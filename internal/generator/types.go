@@ -120,6 +120,154 @@ func controlForType(t string) string {
 	return info.UIControl
 }
 
+// filterKind classifies a canonical C# type (nullable "?" suffix allowed)
+// into the filter-field shape templates should render: string (Contains),
+// numeric/date (Min/Max range), bool (tri-state), or other (no filter).
+func filterKind(csharpType string) string {
+	switch strings.TrimSuffix(csharpType, "?") {
+	case "string":
+		return "string"
+	case "int", "long", "decimal", "float":
+		return "numeric"
+	case "DateOnly", "DateTime":
+		return "date"
+	case "bool":
+		return "bool"
+	default:
+		return "other"
+	}
+}
+
+// quickSearchExpr renders a C# boolean expression ORing a null-safe
+// .Contains(search) check over every plain string property (relation/FK
+// properties are never string-typed, so they're implicitly excluded),
+// e.g. `x.Name.Contains(search) || (x.Notes != null && x.Notes.Contains(search))`.
+// Returns the literal "false" when there are no string properties to search.
+func quickSearchExpr(properties []Property, varName string) string {
+	var parts []string
+	for _, p := range properties {
+		if filterKind(p.CSharpType) != "string" {
+			continue
+		}
+		if strings.HasSuffix(p.CSharpType, "?") {
+			parts = append(parts, fmt.Sprintf("(%s.%s != null && %s.%s.Contains(search))", varName, p.Name, varName, p.Name))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s.%s.Contains(search)", varName, p.Name))
+		}
+	}
+	if len(parts) == 0 {
+		return "false"
+	}
+	return strings.Join(parts, " || ")
+}
+
+// filterFieldNamesAndType returns the derived advanced-filter field name(s)
+// (PascalCase, based on p.Name) and their shared nullable C# type for
+// property p, e.g. Name(string) -> (["NameContains"], "string?"),
+// Age(int) -> (["AgeMin", "AgeMax"], "int?"), a relation FK property ->
+// ([p.Name], "long?"). Returns (nil, "") for unsupported/unfilterable types.
+func filterFieldNamesAndType(p Property) ([]string, string) {
+	if p.RelationTarget != "" {
+		return []string{p.Name}, "long?"
+	}
+	switch filterKind(p.CSharpType) {
+	case "string":
+		return []string{p.Name + "Contains"}, "string?"
+	case "numeric", "date":
+		return []string{p.Name + "Min", p.Name + "Max"}, strings.TrimSuffix(p.CSharpType, "?") + "?"
+	case "bool":
+		return []string{p.Name}, "bool?"
+	default:
+		return nil, ""
+	}
+}
+
+// filterParamDecls renders a leading-comma list of "Type name" declarations
+// (one or two per filterable property) for a method signature or record,
+// e.g. ", string? nameContains, int? ageMin, int? ageMax". casing is "camel"
+// for method parameters or "pascal" for record properties.
+func filterParamDecls(properties []Property, casing string) string {
+	var parts []string
+	for _, p := range properties {
+		names, typ := filterFieldNamesAndType(p)
+		for _, name := range names {
+			if casing == "camel" {
+				name = camel(name)
+			}
+			parts = append(parts, typ+" "+name)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return ", " + strings.Join(parts, ", ")
+}
+
+// filterParamNames renders a leading-comma list of value references matching
+// filterParamDecls's fields, each written as prefix+name, e.g. prefix
+// "request." + casing "pascal" -> ", request.NameContains, request.AgeMin,
+// request.AgeMax" (forwarding a Query's fields), or prefix "" + casing
+// "camel" -> ", nameContains, ageMin, ageMax" (referencing local parameters).
+func filterParamNames(properties []Property, prefix, casing string) string {
+	var parts []string
+	for _, p := range properties {
+		names, _ := filterFieldNamesAndType(p)
+		for _, name := range names {
+			if casing == "camel" {
+				name = camel(name)
+			}
+			parts = append(parts, prefix+name)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return ", " + strings.Join(parts, ", ")
+}
+
+// filterWhereClauses renders one `if (...) query = query.Where(varName =>
+// ...);` C# statement per filter field, conditionally narrowing `query` by
+// each supplied (non-null) filter value. When valuePrefix is "" each filter
+// value is referenced as a local camelCase parameter (e.g. "nameContains");
+// otherwise it's referenced as valuePrefix+PascalCaseName (e.g.
+// "criteria.NameContains"). Statements are newline-joined for direct
+// insertion into a template's method body.
+func filterWhereClauses(properties []Property, varName, valuePrefix string) string {
+	ref := func(name string) string {
+		if valuePrefix == "" {
+			return camel(name)
+		}
+		return valuePrefix + name
+	}
+	var lines []string
+	appendRange := func(minRef, maxRef, propName string) {
+		lines = append(lines, fmt.Sprintf("if (%s.HasValue) query = query.Where(%s => %s.%s >= %s.Value);", minRef, varName, varName, propName, minRef))
+		lines = append(lines, fmt.Sprintf("if (%s.HasValue) query = query.Where(%s => %s.%s <= %s.Value);", maxRef, varName, varName, propName, maxRef))
+	}
+	for _, p := range properties {
+		if p.RelationTarget != "" {
+			v := ref(p.Name)
+			lines = append(lines, fmt.Sprintf("if (%s.HasValue) query = query.Where(%s => %s.%s == %s.Value);", v, varName, varName, p.Name, v))
+			continue
+		}
+		switch filterKind(p.CSharpType) {
+		case "string":
+			v := ref(p.Name + "Contains")
+			condition := fmt.Sprintf("%s.%s.Contains(%s)", varName, p.Name, v)
+			if strings.HasSuffix(p.CSharpType, "?") {
+				condition = fmt.Sprintf("%s.%s != null && %s", varName, p.Name, condition)
+			}
+			lines = append(lines, fmt.Sprintf("if (!string.IsNullOrWhiteSpace(%s)) query = query.Where(%s => %s);", v, varName, condition))
+		case "numeric", "date":
+			appendRange(ref(p.Name+"Min"), ref(p.Name+"Max"), p.Name)
+		case "bool":
+			v := ref(p.Name)
+			lines = append(lines, fmt.Sprintf("if (%s.HasValue) query = query.Where(%s => %s.%s == %s.Value);", v, varName, varName, p.Name, v))
+		}
+	}
+	return strings.Join(lines, "\n        ")
+}
+
 func humanize(value string) string {
 	value = strings.NewReplacer("_", " ", "-", " ").Replace(value)
 	runes := []rune(value)

@@ -22,4 +22,14 @@ public sealed class {{ .Name }}Repository(AppDbContext database) : I{{ .Name }}R
     }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) => database.SaveChangesAsync(cancellationToken);
+
+    public async Task<(List<{{ .Name }}> Items, long TotalCount)> SearchAsync(string? search{{ filterParamDecls .Properties "camel" }}, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var query = database.{{ .Name }}s.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});
+        {{ filterWhereClauses .Properties "x" "" }}
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query.OrderBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        return (items, totalCount);
+    }
 }

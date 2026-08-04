@@ -12,6 +12,32 @@ public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
     public IReadOnlyList<{{ .Name }}Row> GetAll() =>
         http.GetFromJsonAsync<List<{{ .Name }}Row>>(Path).GetAwaiter().GetResult() ?? [];
 
+    public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(criteria.Search)) query.Add($"search={Uri.EscapeDataString(criteria.Search)}");
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        if (criteria.{{ .Name }}.HasValue) query.Add($"{{ camel .Name }}={criteria.{{ .Name }}.Value}");
+{{- else if eq (filterKind .CSharpType) "string" }}
+        if (!string.IsNullOrWhiteSpace(criteria.{{ .Name }}Contains)) query.Add($"{{ camel .Name }}Contains={Uri.EscapeDataString(criteria.{{ .Name }}Contains)}");
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        if (criteria.{{ .Name }}Min.HasValue) query.Add($"{{ camel .Name }}Min={criteria.{{ .Name }}Min.Value}");
+        if (criteria.{{ .Name }}Max.HasValue) query.Add($"{{ camel .Name }}Max={criteria.{{ .Name }}Max.Value}");
+{{- else if eq (filterKind .CSharpType) "date" }}
+        if (criteria.{{ .Name }}Min.HasValue) query.Add($"{{ camel .Name }}Min={criteria.{{ .Name }}Min.Value:O}");
+        if (criteria.{{ .Name }}Max.HasValue) query.Add($"{{ camel .Name }}Max={criteria.{{ .Name }}Max.Value:O}");
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        if (criteria.{{ .Name }}.HasValue) query.Add($"{{ camel .Name }}={criteria.{{ .Name }}.Value}");
+{{- end }}
+{{- end }}
+        query.Add($"page={criteria.Page}");
+        query.Add($"pageSize={criteria.PageSize}");
+        var url = $"{Path}/search?{string.Join("&", query)}";
+        var result = http.GetFromJsonAsync<{{ .Name }}PageResult>(url).GetAwaiter().GetResult();
+        return result ?? new {{ .Name }}PageResult([], 0, criteria.Page, criteria.PageSize);
+    }
+
     public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
     {
         if (editingId == 0)
@@ -44,6 +70,19 @@ public sealed class {{ .Name }}Store(AppDbContext db) : I{{ .Name }}Store
         .OrderBy(x => x.Id)
         .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}))
         .ToList();
+
+    public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
+    {
+        var search = criteria.Search;
+        var query = db.Set<{{ .Name }}>().AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});
+        {{ filterWhereClauses .Properties "x" "criteria." }}
+        var totalCount = query.LongCount();
+        var items = query.OrderBy(x => x.Id).Skip((criteria.Page - 1) * criteria.PageSize).Take(criteria.PageSize)
+            .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}))
+            .ToList();
+        return new {{ .Name }}PageResult(items, totalCount, criteria.Page, criteria.PageSize);
+    }
 
     public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
     {
@@ -79,6 +118,17 @@ public sealed class {{ .Name }}Store : I{{ .Name }}Store
     private long nextId = 1;
 
     public IReadOnlyList<{{ .Name }}Row> GetAll() => items.ToArray();
+
+    public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
+    {
+        var search = criteria.Search;
+        var query = items.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});
+        {{ filterWhereClauses .Properties "x" "criteria." }}
+        var filtered = query.ToList();
+        var paged = filtered.Skip((criteria.Page - 1) * criteria.PageSize).Take(criteria.PageSize).ToList();
+        return new {{ .Name }}PageResult(paged, filtered.Count, criteria.Page, criteria.PageSize);
+    }
 
     public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
     {

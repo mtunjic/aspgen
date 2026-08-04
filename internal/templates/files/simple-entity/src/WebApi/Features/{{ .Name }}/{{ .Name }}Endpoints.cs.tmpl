@@ -11,6 +11,17 @@ public static class {{ .Name }}Endpoints
         var group = app.MapGroup("/api/{{ kebab .Name }}");
         group.MapGet("/", async (AppDbContext db, CancellationToken cancellationToken) =>
             Results.Ok(await db.{{ .Name }}s.AsNoTracking().ToListAsync(cancellationToken)));
+        group.MapGet("/search", async (string? search{{ filterParamDecls .Properties "camel" }}, int page, int pageSize, AppDbContext db, CancellationToken cancellationToken) =>
+        {
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 25;
+            var query = db.{{ .Name }}s.AsNoTracking().AsQueryable();
+            if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});
+            {{ filterWhereClauses .Properties "x" "" }}
+            var totalCount = await query.LongCountAsync(cancellationToken);
+            var items = await query.OrderBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+            return Results.Ok(new { items, totalCount, page, pageSize, hasMore = (long)page * pageSize < totalCount });
+        });
         group.MapGet("/{id:long}", async (long id, AppDbContext db, CancellationToken cancellationToken) =>
         {
             var entity = await db.{{ .Name }}s.FindAsync([id], cancellationToken);

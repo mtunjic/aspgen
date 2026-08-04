@@ -1,0 +1,46 @@
+@page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{Id:long}"
+@using {{ .Project }}.Application.Contexts.{{ .Context }}
+@inject {{ .Project }}.Application.Contexts.{{ .Context }}.{{ .Aggregate }}CrudService Service
+@inject NavigationManager Navigation
+{{- range .Relations }}
+@inject {{ $.Project }}.Application.Contexts.{{ $.Context }}.{{ .Target }}CrudService {{ .Target }}Service
+{{- end }}
+
+<h1>{{ .Aggregate }} details</h1>
+
+@if (item is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <dl class="row">
+{{- range .Properties }}
+        <dt class="col-sm-3">{{ .DisplayName }}</dt>
+{{- if .RelationTarget }}
+        <dd class="col-sm-9">@({{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</dd>
+{{- else }}
+        <dd class="col-sm-9">@item.{{ .Name }}</dd>
+{{- end }}
+{{- end }}
+    </dl>
+    <button class="btn btn-secondary" @onclick="Back">Back</button>
+}
+
+@code {
+    [Parameter] public long Id { get; set; }
+    private {{ .Aggregate }}View? item;
+{{- range .Relations }}
+    private List<{{ .Target }}View> {{ .Target }}Items = [];
+{{- end }}
+
+    protected override async Task OnInitializedAsync()
+    {
+        item = await Service.GetByIdAsync(Id);
+{{- range .Relations }}
+        {{ .Target }}Items = await {{ .Target }}Service.GetAllAsync();
+{{- end }}
+    }
+
+    private void Back() => Navigation.NavigateTo("/{{ kebab .Context }}/{{ kebab .Aggregate }}s");
+}

@@ -1,0 +1,6 @@
+namespace {{ .Namespace }}.Models;
+
+public sealed record {{ .Name }}PageResult(IReadOnlyList<{{ .Name }}Row> Items, long TotalCount, int Page, int PageSize)
+{
+    public bool HasMore => (long)Page * PageSize < TotalCount;
+}

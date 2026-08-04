@@ -81,6 +81,8 @@ func renderTree(root, group string, d data, override string, dryRun, force bool)
 func renderString(raw string, d data) (string, error) {
 	t, err := template.New("file").Funcs(template.FuncMap{
 		"pascal": pascal, "camel": camel, "kebab": kebab, "trimSuffix": strings.TrimSuffix,
+		"filterKind": filterKind, "quickSearchExpr": quickSearchExpr,
+		"filterParamDecls": filterParamDecls, "filterParamNames": filterParamNames, "filterWhereClauses": filterWhereClauses,
 	}).Parse(raw)
 	if err != nil {
 		return "", err
@@ -143,6 +145,8 @@ func validateTemplateTree(source fs.FS, root string) error {
 		}
 		_, err = template.New(filepath.Base(path)).Funcs(template.FuncMap{
 			"pascal": pascal, "camel": camel, "kebab": kebab, "trimSuffix": strings.TrimSuffix,
+			"filterKind": filterKind, "quickSearchExpr": quickSearchExpr,
+			"filterParamDecls": filterParamDecls, "filterParamNames": filterParamNames, "filterWhereClauses": filterWhereClauses,
 		}).Parse(string(content))
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)

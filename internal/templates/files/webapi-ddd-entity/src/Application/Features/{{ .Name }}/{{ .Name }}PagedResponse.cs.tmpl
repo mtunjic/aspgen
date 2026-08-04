@@ -1,0 +1,6 @@
+namespace {{ .Project }}.Application.Features.{{ .Name }};
+
+public sealed record {{ .Name }}PagedResponse(IReadOnlyList<{{ .Name }}Response> Items, long TotalCount, int Page, int PageSize)
+{
+    public bool HasMore => (long)Page * PageSize < TotalCount;
+}

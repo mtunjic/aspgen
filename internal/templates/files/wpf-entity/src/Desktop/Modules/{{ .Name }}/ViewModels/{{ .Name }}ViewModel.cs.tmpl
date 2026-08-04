@@ -9,6 +9,7 @@ using System.Windows;
 {{- end }}
 using Prism.Commands;
 using Prism.Mvvm;
+using Prism.Navigation.Regions;
 using {{ .Namespace }}.Models;
 using {{ .Namespace }}.Services;
 {{- range .Relations }}
@@ -21,7 +22,9 @@ namespace {{ .Namespace }}.ViewModels;
 
 public sealed class {{ .Name }}ViewModel : BindableBase
 {
+    private const int PageSize = 25;
     private readonly I{{ .Name }}Store store;
+    private readonly IRegionManager regionManager;
 {{- range .Relations }}
     private readonly I{{ .Target }}Store {{ camel .Target }}Store;
 {{- end }}
@@ -34,10 +37,15 @@ public sealed class {{ .Name }}ViewModel : BindableBase
     private long editingId;
     private string validationMessage = string.Empty;
     private bool isBusy;
+    private string searchText = string.Empty;
+    private bool isAdvancedFilterExpanded;
+    private int page = 1;
+    private bool hasMore;
 
-    public {{ .Name }}ViewModel(I{{ .Name }}Store store{{ range .Relations }}, I{{ .Target }}Store {{ camel .Target }}Store{{ end }}{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }}/* aspgen:relatedParams */)
+    public {{ .Name }}ViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range .Relations }}, I{{ .Target }}Store {{ camel .Target }}Store{{ end }}{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }}/* aspgen:relatedParams */)
     {
         this.store = store;
+        this.regionManager = regionManager;
 {{- range .Relations }}
         this.{{ camel .Target }}Store = {{ camel .Target }}Store;
 {{- end }}
@@ -47,14 +55,19 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         this.snackbarService = snackbarService;
 {{- end }}
         Form = new {{ .Name }}Editor();
+        Filter = new {{ .Name }}FilterEditor();
         NewCommand = new DelegateCommand(New, () => !IsBusy);
         EditCommand = new DelegateCommand(Edit, () => !IsBusy && SelectedItem is not null);
         DeleteCommand = new DelegateCommand(Delete, () => !IsBusy && SelectedItem is not null);
         RefreshCommand = new DelegateCommand(Refresh, () => !IsBusy);
         SaveCommand = new DelegateCommand(Save, () => !IsBusy);
         CancelCommand = new DelegateCommand(Cancel, () => !IsBusy);
+        SearchCommand = new DelegateCommand(Search, () => !IsBusy);
+        LoadMoreCommand = new DelegateCommand(LoadMore, () => !IsBusy && HasMore);
+        ClearFiltersCommand = new DelegateCommand(ClearFilters, () => !IsBusy);
+        ViewDetailsCommand = new DelegateCommand(ViewDetails, () => SelectedItem is not null);
         LoadRelated();
-        Reload();
+        Search();
     }
 
     public ObservableCollection<{{ .Name }}Row> Items { get; } = [];
@@ -63,8 +76,30 @@ public sealed class {{ .Name }}ViewModel : BindableBase
 {{- end }}
     // aspgen:relatedCollections
     public {{ .Name }}Editor Form { get; }
+    public {{ .Name }}FilterEditor Filter { get; }
     public bool IsEditing => editingId != 0;
     public bool IsEmpty => Items.Count == 0;
+    public string SearchText
+    {
+        get => searchText;
+        set => SetProperty(ref searchText, value);
+    }
+    public bool IsAdvancedFilterExpanded
+    {
+        get => isAdvancedFilterExpanded;
+        set => SetProperty(ref isAdvancedFilterExpanded, value);
+    }
+    public bool HasMore
+    {
+        get => hasMore;
+        private set
+        {
+            if (SetProperty(ref hasMore, value))
+            {
+                LoadMoreCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
     public string ValidationMessage
     {
         get => validationMessage;
@@ -90,6 +125,9 @@ public sealed class {{ .Name }}ViewModel : BindableBase
                 RefreshCommand.RaiseCanExecuteChanged();
                 SaveCommand.RaiseCanExecuteChanged();
                 CancelCommand.RaiseCanExecuteChanged();
+                SearchCommand.RaiseCanExecuteChanged();
+                LoadMoreCommand.RaiseCanExecuteChanged();
+                ClearFiltersCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -103,6 +141,7 @@ public sealed class {{ .Name }}ViewModel : BindableBase
             {
                 EditCommand.RaiseCanExecuteChanged();
                 DeleteCommand.RaiseCanExecuteChanged();
+                ViewDetailsCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -113,6 +152,10 @@ public sealed class {{ .Name }}ViewModel : BindableBase
     public DelegateCommand RefreshCommand { get; }
     public DelegateCommand SaveCommand { get; }
     public DelegateCommand CancelCommand { get; }
+    public DelegateCommand SearchCommand { get; }
+    public DelegateCommand LoadMoreCommand { get; }
+    public DelegateCommand ClearFiltersCommand { get; }
+    public DelegateCommand ViewDetailsCommand { get; }
 
     private void LoadRelated()
     {
@@ -123,25 +166,78 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         // aspgen:relatedLoads
     }
 
-    private void Reload()
+    private void Refresh()
     {
-        Items.Clear();
-        foreach (var item in store.GetAll()) Items.Add(item);
-        RaisePropertyChanged(nameof(IsEmpty));
+        SelectedItem = null;
+        Search();
     }
 
-    private void Refresh()
+    private void ExecuteSearch(bool append = false)
     {
         IsBusy = true;
         try
         {
-            SelectedItem = null;
-            Reload();
+            var result = store.Search(BuildCriteria(page));
+            if (!append) Items.Clear();
+            foreach (var item in result.Items) Items.Add(item);
+            HasMore = result.HasMore;
+            RaisePropertyChanged(nameof(IsEmpty));
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    private void Search()
+    {
+        page = 1;
+        ExecuteSearch();
+    }
+
+    private void LoadMore()
+    {
+        page++;
+        ExecuteSearch(append: true);
+    }
+
+    private void ClearFilters()
+    {
+        SearchText = string.Empty;
+        Filter.Clear();
+        Search();
+    }
+
+    private void ViewDetails()
+    {
+        if (SelectedItem is null) return;
+        var parameters = new NavigationParameters { { "id", SelectedItem.Id } };
+        regionManager.RequestNavigate("MainRegion", "{{ .Name }}DetailsView", parameters);
+    }
+
+    private {{ .Name }}SearchCriteria BuildCriteria(int page)
+    {
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        long? {{ camel .Name }} = long.TryParse(Filter.{{ .Name }}, out var parsed{{ .Name }}) ? parsed{{ .Name }} : null;
+{{- else if eq (filterKind .CSharpType) "string" }}
+        var {{ camel .Name }}Contains = string.IsNullOrWhiteSpace(Filter.{{ .Name }}Contains) ? null : Filter.{{ .Name }}Contains;
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        {{ trimSuffix .CSharpType "?" }}? {{ camel .Name }}Min = {{ trimSuffix .CSharpType "?" }}.TryParse(Filter.{{ .Name }}Min, out var parsed{{ .Name }}Min) ? parsed{{ .Name }}Min : null;
+        {{ trimSuffix .CSharpType "?" }}? {{ camel .Name }}Max = {{ trimSuffix .CSharpType "?" }}.TryParse(Filter.{{ .Name }}Max, out var parsed{{ .Name }}Max) ? parsed{{ .Name }}Max : null;
+{{- else if eq (filterKind .CSharpType) "date" }}
+{{- if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") }}
+        DateOnly? {{ camel .Name }}Min = Filter.{{ .Name }}Min is null ? null : DateOnly.FromDateTime(Filter.{{ .Name }}Min.Value);
+        DateOnly? {{ camel .Name }}Max = Filter.{{ .Name }}Max is null ? null : DateOnly.FromDateTime(Filter.{{ .Name }}Max.Value);
+{{- else }}
+        DateTime? {{ camel .Name }}Min = Filter.{{ .Name }}Min;
+        DateTime? {{ camel .Name }}Max = Filter.{{ .Name }}Max;
+{{- end }}
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        var {{ camel .Name }} = Filter.{{ .Name }};
+{{- end }}
+{{- end }}
+        return new {{ .Name }}SearchCriteria(string.IsNullOrWhiteSpace(SearchText) ? null : SearchText{{ filterParamNames .Properties "" "camel" }}, page, PageSize);
     }
 
     private void New()
@@ -173,7 +269,7 @@ public sealed class {{ .Name }}ViewModel : BindableBase
             editingId = 0;
             Form.Reset(null);
             ValidationMessage = string.Empty;
-            Reload();
+            Search();
             RaisePropertyChanged(nameof(IsEditing));
 {{- if eq .Theme "wpfui" }}
             snackbarService.Show("Saved", $"{{ .Name }} {operation} successfully.", ControlAppearance.Success, new SymbolIcon { Symbol = SymbolRegular.CheckmarkCircle24 }, TimeSpan.FromSeconds(4));
@@ -212,7 +308,7 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         {
             store.Delete(SelectedItem.Id);
             SelectedItem = null;
-            Reload();
+            Search();
 {{- if eq .Theme "wpfui" }}
             snackbarService.Show("Deleted", "{{ .Name }} deleted successfully.", ControlAppearance.Success, new SymbolIcon { Symbol = SymbolRegular.Delete24 }, TimeSpan.FromSeconds(4));
 {{- end }}
@@ -312,6 +408,51 @@ public sealed class {{ .Name }}Editor : BindableBase
         {{ .Name }}Time = item?.{{ .Name }}?.TimeOfDay;
 {{- else }}
         {{ .Name }} = item is null ? string.Empty : item.{{ .Name }}.ToString();
+{{- end }}
+{{- end }}
+    }
+}
+
+public sealed class {{ .Name }}FilterEditor : BindableBase
+{
+{{- range .Properties }}
+{{- if .RelationTarget }}
+    private string {{ camel .Name }} = string.Empty;
+    public string {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- else if eq (filterKind .CSharpType) "string" }}
+    private string {{ camel .Name }}Contains = string.Empty;
+    public string {{ .Name }}Contains { get => {{ camel .Name }}Contains; set => SetProperty(ref {{ camel .Name }}Contains, value); }
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+    private string {{ camel .Name }}Min = string.Empty;
+    public string {{ .Name }}Min { get => {{ camel .Name }}Min; set => SetProperty(ref {{ camel .Name }}Min, value); }
+    private string {{ camel .Name }}Max = string.Empty;
+    public string {{ .Name }}Max { get => {{ camel .Name }}Max; set => SetProperty(ref {{ camel .Name }}Max, value); }
+{{- else if eq (filterKind .CSharpType) "date" }}
+    private DateTime? {{ camel .Name }}Min;
+    public DateTime? {{ .Name }}Min { get => {{ camel .Name }}Min; set => SetProperty(ref {{ camel .Name }}Min, value); }
+    private DateTime? {{ camel .Name }}Max;
+    public DateTime? {{ .Name }}Max { get => {{ camel .Name }}Max; set => SetProperty(ref {{ camel .Name }}Max, value); }
+{{- else if eq (filterKind .CSharpType) "bool" }}
+    private bool? {{ camel .Name }};
+    public bool? {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- end }}
+{{- end }}
+
+    public void Clear()
+    {
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        {{ .Name }} = string.Empty;
+{{- else if eq (filterKind .CSharpType) "string" }}
+        {{ .Name }}Contains = string.Empty;
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        {{ .Name }}Min = string.Empty;
+        {{ .Name }}Max = string.Empty;
+{{- else if eq (filterKind .CSharpType) "date" }}
+        {{ .Name }}Min = null;
+        {{ .Name }}Max = null;
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        {{ .Name }} = null;
 {{- end }}
 {{- end }}
     }

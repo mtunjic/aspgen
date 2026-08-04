@@ -19,12 +19,15 @@
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
         <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
         <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
-        <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding EditCommand}" />
+        <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding ViewDetailsCommand}" />
     </UserControl.InputBindings>
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -53,9 +56,73 @@
             </StackPanel>
         </DockPanel>
 {{- if eq .Theme "wpfui" }}
-        <ui:DataGrid Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False" CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" IsReadOnly="True" ItemsSource="{Binding Items}" RowBackground="Transparent" AlternatingRowBackground="{DynamicResource ControlFillColorDefaultBrush}" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
+        <DockPanel Grid.Row="1" Margin="0,0,0,8">
+            <ui:Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="12,6" Content="Search" Icon="{ui:SymbolIcon Search24}" Command="{Binding SearchCommand}" />
+            <ui:TextBox ClearButtonEnabled="True" PlaceholderText="Search {{ .Name }} records..." Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+        </DockPanel>
 {{- else }}
-        <DataGrid Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False" CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" IsReadOnly="True" ItemsSource="{Binding Items}" AlternatingRowBackground="WhiteSmoke" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
+        <DockPanel Grid.Row="1" Margin="0,0,0,8">
+            <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="12,6" Content="Search" Command="{Binding SearchCommand}" />
+            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+        </DockPanel>
+{{- end }}
+        <Expander Grid.Row="2" Margin="0,0,0,8" Header="Advanced filters" IsExpanded="{Binding IsAdvancedFilterExpanded, Mode=TwoWay}">
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+{{- range .Properties }}
+{{- if .RelationTarget }}
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="{{ .DisplayName }}" />
+                    <ComboBox Width="140" Margin="0,4,0,0" ItemsSource="{Binding {{ .RelationTarget }}Items}" DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}" />
+                </StackPanel>
+{{- else if eq (filterKind .CSharpType) "string" }}
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="{{ .DisplayName }} contains" />
+                    <TextBox Width="160" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Contains, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="{{ .DisplayName }} min" />
+                    <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Min, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="{{ .DisplayName }} max" />
+                    <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Max, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+{{- else if eq (filterKind .CSharpType) "date" }}
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="{{ .DisplayName }} from" />
+                    <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Min, Mode=TwoWay}" />
+                </StackPanel>
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="{{ .DisplayName }} to" />
+                    <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Max, Mode=TwoWay}" />
+                </StackPanel>
+{{- else if eq (filterKind .CSharpType) "bool" }}
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="{{ .DisplayName }}" />
+                    <ComboBox Width="90" Margin="0,4,0,0" SelectedValuePath="Content" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}">
+                        <ComboBoxItem Content="{x:Null}" />
+                        <ComboBoxItem Content="True" />
+                        <ComboBoxItem Content="False" />
+                    </ComboBox>
+                </StackPanel>
+{{- end }}
+{{- end }}
+                <StackPanel VerticalAlignment="Bottom">
+{{- if eq .Theme "wpfui" }}
+                    <ui:Button Content="Apply" Command="{Binding SearchCommand}" />
+                    <ui:Button Margin="8,0,0,0" Content="Clear" Command="{Binding ClearFiltersCommand}" />
+{{- else }}
+                    <Button Content="Apply" Command="{Binding SearchCommand}" />
+                    <Button Margin="8,0,0,0" Content="Clear" Command="{Binding ClearFiltersCommand}" />
+{{- end }}
+                </StackPanel>
+            </StackPanel>
+        </Expander>
+{{- if eq .Theme "wpfui" }}
+        <ui:DataGrid Grid.Row="3" AutoGenerateColumns="False" CanUserAddRows="False" CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" IsReadOnly="True" ItemsSource="{Binding Items}" RowBackground="Transparent" AlternatingRowBackground="{DynamicResource ControlFillColorDefaultBrush}" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
+{{- else }}
+        <DataGrid Grid.Row="3" AutoGenerateColumns="False" CanUserAddRows="False" CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" IsReadOnly="True" ItemsSource="{Binding Items}" AlternatingRowBackground="WhiteSmoke" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
 {{- end }}
             <DataGrid.Columns>
 {{- range .Properties }}
@@ -76,12 +143,28 @@
         </DataGrid>
 {{- end }}
 {{- if eq .Theme "wpfui" }}
-        <ui:InfoBar Grid.Row="1" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" IsOpen="{Binding IsEmpty}" IsClosable="False" Severity="Informational" Title="No {{ .Name }} records" Message="Create a new {{ .Name }} to get started." />
+        <ui:InfoBar Grid.Row="3" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" IsOpen="{Binding IsEmpty}" IsClosable="False" Severity="Informational" Title="No {{ .Name }} records" Message="Create a new {{ .Name }} to get started." />
 {{- end }}
 {{- if eq .Theme "wpfui" }}
-        <Border Grid.Row="2" Margin="0,12,0,0" Padding="12" Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
+        <ui:Button Grid.Row="4" Margin="0,8,0,0" HorizontalAlignment="Center" Content="Load more" Visibility="{Binding HasMore, Converter={StaticResource BoolToVisibility}}" Command="{Binding LoadMoreCommand}" />
 {{- else }}
-        <Border Grid.Row="2" Margin="0,12,0,0" Padding="12" BorderBrush="Gray" BorderThickness="1">
+        <Button Grid.Row="4" Margin="0,8,0,0" HorizontalAlignment="Center" Padding="12,6" Content="Load more" Command="{Binding LoadMoreCommand}">
+            <Button.Style>
+                <Style TargetType="Button">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasMore}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Button.Style>
+        </Button>
+{{- end }}
+{{- if eq .Theme "wpfui" }}
+        <Border Grid.Row="5" Margin="0,12,0,0" Padding="12" Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
+{{- else }}
+        <Border Grid.Row="5" Margin="0,12,0,0" Padding="12" BorderBrush="Gray" BorderThickness="1">
 {{- end }}
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>

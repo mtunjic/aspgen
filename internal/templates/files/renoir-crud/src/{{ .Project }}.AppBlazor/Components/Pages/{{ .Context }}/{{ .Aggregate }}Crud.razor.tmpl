@@ -2,6 +2,7 @@
 @page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s"
 @using {{ .Project }}.Application.Contexts.{{ .Context }}
 @inject {{ .Project }}.Application.Contexts.{{ .Context }}.{{ .Aggregate }}CrudService Service
+@inject NavigationManager Navigation
 {{- range .Relations }}
 @inject {{ $.Project }}.Application.Contexts.{{ $.Context }}.{{ .Target }}CrudService {{ .Target }}Service
 {{- end }}
@@ -29,23 +30,87 @@
     <button class="btn btn-primary" type="submit">Save</button>
 </EditForm>
 
+<div class="mb-3 d-flex gap-2">
+    <input @bind="searchText" @bind:event="oninput" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
+    <button class="btn btn-outline-primary" @onclick="SearchAsync">Search</button>
+</div>
+<details class="mb-3">
+    <summary>Advanced filters</summary>
+    <div class="row g-2 mt-1">
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }}</label>
+            <select @bind="filter{{ .Name }}" class="form-control">
+                <option value="">Any</option>
+                @foreach (var option in {{ .RelationTarget }}Items)
+                {
+                    <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
+                }
+            </select>
+        </div>
+{{- else if eq (filterKind .CSharpType) "string" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} contains</label>
+            <input @bind="filter{{ .Name }}Contains" @bind:event="oninput" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} min</label>
+            <input type="number" @bind="filter{{ .Name }}Min" class="form-control" />
+        </div>
+        <div class="col-auto">
+            <label>{{ .DisplayName }} max</label>
+            <input type="number" @bind="filter{{ .Name }}Max" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "date" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} from</label>
+            <input type="date" @bind="filter{{ .Name }}Min" class="form-control" />
+        </div>
+        <div class="col-auto">
+            <label>{{ .DisplayName }} to</label>
+            <input type="date" @bind="filter{{ .Name }}Max" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }}</label>
+            <select @bind="filter{{ .Name }}" class="form-control">
+                <option value="">Any</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+            </select>
+        </div>
+{{- end }}
+{{- end }}
+        <div class="col-auto align-self-end">
+            <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">Clear</button>
+            <button class="btn btn-primary" @onclick="SearchAsync">Apply</button>
+        </div>
+    </div>
+</details>
+
 <table class="table">
     <tbody>
 {{- range .Properties }}{{ if eq .Name "Name" }}{{ end }}{{ end }}
     @foreach (var item in items)
     {
-        <tr>
+        <tr style="cursor:pointer" @onclick="() => ViewDetails(item.Id)">
 {{- range .Properties }}
             <td>@item.{{ .Name }}</td>
 {{- end }}
             <td>
-                <button class="btn btn-secondary" @onclick="() => EditAsync(item.Id)">Edit</button>
-                <button class="btn btn-danger" @onclick="() => DeleteAsync(item.Id)">Delete</button>
+                <button class="btn btn-secondary" @onclick="() => EditAsync(item.Id)" @onclick:stopPropagation="true">Edit</button>
+                <button class="btn btn-danger" @onclick="() => DeleteAsync(item.Id)" @onclick:stopPropagation="true">Delete</button>
             </td>
         </tr>
     }
     </tbody>
 </table>
+@if (hasMore)
+{
+    <button class="btn btn-outline-secondary" @onclick="LoadMoreAsync">Load more</button>
+}
 
 @code {
     private List<{{ .Aggregate }}View> items = [];
@@ -54,16 +119,73 @@
 {{- end }}
     private {{ .Aggregate }}Editor form = new();
     private long editingId;
+    private string? searchText;
+    private int page = 1;
+    private long totalCount;
+    private const int PageSize = 25;
+    private bool hasMore => (long)page * PageSize < totalCount;
+{{- range .Properties }}
+{{- if .RelationTarget }}
+    private long? filter{{ .Name }};
+{{- else if eq (filterKind .CSharpType) "string" }}
+    private string? filter{{ .Name }}Contains;
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+    private {{ trimSuffix .CSharpType "?" }}? filter{{ .Name }}Min;
+    private {{ trimSuffix .CSharpType "?" }}? filter{{ .Name }}Max;
+{{- else if eq (filterKind .CSharpType) "date" }}
+    private {{ trimSuffix .CSharpType "?" }}? filter{{ .Name }}Min;
+    private {{ trimSuffix .CSharpType "?" }}? filter{{ .Name }}Max;
+{{- else if eq (filterKind .CSharpType) "bool" }}
+    private bool? filter{{ .Name }};
+{{- end }}
+{{- end }}
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
-
-    private async Task ReloadAsync()
+    protected override async Task OnInitializedAsync()
     {
-        items = await Service.GetAllAsync();
 {{- range .Relations }}
         {{ .Target }}Items = await {{ .Target }}Service.GetAllAsync();
 {{- end }}
+        await SearchAsync();
     }
+
+    private async Task SearchAsync()
+    {
+        page = 1;
+        var (results, count) = await Service.SearchAsync(searchText{{ filterParamNames .Properties "filter" "pascal" }}, page, PageSize);
+        items = results.ToList();
+        totalCount = count;
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        page++;
+        var (results, count) = await Service.SearchAsync(searchText{{ filterParamNames .Properties "filter" "pascal" }}, page, PageSize);
+        items.AddRange(results);
+        totalCount = count;
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        searchText = null;
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        filter{{ .Name }} = null;
+{{- else if eq (filterKind .CSharpType) "string" }}
+        filter{{ .Name }}Contains = null;
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        filter{{ .Name }}Min = null;
+        filter{{ .Name }}Max = null;
+{{- else if eq (filterKind .CSharpType) "date" }}
+        filter{{ .Name }}Min = null;
+        filter{{ .Name }}Max = null;
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        filter{{ .Name }} = null;
+{{- end }}
+{{- end }}
+        await SearchAsync();
+    }
+
+    private void ViewDetails(long id) => Navigation.NavigateTo($"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{id}");
 
     private async Task SaveAsync()
     {
@@ -80,7 +202,7 @@
         }
         form = new();
         editingId = 0;
-        await ReloadAsync();
+        await SearchAsync();
     }
 
     private async Task EditAsync(long id)
@@ -101,7 +223,7 @@
     {
         var result = await Service.DeleteAsync(id);
         if (!result.Success) return;
-        await ReloadAsync();
+        await SearchAsync();
     }
 
     private sealed class {{ .Aggregate }}Editor
