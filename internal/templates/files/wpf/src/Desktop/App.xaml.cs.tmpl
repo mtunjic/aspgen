@@ -3,6 +3,9 @@ using Prism.DryIoc;
 using Prism.Ioc;
 using Prism.Modularity;
 using Prism.Navigation.Regions;
+{{- if eq .Theme "wpfui" }}
+using Wpf.Ui;
+{{- end }}
 
 namespace {{ .Project }}.Desktop;
 
@@ -16,6 +19,8 @@ public partial class App : PrismApplication
         containerRegistry.RegisterForNavigation<Views.SettingsView>();
 {{- if eq .Theme "wpfui" }}
         containerRegistry.RegisterSingleton<Navigation.NavigationRegistry>();
+        containerRegistry.RegisterSingleton<IContentDialogService, ContentDialogService>();
+        containerRegistry.RegisterSingleton<ISnackbarService, SnackbarService>();
 {{- end }}
     }
 

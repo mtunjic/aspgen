@@ -52,6 +52,8 @@
             </ui:NavigationView>
             <ContentControl Grid.Column="1" Margin="16,0,0,0" prism:RegionManager.RegionName="MainRegion" />
         </Grid>
+        <ui:ContentDialogHost x:Name="RootContentDialog" Grid.Row="0" Grid.RowSpan="2" />
+        <ui:SnackbarPresenter x:Name="RootSnackbar" Grid.Row="1" />
     </Grid>
 {{- else }}
     <Grid Margin="16">

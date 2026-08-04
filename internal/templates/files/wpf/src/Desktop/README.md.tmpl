@@ -26,11 +26,11 @@ dotnet run --project .\src\Desktop\{{ .Project }}.Desktop.csproj
 ```
 
 {{- if eq .Theme "wpfui" }}
-WPF-UI theme is enabled with the `WPF-UI` NuGet package. Theme resources are configured in `App.xaml`, and the shell uses `FluentWindow`, `TitleBar`, `NavigationView`, `AutoSuggestBox` module search, grouped module navigation, Fluent resource brushes, and Prism regions.
+WPF-UI theme is enabled with the `WPF-UI` NuGet package. Theme resources are configured in `App.xaml`, and the shell uses `FluentWindow`, `TitleBar`, `NavigationView`, `AutoSuggestBox` module search, grouped module navigation, Fluent resource brushes, and Prism regions. The shell also calls `SystemThemeWatcher.Watch(this)` so the app theme, accent, and Mica backdrop stay in sync with Windows light/dark settings.
 
 The dashboard is the initial landing page. It includes a Fluent hero banner and responsive cards for generated modules. The left navigation can collapse with its hamburger button, modules are grouped under **Modules**, PascalCase names are displayed as readable labels, and **Settings** is available in the footer. The initial theme is Dark; use the **Toggle theme** button or Settings page to switch between Light and Dark themes at runtime.
 
-Generated entity forms use WPF-UI controls based on property type: `TextBox`, `NumberBox`, `CalendarDatePicker`, `TimePicker`, and `ToggleSwitch`. Lists use a themed `DataGrid` with typed columns, empty-state feedback, validation and success `InfoBar` messages, and Fluent action icons.
+Generated entity forms use WPF-UI controls based on property type: `TextBox`, `NumberBox`, `CalendarDatePicker`, `TimePicker`, and `ToggleSwitch`. Lists use a themed `DataGrid` with typed columns, empty-state feedback, validation and success `InfoBar` messages, and Fluent action icons. Deleting a record prompts for confirmation in a Fluent `ContentDialog` (hosted by the shell's `ContentDialogHost`) before removing it.
 
 CRUD keyboard shortcuts are available in each module: `Ctrl+N` (new), `Ctrl+S` (save), `F5` (refresh), `Delete` (delete selected), and `Escape` (cancel). Double-click a grid row to edit it.
 

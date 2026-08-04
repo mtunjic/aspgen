@@ -1,4 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
+{{- if eq .Theme "wpfui" }}
+using Wpf.Ui;
+using Wpf.Ui.Controls;
+using Wpf.Ui.Extensions;
+{{- else }}
+using System.Windows;
+{{- end }}
 using Prism.Commands;
 using Prism.Mvvm;
 using {{ .Namespace }}.Models;
@@ -9,21 +17,29 @@ namespace {{ .Namespace }}.ViewModels;
 public sealed class {{ .Name }}ViewModel : BindableBase
 {
     private readonly I{{ .Name }}Store store;
+{{- if eq .Theme "wpfui" }}
+    private readonly IContentDialogService dialogService;
+    private readonly ISnackbarService snackbarService;
+{{- end }}
     private {{ .Name }}Row? selectedItem;
     private long editingId;
     private string validationMessage = string.Empty;
-    private string operationMessage = string.Empty;
+    private bool isBusy;
 
-    public {{ .Name }}ViewModel(I{{ .Name }}Store store)
+    public {{ .Name }}ViewModel(I{{ .Name }}Store store{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }})
     {
         this.store = store;
+{{- if eq .Theme "wpfui" }}
+        this.dialogService = dialogService;
+        this.snackbarService = snackbarService;
+{{- end }}
         Form = new {{ .Name }}Editor();
-        NewCommand = new DelegateCommand(New);
-        EditCommand = new DelegateCommand(Edit, () => SelectedItem is not null);
-        DeleteCommand = new DelegateCommand(Delete, () => SelectedItem is not null);
-        RefreshCommand = new DelegateCommand(Refresh);
-        SaveCommand = new DelegateCommand(Save);
-        CancelCommand = new DelegateCommand(Cancel);
+        NewCommand = new DelegateCommand(New, () => !IsBusy);
+        EditCommand = new DelegateCommand(Edit, () => !IsBusy && SelectedItem is not null);
+        DeleteCommand = new DelegateCommand(Delete, () => !IsBusy && SelectedItem is not null);
+        RefreshCommand = new DelegateCommand(Refresh, () => !IsBusy);
+        SaveCommand = new DelegateCommand(Save, () => !IsBusy);
+        CancelCommand = new DelegateCommand(Cancel, () => !IsBusy);
         Reload();
     }
 
@@ -43,18 +59,22 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         }
     }
     public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationMessage);
-    public string OperationMessage
+    public bool IsBusy
     {
-        get => operationMessage;
+        get => isBusy;
         private set
         {
-            if (SetProperty(ref operationMessage, value))
+            if (SetProperty(ref isBusy, value))
             {
-                RaisePropertyChanged(nameof(HasOperationMessage));
+                NewCommand.RaiseCanExecuteChanged();
+                EditCommand.RaiseCanExecuteChanged();
+                DeleteCommand.RaiseCanExecuteChanged();
+                RefreshCommand.RaiseCanExecuteChanged();
+                SaveCommand.RaiseCanExecuteChanged();
+                CancelCommand.RaiseCanExecuteChanged();
             }
         }
     }
-    public bool HasOperationMessage => !string.IsNullOrWhiteSpace(OperationMessage);
 
     public {{ .Name }}Row? SelectedItem
     {
@@ -85,9 +105,16 @@ public sealed class {{ .Name }}ViewModel : BindableBase
 
     private void Refresh()
     {
-        SelectedItem = null;
-        Reload();
-        OperationMessage = string.Empty;
+        IsBusy = true;
+        try
+        {
+            SelectedItem = null;
+            Reload();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private void New()
@@ -95,7 +122,6 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         editingId = 0;
         Form.Reset(null);
         ValidationMessage = string.Empty;
-        OperationMessage = string.Empty;
         RaisePropertyChanged(nameof(IsEditing));
     }
 
@@ -105,31 +131,69 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         editingId = SelectedItem.Id;
         Form.Reset(SelectedItem);
         ValidationMessage = string.Empty;
-        OperationMessage = string.Empty;
         RaisePropertyChanged(nameof(IsEditing));
     }
 
     private void Save()
     {
         if (!TryBuild(out var value)) return;
-        var operation = editingId == 0 ? "created" : "updated";
-        store.Save(editingId, value);
-        SelectedItem = null;
-        editingId = 0;
-        Form.Reset(null);
-        ValidationMessage = string.Empty;
-        OperationMessage = $"{{ .Name }} {operation} successfully.";
-        Reload();
-        RaisePropertyChanged(nameof(IsEditing));
+        IsBusy = true;
+        try
+        {
+            var operation = editingId == 0 ? "created" : "updated";
+            store.Save(editingId, value);
+            SelectedItem = null;
+            editingId = 0;
+            Form.Reset(null);
+            ValidationMessage = string.Empty;
+            Reload();
+            RaisePropertyChanged(nameof(IsEditing));
+{{- if eq .Theme "wpfui" }}
+            snackbarService.Show("Saved", $"{{ .Name }} {operation} successfully.", ControlAppearance.Success, new SymbolIcon { Symbol = SymbolRegular.CheckmarkCircle24 }, TimeSpan.FromSeconds(4));
+{{- end }}
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
-    private void Delete()
+    private void Delete() => _ = DeleteAsync();
+
+    private async Task DeleteAsync()
     {
         if (SelectedItem is null) return;
-        store.Delete(SelectedItem.Id);
-        SelectedItem = null;
-        OperationMessage = "{{ .Name }} deleted successfully.";
-        Reload();
+{{- if eq .Theme "wpfui" }}
+        var result = await dialogService.ShowSimpleDialogAsync(new SimpleContentDialogCreateOptions
+        {
+            Title = "Delete {{ .Name }}?",
+            Content = "This will permanently delete the selected {{ .Name }} record.",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel"
+        });
+        if (result != ContentDialogResult.Primary) return;
+{{- else }}
+        var confirmed = MessageBox.Show(
+            "This will permanently delete the selected {{ .Name }} record.",
+            "Delete {{ .Name }}?",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        if (!confirmed) return;
+{{- end }}
+        IsBusy = true;
+        try
+        {
+            store.Delete(SelectedItem.Id);
+            SelectedItem = null;
+            Reload();
+{{- if eq .Theme "wpfui" }}
+            snackbarService.Show("Deleted", "{{ .Name }} deleted successfully.", ControlAppearance.Success, new SymbolIcon { Symbol = SymbolRegular.Delete24 }, TimeSpan.FromSeconds(4));
+{{- end }}
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private void Cancel()
@@ -138,13 +202,11 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         SelectedItem = null;
         Form.Reset(null);
         ValidationMessage = string.Empty;
-        OperationMessage = string.Empty;
         RaisePropertyChanged(nameof(IsEditing));
     }
 
     private bool Invalid(string propertyName)
     {
-        OperationMessage = string.Empty;
         ValidationMessage = $"{propertyName} is invalid.";
         return false;
     }

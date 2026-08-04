@@ -1,5 +1,7 @@
 using System.Windows;
 {{- if eq .Theme "wpfui" }}
+using Wpf.Ui;
+using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 {{- end }}
 
@@ -7,7 +9,20 @@ namespace {{ .Project }}.Desktop;
 
 public partial class Shell{{ if eq .Theme "wpfui" }} : Wpf.Ui.Controls.FluentWindow{{ else }} : Window{{ end }}
 {
+{{- if eq .Theme "wpfui" }}
+    public Shell(IContentDialogService contentDialogService, ISnackbarService snackbarService)
+    {
+        // Keep the app theme, accent, and Mica backdrop in sync with Windows settings.
+        SystemThemeWatcher.Watch(this);
+
+        InitializeComponent();
+
+        contentDialogService.SetDialogHost(RootContentDialog);
+        snackbarService.SetSnackbarPresenter(RootSnackbar);
+    }
+{{- else }}
     public Shell() => InitializeComponent();
+{{- end }}
 {{- if eq .Theme "wpfui" }}
 
     private void OnNavigationSuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)

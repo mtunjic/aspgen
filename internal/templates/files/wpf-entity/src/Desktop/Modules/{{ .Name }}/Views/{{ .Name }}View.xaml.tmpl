@@ -8,6 +8,11 @@
     Foreground="{DynamicResource TextFillColorPrimaryBrush}"
 {{- end }}
     prism:ViewModelLocator.AutoWireViewModel="True">
+{{- if eq .Theme "wpfui" }}
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </UserControl.Resources>
+{{- end }}
     <UserControl.InputBindings>
         <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
@@ -24,15 +29,19 @@
         </Grid.RowDefinitions>
         <DockPanel Margin="0,0,0,12">
 {{- if eq .Theme "wpfui" }}
-            <ui:TextBlock DockPanel.Dock="Left" FontSize="24" FontWeight="SemiBold" Text="{{ .Name }}" />
+            <StackPanel DockPanel.Dock="Left">
+                <ui:TextBlock FontTypography="TitleLarge" Text="{{ .Name }}" />
+                <ui:TextBlock Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontTypography="Body" Text="Manage {{ .Name }} records." />
+            </StackPanel>
 {{- else }}
             <TextBlock DockPanel.Dock="Left" FontSize="24" FontWeight="SemiBold" Text="{{ .Name }}" />
 {{- end }}
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
 {{- if eq .Theme "wpfui" }}
-                <ui:Button Margin="4,0,0,0" Padding="12,6" Content="New" Icon="{ui:SymbolIcon Add24}" ToolTip="Create a new {{ .Name }}" Command="{Binding NewCommand}" />
+                <ui:ProgressRing Width="20" Height="20" Margin="0,0,12,0" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
+                <ui:Button Margin="4,0,0,0" Padding="12,6" Appearance="Primary" Content="New" Icon="{ui:SymbolIcon Add24}" ToolTip="Create a new {{ .Name }}" Command="{Binding NewCommand}" />
                 <ui:Button Margin="4,0,0,0" Padding="12,6" Content="Edit" Icon="{ui:SymbolIcon Edit24}" ToolTip="Edit the selected {{ .Name }}" Command="{Binding EditCommand}" />
-                <ui:Button Margin="4,0,0,0" Padding="12,6" Content="Delete" Icon="{ui:SymbolIcon Delete24}" ToolTip="Delete the selected {{ .Name }}" Command="{Binding DeleteCommand}" />
+                <ui:Button Margin="4,0,0,0" Padding="12,6" Appearance="Danger" Content="Delete" Icon="{ui:SymbolIcon Delete24}" ToolTip="Delete the selected {{ .Name }}" Command="{Binding DeleteCommand}" />
                 <ui:Button Margin="4,0,0,0" Padding="12,6" Content="Refresh" Icon="{ui:SymbolIcon ArrowClockwise16}" ToolTip="Refresh {{ .Name }} records" Command="{Binding RefreshCommand}" />
 {{- else }}
                 <Button Margin="4,0,0,0" Padding="12,6" Content="New" Command="{Binding NewCommand}" />
@@ -43,9 +52,9 @@
             </StackPanel>
         </DockPanel>
 {{- if eq .Theme "wpfui" }}
-        <ui:DataGrid Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False" CanUserSortColumns="True" GridLinesVisibility="Horizontal" IsReadOnly="True" ItemsSource="{Binding Items}" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
+        <ui:DataGrid Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False" CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" IsReadOnly="True" ItemsSource="{Binding Items}" RowBackground="Transparent" AlternatingRowBackground="{DynamicResource ControlFillColorDefaultBrush}" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
 {{- else }}
-        <DataGrid Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False" CanUserSortColumns="True" GridLinesVisibility="Horizontal" IsReadOnly="True" ItemsSource="{Binding Items}" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
+        <DataGrid Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False" CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" IsReadOnly="True" ItemsSource="{Binding Items}" AlternatingRowBackground="WhiteSmoke" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
 {{- end }}
             <DataGrid.Columns>
 {{- range .Properties }}
@@ -125,13 +134,12 @@
 {{- end }}
 {{- if eq .Theme "wpfui" }}
                 <ui:InfoBar Margin="0,8,0,0" IsOpen="{Binding HasValidationError}" IsClosable="False" Severity="Error" Title="Validation" Message="{Binding ValidationMessage}" />
-                <ui:InfoBar Margin="0,8,0,0" IsOpen="{Binding HasOperationMessage}" IsClosable="False" Severity="Success" Title="Completed" Message="{Binding OperationMessage}" />
 {{- else }}
                 <TextBlock Margin="0,8,0,0" Foreground="Firebrick" Text="{Binding ValidationMessage}" />
 {{- end }}
                 <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
 {{- if eq .Theme "wpfui" }}
-                    <ui:Button Padding="12,6" Content="Save" Icon="{ui:SymbolIcon Save24}" ToolTip="Save changes" Command="{Binding SaveCommand}" />
+                    <ui:Button Padding="12,6" Appearance="Primary" Content="Save" Icon="{ui:SymbolIcon Save24}" ToolTip="Save changes" Command="{Binding SaveCommand}" />
                     <ui:Button Margin="8,0,0,0" Padding="12,6" Content="Cancel" Icon="{ui:SymbolIcon Dismiss24}" ToolTip="Cancel editing" Command="{Binding CancelCommand}" />
 {{- else }}
                     <Button Padding="12,6" Content="Save" Command="{Binding SaveCommand}" />
