@@ -67,48 +67,50 @@
         </DockPanel>
 {{- end }}
         <Expander Grid.Row="2" Margin="0,0,0,8" Header="Advanced filters" IsExpanded="{Binding IsAdvancedFilterExpanded, Mode=TwoWay}">
-            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <StackPanel Margin="0,8,0,0">
+                <WrapPanel>
 {{- range .Properties }}
 {{- if .RelationTarget }}
-                <StackPanel Margin="0,0,12,0">
-                    <TextBlock Text="{{ .DisplayName }}" />
-                    <ComboBox Width="140" Margin="0,4,0,0" ItemsSource="{Binding {{ .RelationTarget }}Items}" DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}" />
-                </StackPanel>
+                    <StackPanel Margin="0,0,12,8">
+                        <TextBlock Text="{{ .DisplayName }}" />
+                        <ComboBox Width="140" Margin="0,4,0,0" ItemsSource="{Binding {{ .RelationTarget }}Items}" DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}" />
+                    </StackPanel>
 {{- else if eq (filterKind .CSharpType) "string" }}
-                <StackPanel Margin="0,0,12,0">
-                    <TextBlock Text="{{ .DisplayName }} contains" />
-                    <TextBox Width="160" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Contains, UpdateSourceTrigger=PropertyChanged}" />
-                </StackPanel>
+                    <StackPanel Margin="0,0,12,8">
+                        <TextBlock Text="{{ .DisplayName }} contains" />
+                        <TextBox Width="160" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Contains, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
 {{- else if eq (filterKind .CSharpType) "numeric" }}
-                <StackPanel Margin="0,0,12,0">
-                    <TextBlock Text="{{ .DisplayName }} min" />
-                    <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Min, UpdateSourceTrigger=PropertyChanged}" />
-                </StackPanel>
-                <StackPanel Margin="0,0,12,0">
-                    <TextBlock Text="{{ .DisplayName }} max" />
-                    <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Max, UpdateSourceTrigger=PropertyChanged}" />
-                </StackPanel>
+                    <StackPanel Margin="0,0,12,8">
+                        <TextBlock Text="{{ .DisplayName }} min" />
+                        <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Min, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,12,8">
+                        <TextBlock Text="{{ .DisplayName }} max" />
+                        <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Max, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
 {{- else if eq (filterKind .CSharpType) "date" }}
-                <StackPanel Margin="0,0,12,0">
-                    <TextBlock Text="{{ .DisplayName }} from" />
-                    <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Min, Mode=TwoWay}" />
-                </StackPanel>
-                <StackPanel Margin="0,0,12,0">
-                    <TextBlock Text="{{ .DisplayName }} to" />
-                    <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Max, Mode=TwoWay}" />
-                </StackPanel>
+                    <StackPanel Margin="0,0,12,8">
+                        <TextBlock Text="{{ .DisplayName }} from" />
+                        <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Min, Mode=TwoWay}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,12,8">
+                        <TextBlock Text="{{ .DisplayName }} to" />
+                        <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Max, Mode=TwoWay}" />
+                    </StackPanel>
 {{- else if eq (filterKind .CSharpType) "bool" }}
-                <StackPanel Margin="0,0,12,0">
-                    <TextBlock Text="{{ .DisplayName }}" />
-                    <ComboBox Width="90" Margin="0,4,0,0" SelectedValuePath="Content" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}">
-                        <ComboBoxItem Content="{x:Null}" />
-                        <ComboBoxItem Content="True" />
-                        <ComboBoxItem Content="False" />
-                    </ComboBox>
-                </StackPanel>
+                    <StackPanel Margin="0,0,12,8">
+                        <TextBlock Text="{{ .DisplayName }}" />
+                        <ComboBox Width="90" Margin="0,4,0,0" SelectedValuePath="Content" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}">
+                            <ComboBoxItem Content="{x:Null}" />
+                            <ComboBoxItem Content="True" />
+                            <ComboBoxItem Content="False" />
+                        </ComboBox>
+                    </StackPanel>
 {{- end }}
 {{- end }}
-                <StackPanel VerticalAlignment="Bottom">
+                </WrapPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
 {{- if eq .Theme "wpfui" }}
                     <ui:Button Content="Apply" Command="{Binding SearchCommand}" />
                     <ui:Button Margin="8,0,0,0" Content="Clear" Command="{Binding ClearFiltersCommand}" />
