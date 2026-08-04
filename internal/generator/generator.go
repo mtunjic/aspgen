@@ -5,6 +5,9 @@ import (
 	"fmt"
 )
 
+// Version is set at build time via -ldflags "-X aspgen/internal/generator.Version=...".
+var Version = "dev"
+
 func Run(args []string) error {
 	if len(args) == 0 {
 		return usage()
@@ -23,7 +26,7 @@ func Run(args []string) error {
 	case "templates":
 		return templateCommand(args[1:])
 	case "version":
-		fmt.Println("aspgen dev")
+		fmt.Println("aspgen " + Version)
 		return nil
 	default:
 		return usage()

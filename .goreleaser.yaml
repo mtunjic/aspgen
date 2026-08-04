@@ -1,0 +1,47 @@
+version: 2
+
+project_name: aspgen
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: aspgen
+    main: ./cmd/aspgen
+    binary: aspgen
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X aspgen/internal/generator.Version={{.Version}}
+
+archives:
+  - id: aspgen
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^doc:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  draft: false
+  prerelease: auto
