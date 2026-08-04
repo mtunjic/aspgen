@@ -28,6 +28,7 @@ var addHandlers = map[string]func(addRequest, *Manifest, *data) error{
 	"feature":        addFeatureCmd,
 	"ui":             addUICmd,
 	"entity":         addEntityCmd,
+	"entity-field":   addEntityFieldCmd,
 	"module":         addModuleCmd,
 	"database":       addDatabaseCmd,
 	"service":        addServiceCmd,
