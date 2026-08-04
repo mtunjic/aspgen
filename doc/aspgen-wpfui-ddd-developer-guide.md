@@ -504,6 +504,24 @@ aspgen's "add a building block" command depends entirely on which `--app`/backen
 
 Switching between profiles (e.g. from fullstack DDD to Renoir, or dropping the WPF-only DDD app's `HttpClient`-less Desktop into a fullstack one) is not supported as an in-place command — see `doc/aspgen-generation-decision-guide.md` for the full decision table if you're choosing a profile for a new project.
 
+### 4.1 WPF-only local DDD — the same profile without a Web API
+
+Everything in this guide applies unchanged if you drop `fullstack` for `wpf` at `new` time:
+
+```bash
+aspgen new WpfLocalDemo --app wpf --backend ddd --theme wpfui --theme-mode light --output ./WpfLocalDemo
+aspgen add entity Product name:string price:decimal active:bool category:string --project ./WpfLocalDemo
+aspgen add entity-field Product notes:string --project ./WpfLocalDemo
+```
+
+The generated solution has no `WebApi`/`Application` project at all — `Desktop` references `Infrastructure` and `Domain` directly, `{Entity}Store` calls the EF Core repository in-process instead of `HttpClient`, and there's no `Features/{Entity}` CQRS folder or `Search{Entity}Handler` to keep in sync. Because that whole layer doesn't exist in this profile, `add entity-field` only ever has to patch the domain entity, the Infrastructure/EF configuration, seed data, and the Desktop row/view/ViewModel — there's no equivalent of the fullstack profile's `Search*sHandler` gotcha (see section 5) to worry about here. Build/run is a single project instead of two:
+
+```bash
+dotnet restore ./WpfLocalDemo/WpfLocalDemo.sln
+dotnet build ./WpfLocalDemo/WpfLocalDemo.sln
+dotnet run --project ./WpfLocalDemo/src/Desktop
+```
+
 ## 5. Tips, tricks & patching
 
 - **Never hand-edit around `// aspgen:features` or `// aspgen:modules`.** Every `add entity`/`add module` command inserts its registration line directly at these markers in `Program.cs`/`App.xaml.cs`. Moving or deleting a marker comment breaks subsequent `add` commands' insertion point.
@@ -517,6 +535,7 @@ Switching between profiles (e.g. from fullstack DDD to Renoir, or dropping the W
   dotnet build ./WpfUiDemo/WpfUiDemo.sln
   ```
 - **Avoid `Task` as an entity name.** It collides with `System.Threading.Tasks.Task` in generated C# files that have a bare `using System.Threading.Tasks;` — use `TodoItem` or similar instead.
+- **`add entity-field` must patch every handler that maps the entity into a response, not just `Create`/`Update`/`Get*ById`/`Get*s`.** `Search{Entity}Handler` (fullstack DDD's `add entity`/`add entity-field` generate/patch it too) builds its own `{Entity}Response` from each result row; missing it after adding a required property is a `CS7036` ("no argument given for required parameter") at build time. This doesn't apply to the WPF-only local DDD profile (section 4.1), which has no `Search*Handler`/CQRS layer to patch.
 - **Troubleshooting a build failure right after `add`:** check the manifest first — confirm the entity you referenced actually exists there, and confirm the `// aspgen:features`/`// aspgen:modules` markers weren't accidentally removed or duplicated. Most post-`add` compile errors trace back to one of those two things rather than a bug in the generated code itself.
 
 ## 6. Appendix: command cheat sheet
@@ -542,4 +561,13 @@ dotnet run --project ./WpfUiDemo/src/Desktop
 
 # Corporate NuGet restore workaround
 dotnet restore ./WpfUiDemo/WpfUiDemo.sln -s https://api.nuget.org/v3/index.json
+```
+
+```bash
+# WPF-only local DDD (no Web API, Desktop talks straight to Infrastructure/EF)
+aspgen new WpfLocalDemo --app wpf --backend ddd --theme wpfui --theme-mode light --output ./WpfLocalDemo
+aspgen add entity Product name:string price:decimal active:bool category:string --project ./WpfLocalDemo
+dotnet restore ./WpfLocalDemo/WpfLocalDemo.sln
+dotnet build ./WpfLocalDemo/WpfLocalDemo.sln
+dotnet run --project ./WpfLocalDemo/src/Desktop
 ```
