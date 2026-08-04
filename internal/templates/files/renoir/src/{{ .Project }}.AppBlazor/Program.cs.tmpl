@@ -10,6 +10,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<{{ .Project }}.Application.
 builder.Services.AddSingleton(new RenoirSettings());
 builder.Services.AddDbContext<{{ .Project }}Database>((services, options) =>
     options.UseSqlServer(services.GetRequiredService<RenoirSettings>().Secrets.Database.Get()));
+// aspgen:services
 
 var app = builder.Build();
 app.UseStaticFiles();

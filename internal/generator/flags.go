@@ -1,0 +1,178 @@
+package generator
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+func themeOption(args []string) (string, error) {
+	for i, arg := range args {
+		for _, key := range []string{"--theme", "-theme"} {
+			if arg == key {
+				if i+1 >= len(args) {
+					return "", errors.New("theme value is required")
+				}
+				return validateTheme(args[i+1])
+			}
+			if strings.HasPrefix(arg, key+":") {
+				return validateTheme(strings.TrimPrefix(arg, key+":"))
+			}
+		}
+	}
+	return "", nil
+}
+
+func backendOption(args []string) (string, error) {
+	for i, arg := range args {
+		for _, key := range []string{"--backend", "-backend"} {
+			if arg == key {
+				if i+1 >= len(args) {
+					return "", errors.New("backend value is required")
+				}
+				return validateBackend(args[i+1])
+			}
+			if strings.HasPrefix(arg, key+":") {
+				return validateBackend(strings.TrimPrefix(arg, key+":"))
+			}
+		}
+	}
+	return "", nil
+}
+
+func seedOption(args []string) (string, int, error) {
+	for i, arg := range args {
+		for _, key := range []string{"--seed", "-seed"} {
+			if arg == key {
+				if i+1 >= len(args) {
+					return "", 0, errors.New("seed value is required")
+				}
+				count := 3
+				if i+2 < len(args) && !strings.HasPrefix(args[i+2], "-") {
+					parsed, err := strconv.Atoi(args[i+2])
+					if err != nil {
+						return "", 0, fmt.Errorf("invalid seed count %q", args[i+2])
+					}
+					count = parsed
+				}
+				seed, err := validateSeed(args[i+1])
+				return seed, count, validateSeedCount(seed, count, err)
+			}
+			if strings.HasPrefix(arg, key+":") {
+				value := strings.TrimPrefix(arg, key+":")
+				parts := strings.Split(value, ":")
+				count := 3
+				if len(parts) > 1 {
+					parsed, err := strconv.Atoi(parts[1])
+					if err != nil {
+						return "", 0, fmt.Errorf("invalid seed count %q", parts[1])
+					}
+					count = parsed
+				}
+				seed, err := validateSeed(parts[0])
+				return seed, count, validateSeedCount(seed, count, err)
+			}
+		}
+	}
+	return "", 0, nil
+}
+
+func validateSeedCount(seed string, count int, seedErr error) error {
+	if seedErr != nil {
+		return seedErr
+	}
+	if seed == "" || seed == "none" {
+		return nil
+	}
+	if count < 1 || count > 10000 {
+		return fmt.Errorf("seed count must be between 1 and 10000, got %d", count)
+	}
+	return nil
+}
+
+func validateSeed(seed string) (string, error) {
+	if seed == "" || seed == "none" {
+		return "", nil
+	}
+	if seed != "dummy" {
+		return "", fmt.Errorf("unsupported seed profile %q", seed)
+	}
+	return seed, nil
+}
+
+func databaseOption(args []string) (string, error) {
+	for i, arg := range args {
+		for _, key := range []string{"--database", "-database"} {
+			if arg == key {
+				if i+1 >= len(args) {
+					return "", errors.New("database value is required")
+				}
+				return validateDatabase(args[i+1])
+			}
+			if strings.HasPrefix(arg, key+":") {
+				return validateDatabase(strings.TrimPrefix(arg, key+":"))
+			}
+		}
+	}
+	return "", nil
+}
+
+func validateDatabase(database string) (string, error) {
+	if database == "" || database == "none" {
+		return "", nil
+	}
+	if database != "sqlite" && database != "postgres" {
+		return "", fmt.Errorf("unsupported database %q; use sqlite or postgres", database)
+	}
+	return database, nil
+}
+
+func validateBackend(backend string) (string, error) {
+	if backend == "" || backend == "none" {
+		return "", nil
+	}
+	if backend != "ddd" {
+		return "", fmt.Errorf("unsupported backend %q", backend)
+	}
+	return backend, nil
+}
+
+func validateTheme(theme string) (string, error) {
+	if theme == "" || theme == "none" {
+		return "", nil
+	}
+	if theme != "wpfui" {
+		return "", fmt.Errorf("unsupported WPF theme %q", theme)
+	}
+	return theme, nil
+}
+
+func exists(path string) bool { _, err := os.Stat(path); return err == nil }
+func value(args []string, key, fallback string) string {
+	for i, a := range args {
+		if a == key && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return fallback
+}
+func templateDir(args []string) string { return value(args, "--templates", "") }
+func hasFlag(args []string, flag string) bool {
+	for _, arg := range args {
+		if arg == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func appendUnique(xs []string, value string) []string {
+	for _, x := range xs {
+		if x == value {
+			return xs
+		}
+	}
+	return append(xs, value)
+}

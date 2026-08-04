@@ -1,0 +1,35 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.DomainModel;
+using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+
+namespace {{ .Project }}.Persistence.Contexts.{{ .Context }}.Repositories;
+
+public sealed class {{ .Name }}({{ .Project }}Database database) : I{{ .Name }}
+{
+    public Task<{{ .Aggregate }}?> GetByIdAsync(long id, CancellationToken cancellationToken = default) =>
+        database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
+
+    public async Task<IReadOnlyList<{{ .Aggregate }}>> GetAllAsync(CancellationToken cancellationToken = default) =>
+        await database.{{ .Aggregate }}s.Where(x => !x.Deleted).ToListAsync(cancellationToken);
+
+    public async Task<CommandResponse> AddAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default)
+    {
+        aggregate.Init("system");
+        database.Add(aggregate);
+        return await database.TrySaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<CommandResponse> SaveAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default)
+    {
+        aggregate.Mark("system");
+        return await database.TrySaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<CommandResponse> DeleteAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var aggregate = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
+        if (aggregate is null) return CommandResponse.Fail().AddMessage("{{ .Aggregate }} not found.");
+        aggregate.SoftDelete();
+        return await database.TrySaveChangesAsync(cancellationToken);
+    }
+}

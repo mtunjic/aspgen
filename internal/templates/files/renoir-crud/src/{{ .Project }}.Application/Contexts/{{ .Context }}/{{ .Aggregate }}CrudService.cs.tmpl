@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using FluentValidation;
+using {{ .Project }}.DomainModel;
 using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
 using {{ .Project }}.Persistence;
 
@@ -23,30 +24,29 @@ public sealed class {{ .Aggregate }}CrudService({{ .Project }}Database database,
         await validator.ValidateAndThrowAsync(request, cancellationToken);
         var entity = new {{ .Aggregate }}(
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        entity.Init("system");
         database.Add(entity);
         await database.SaveChangesAsync(cancellationToken);
         return new {{ .Aggregate }}View(entity.Id,
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }});
     }
 
-    public async Task<bool> UpdateAsync(long id, {{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
+    public async Task<CommandResponse> UpdateAsync(long id, {{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
     {
         await validator.ValidateAndThrowAsync(request, cancellationToken);
         var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
-        if (entity is null) return false;
+        if (entity is null) return CommandResponse.Fail().AddMessage("{{ .Aggregate }} not found.");
         entity.Update(
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
-        await database.SaveChangesAsync(cancellationToken);
-        return true;
+        return await database.TrySaveChangesAsync(cancellationToken);
     }
 
-    public async Task<bool> DeleteAsync(long id, CancellationToken cancellationToken = default)
+    public async Task<CommandResponse> DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
         var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
-        if (entity is null) return false;
+        if (entity is null) return CommandResponse.Fail().AddMessage("{{ .Aggregate }} not found.");
         entity.SoftDelete();
-        await database.SaveChangesAsync(cancellationToken);
-        return true;
+        return await database.TrySaveChangesAsync(cancellationToken);
     }
 }
 

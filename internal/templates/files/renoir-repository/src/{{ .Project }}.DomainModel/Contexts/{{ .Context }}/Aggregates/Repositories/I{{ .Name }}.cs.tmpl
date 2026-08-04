@@ -1,4 +1,4 @@
-using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+using {{ .Project }}.DomainModel;
 
 namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
 
@@ -6,6 +6,8 @@ namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
 public interface I{{ .Name }}
 {
     Task<{{ .Aggregate }}?> GetByIdAsync(long id, CancellationToken cancellationToken = default);
-    Task AddAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default);
-    Task SaveAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<{{ .Aggregate }}>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<CommandResponse> AddAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default);
+    Task<CommandResponse> SaveAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default);
+    Task<CommandResponse> DeleteAsync(long id, CancellationToken cancellationToken = default);
 }

@@ -1,11 +1,13 @@
 namespace {{ .Project }}.Application.Settings;
 
-public sealed class RenoirSettings
+public sealed partial class RenoirSettings
 {
     public const string AuthCookieName = "{{ .Project }}.Auth";
     public bool DevMode { get; set; } = true;
     public ProjectSettings Project { get; set; } = new();
     public SecretsSettings Secrets { get; set; } = new();
+
+    public bool IsDevelopment() => DevMode;
 }
 
 public sealed class ProjectSettings

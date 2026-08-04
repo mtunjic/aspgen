@@ -1,0 +1,78 @@
+package generator
+
+import (
+	"crypto/sha1"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+func writeSolution(root, name, app string, force, simple bool, backend string) error {
+	target := filepath.Join(root, name+".sln")
+	if exists(target) && !force {
+		return fmt.Errorf("refusing to overwrite %s", target)
+	}
+	projects := make([]string, 0, 8)
+	targets := make([]string, 0, 8)
+	if app == "webapi" || app == "fullstack" || (app == "wpf" && backend == "ddd") {
+		projectsToAdd := []struct{ target, display, path string }{
+			{"domain", name + ".Domain", "src\\Domain\\" + projectFileName(name, "Domain")},
+			{"application", name + ".Application", "src\\Application\\" + projectFileName(name, "Application")},
+			{"infrastructure", name + ".Infrastructure", "src\\Infrastructure\\" + projectFileName(name, "Infrastructure")},
+			{"webapi", name + ".WebApi", "src\\WebApi\\" + projectFileName(name, "WebApi")},
+		}
+		if simple {
+			projectsToAdd = []struct{ target, display, path string }{{"webapi", name + ".WebApi", "src\\WebApi\\" + projectFileName(name, "WebApi")}}
+		}
+		if app == "wpf" && backend == "ddd" {
+			projectsToAdd = []struct{ target, display, path string }{
+				{"domain", name + ".Domain", "src\\Domain\\" + projectFileName(name, "Domain")},
+				{"application", name + ".Application", "src\\Application\\" + projectFileName(name, "Application")},
+				{"infrastructure", name + ".Infrastructure", "src\\Infrastructure\\" + projectFileName(name, "Infrastructure")},
+			}
+		}
+		for _, project := range projectsToAdd {
+			projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"", project.display, project.path, projectGUID(name, project.target)))
+			targets = append(targets, project.target)
+		}
+	}
+	if app == "wpf" || app == "fullstack" {
+		projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s.Desktop\", \"src\\Desktop\\%s.Desktop.csproj\", \"{%s}\"", name, name, projectGUID(name, "wpf")))
+		targets = append(targets, "wpf")
+	}
+	if app == "blazor" {
+		for _, project := range []struct{ target, display, path string }{
+			{"domain", name + ".DomainModel", "src\\" + name + ".DomainModel\\" + name + ".DomainModel.csproj"},
+			{"application", name + ".Application", "src\\" + name + ".Application\\" + name + ".Application.csproj"},
+			{"infrastructure", name + ".Infrastructure", "src\\" + name + ".Infrastructure\\" + name + ".Infrastructure.csproj"},
+			{"persistence", name + ".Persistence", "src\\" + name + ".Persistence\\" + name + ".Persistence.csproj"},
+			{"resources", name + ".Resources", "src\\" + name + ".Resources\\" + name + ".Resources.csproj"},
+			{"app", name + ".AppBlazor", "src\\" + name + ".AppBlazor\\" + name + ".AppBlazor.csproj"},
+		} {
+			projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"", project.display, project.path, projectGUID(name, project.target)))
+			targets = append(targets, project.target)
+		}
+	}
+	projectText := make([]string, 0, len(projects))
+	for _, project := range projects {
+		projectText = append(projectText, project+"\nEndProject")
+	}
+	config := make([]string, 0, len(projects)*4)
+	for _, target := range targets {
+		guid := projectGUID(name, target)
+		config = append(config,
+			fmt.Sprintf("\t\t{%s}.Debug|Any CPU.ActiveCfg = Debug|Any CPU", guid),
+			fmt.Sprintf("\t\t{%s}.Debug|Any CPU.Build.0 = Debug|Any CPU", guid),
+			fmt.Sprintf("\t\t{%s}.Release|Any CPU.ActiveCfg = Release|Any CPU", guid),
+			fmt.Sprintf("\t\t{%s}.Release|Any CPU.Build.0 = Release|Any CPU", guid),
+		)
+	}
+	content := "Microsoft Visual Studio Solution File, Format Version 12.00\n# Visual Studio Version 17\nVisualStudioVersion = 17.0.31903.59\nMinimumVisualStudioVersion = 10.0.40219.1\n" + strings.Join(projectText, "\n") + "\nGlobal\n\tGlobalSection(SolutionConfigurationPlatforms) = preSolution\n\t\tDebug|Any CPU = Debug|Any CPU\n\t\tRelease|Any CPU = Release|Any CPU\n\tEndGlobalSection\n\tGlobalSection(ProjectConfigurationPlatforms) = postSolution\n" + strings.Join(config, "\n") + "\n\tEndGlobalSection\nEndGlobal\n"
+	return os.WriteFile(target, []byte(content), 0o644)
+}
+
+func projectGUID(project, target string) string {
+	sum := sha1.Sum([]byte(project + ":" + target))
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
+}

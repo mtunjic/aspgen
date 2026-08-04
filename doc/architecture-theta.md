@@ -176,6 +176,19 @@ generate:
 
 Nullable syntax uses `?`, for example `middleName:string?` or `birthDate:date?`. Type parsing must be deterministic and reject unknown types rather than silently generating incorrect code.
 
+## Renoir reference conventions (Blazor DDD profile)
+
+The `--app blazor` profile (`add context / aggregate / value-object / domain-service / repository / event`) is a separate DDD profile from the Theta Web API backend above. Its structural conventions are modeled directly on a real reference implementation (the Renoir sample from Dino Esposito's *Clean Architecture with .NET*, MS Press 2024), adapted to keep this codebase's async/`CancellationToken` conventions rather than the reference's synchronous style. When extending `renoir*` templates, prefer mirroring these conventions over inventing new ones:
+
+- **`BaseEntity`**: soft-delete via a `Deleted` bool plus `Created`/`LastUpdated` `TimeStamp` value objects (`When`, `By`, display helpers). `Init(author)` stamps both timestamps on create; `Mark(author)` stamps `LastUpdated` on update; `SoftDelete()`/`SoftUndelete()` toggle `Deleted`.
+- **Partial-class split per aggregate**: `{Aggregate}.cs` holds state and constructors; `{Aggregate}.Methods.cs` holds behavior (`Update`, `IsValid`, `Normalize`, `Import`, `ToString`). Always create both halves together — a partial class split across two template files must never be committed with only one half present.
+- **`CommandResponse`**: the result type for mutating operations (`Success`, nullable `Message`/`Extra`, static `Ok()`/`Fail()`, fluent `AddMessage()`/`AddExtra()`). CrudService `UpdateAsync`/`DeleteAsync` and repository `AddAsync`/`SaveAsync`/`DeleteAsync` return `Task<CommandResponse>` instead of `Task<bool>`.
+- **`{{.Project}}Database.TrySaveChangesAsync(CancellationToken)`**: wraps `SaveChangesAsync` in try/catch and returns `CommandResponse.Ok()` or `CommandResponse.Fail()` — mutating operations should call this instead of calling `SaveChangesAsync` and returning a bare bool.
+- **EF mapping**: one `IEntityTypeConfiguration<T>` class per aggregate in Persistence, discovered via `modelBuilder.ApplyConfigurationsFromAssembly(typeof({{.Project}}Database).Assembly)` in the base `DbContext`. Do not hand-edit `OnModelCreating` per generated aggregate.
+- **Repository indirection**: `I{{.Name}}` contract lives in Domain; the concrete EF-backed implementation lives in Persistence and must always be generated alongside the interface — an interface with no implementation is a functional gap, not an acceptable stopping point.
+- **DI registration**: a `// aspgen:services` marker comment in the AppBlazor `Program.cs` (mirroring `// aspgen:features`/`// aspgen:seed`) is where `add aggregate` (CrudService) and `add repository` (interface -> implementation) register their DI bindings via `updateBlazorServiceHost`.
+- **`RenoirSettings`** is a `partial` class so generated code can extend it (e.g. `IsDevelopment()`), matching the reference project's settings pattern.
+
 ## Generator behavior
 
 - `new` is the initialization command. It creates the project tree, solution, host files, and `.aspgen/manifest.json`.
@@ -217,3 +230,4 @@ When discussing future work:
 - **Theta feature** means a self-contained command/query slice with records, handler, validator, endpoint, and optional UI.
 - **Theta module** means an independently registered Prism module with View, ViewModel, commands, services, navigation, and event contracts.
 - **Theta CRUD** means aggregate-safe CRUD with API contracts, validation, persistence mapping, and typed WPF controls.
+- **Renoir profile** means the `--app blazor` DDD profile whose structural conventions (`BaseEntity`, `CommandResponse`, partial-class aggregates, repository indirection, `IEntityTypeConfiguration`) are modeled on the Renoir reference implementation, kept async.

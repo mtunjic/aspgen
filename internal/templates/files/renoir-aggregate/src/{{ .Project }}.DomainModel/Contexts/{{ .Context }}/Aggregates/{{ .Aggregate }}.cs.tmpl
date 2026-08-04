@@ -2,7 +2,7 @@ using {{ .Project }}.DomainModel;
 
 namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
 
-public sealed class {{ .Aggregate }} : BaseEntity
+public sealed partial class {{ .Aggregate }} : BaseEntity
 {
     private {{ .Aggregate }}() { }
 
@@ -18,13 +18,4 @@ public sealed class {{ .Aggregate }} : BaseEntity
 {{- range .Properties }}
     public {{ .CSharpType }} {{ .Name }} { get; private set; } = default!;
 {{- end }}
-
-    public void Update(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }})
-    {
-{{- range .Properties }}
-        {{ .Name }} = {{ if eq .CSharpType "string" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "Guid" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "DateOnly" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "DateTime" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else }}{{ camel .Name }}{{ end }};
-{{- end }}
-        Mark("system");
-    }
 }

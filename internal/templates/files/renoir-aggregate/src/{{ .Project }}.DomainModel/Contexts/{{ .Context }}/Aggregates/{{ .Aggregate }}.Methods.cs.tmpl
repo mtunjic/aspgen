@@ -1,0 +1,30 @@
+using {{ .Project }}.DomainModel;
+
+namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+
+public sealed partial class {{ .Aggregate }}
+{
+    public void Update(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }})
+    {
+{{- range .Properties }}
+        {{ .Name }} = {{ if eq .CSharpType "string" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "Guid" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "DateOnly" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "DateTime" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else }}{{ camel .Name }}{{ end }};
+{{- end }}
+        Mark("system");
+    }
+
+    public override bool IsValid() => true;
+
+    public override void Normalize() { }
+
+    public override void Import(BaseEntity entity)
+    {
+        base.Import(entity);
+        if (entity is not {{ .Aggregate }} other) return;
+{{- range .Properties }}
+        {{ .Name }} = other.{{ .Name }};
+{{- end }}
+    }
+
+    public override string ToString() => $"{{ .Aggregate }} #{Id}";
+}
