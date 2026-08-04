@@ -136,14 +136,6 @@ func providerOption(args []string) (string, error) {
 	return "", fmt.Errorf("unsupported provider %q; use sqlite, postgres, sqlserver, or mysql", v)
 }
 
-// connectionOption and scriptOption are mutually exclusive; validateDBSource
-// enforces exactly one is present whenever DB-driven entity import is
-// requested.
-func connectionOption(args []string) (string, error) {
-	v, _, err := matchOption(args, "--connection")
-	return v, err
-}
-
 func scriptOption(args []string) (string, error) {
 	v, _, err := matchOption(args, "--script")
 	return v, err

@@ -74,10 +74,10 @@ func newProject(args []string) error {
 	}
 	if dbImportRequested {
 		if app != "webapi" && app != "fullstack" && !(app == "wpf" && backend == "ddd") {
-			return errors.New("--connection/--script requires a webapi, fullstack, or local DDD wpf application")
+			return errors.New("--script requires a webapi, fullstack, or local DDD wpf application")
 		}
 		if !simple && backend == "" {
-			return errors.New("--connection/--script requires --simple or --backend ddd")
+			return errors.New("--script requires --simple or --backend ddd")
 		}
 	}
 	if database == "" {

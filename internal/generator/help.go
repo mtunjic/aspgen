@@ -6,7 +6,7 @@ const topLevelHelp = `aspgen scaffolds ASP.NET Core Clean Architecture APIs and 
 Usage:
   aspgen new NAME [flags]        Create a new project (tree + solution + manifest)
   aspgen add KIND NAME [flags]   Add a component to an existing project
-  aspgen import-db [flags]       Add entities to an existing project from a DB connection/script
+  aspgen import-db [flags]       Add entities to an existing project from a SQL DDL script
   aspgen templates list|export PATH|validate PATH
   aspgen version                 Print the aspgen version
 
@@ -27,9 +27,8 @@ Flags:
   --theme wpfui      WPF-UI Fluent theme (wpf/fullstack only)
   --theme-mode MODE  light | dark (default light; requires --theme wpfui)
   --seed dummy [N]   N sample records per entity, default 3 (needs --simple or --backend ddd)
-  --connection CONN  Live DB connection string to import entities from (needs --provider)
-  --script PATH      SQL DDL script to import entities from instead of --connection (needs --provider)
-  --provider P       sqlite | postgres | sqlserver | mysql (required with --connection/--script)
+  --script PATH      SQL DDL script to import entities from (needs --provider)
+  --provider P       sqlite | postgres | sqlserver | mysql (required with --script)
   --tables T         all (default) or a comma list of table names to import
   --output PATH      Output directory (default: project NAME)
   --templates PATH   Use a custom template directory instead of the embedded set
@@ -76,7 +75,7 @@ Examples:
 
 // importDBHelp is printed for `aspgen import-db --help`.
 const importDBHelp = `Usage:
-  aspgen import-db --project PATH --connection CONN|--script PATH --provider PROVIDER [flags]
+  aspgen import-db --project PATH --script PATH --provider PROVIDER [flags]
 
 Adds an entity per selected table to an existing project (simple or ddd
 backend, webapi/fullstack/wpf profiles only — not blazor/Renoir), the same
@@ -86,8 +85,7 @@ step against the generated entities/DbContext.
 
 Flags:
   --project PATH     Path to the generated project (default: search this dir and parents for .aspgen/manifest.json)
-  --connection CONN  Live DB connection string (mutually exclusive with --script)
-  --script PATH      SQL DDL script to parse instead of connecting live
+  --script PATH      SQL DDL script to parse
   --provider P       sqlite | postgres | sqlserver | mysql (required)
   --tables T         all (default) or a comma list of table names to import
   --backend ddd      Override the project's backend profile (default: the project's own backend)
@@ -96,5 +94,4 @@ Flags:
 
 Examples:
   aspgen import-db --project ./MyApp --script schema.sql --provider postgres --tables all
-  aspgen import-db --project ./MyApp --connection "file:demo.db" --provider sqlite --tables Customers,Orders
 `

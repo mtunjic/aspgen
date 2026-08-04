@@ -1,5 +1,5 @@
-// Package dbschema discovers table/column schema from a live database
-// connection or a static SQL DDL script, for aspgen's import-db command.
+// Package dbschema discovers table/column schema from a static SQL DDL
+// script, for aspgen's import-db command.
 package dbschema
 
 // Column describes one column of an introspected or parsed table. IsPrimaryKey
@@ -18,7 +18,7 @@ type Table struct {
 	Columns []Column
 }
 
-// Providers supported by both live introspection and script parsing.
+// Providers supported by script parsing.
 const (
 	SQLite    = "sqlite"
 	Postgres  = "postgres"

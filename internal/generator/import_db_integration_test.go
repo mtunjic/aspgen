@@ -122,7 +122,4 @@ func TestImportDBRequiresProvider(t *testing.T) {
 	if err := Run([]string{"import-db", "--project", project, "--script", script}); err == nil {
 		t.Fatal("expected an error when --provider is missing")
 	}
-	if err := Run([]string{"import-db", "--project", project, "--script", script, "--connection", "x", "--provider", "sqlite"}); err == nil {
-		t.Fatal("expected an error when both --script and --connection are given")
-	}
 }

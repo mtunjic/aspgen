@@ -6,8 +6,8 @@ import (
 )
 
 // importDBCmd implements the `aspgen import-db` top-level verb: incrementally
-// add entities to an existing project from a live DB connection or SQL
-// script, mirroring add()'s project-discovery/manifest-save tail.
+// add entities to an existing project from a SQL DDL script, mirroring
+// add()'s project-discovery/manifest-save tail.
 func importDBCmd(args []string) error {
 	if len(args) > 0 && isHelp(args[0]) {
 		fmt.Print(importDBHelp)
@@ -18,7 +18,7 @@ func importDBCmd(args []string) error {
 		return err
 	}
 	if !ok {
-		return errors.New("usage: aspgen import-db --project PATH --connection CONN|--script PATH --provider PROVIDER [--tables all|A,B] [flags]; run 'aspgen import-db --help' for details")
+		return errors.New("usage: aspgen import-db --project PATH --script PATH --provider PROVIDER [--tables all|A,B] [flags]; run 'aspgen import-db --help' for details")
 	}
 	project := value(args, "--project", "")
 	if project == "" {

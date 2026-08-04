@@ -10,48 +10,40 @@ import (
 	"aspgen/internal/dbschema"
 )
 
-// dbImportRequest carries the flags shared by `new --connection/--script`
-// and the `import-db` verb.
+// dbImportRequest carries the flags shared by `new --script` and the
+// `import-db` verb.
 type dbImportRequest struct {
-	Provider   string
-	Connection string
-	Script     string
-	Tables     []string
+	Provider string
+	Script   string
+	Tables   []string
 }
 
 // parseDBImportFlags reads the DB-import flags out of args. ok is false when
-// neither --connection nor --script is present (DB import not requested).
+// --script is not present (DB import not requested).
 func parseDBImportFlags(args []string) (req dbImportRequest, ok bool, err error) {
-	connection, err := connectionOption(args)
-	if err != nil {
-		return dbImportRequest{}, false, err
-	}
 	script, err := scriptOption(args)
 	if err != nil {
 		return dbImportRequest{}, false, err
 	}
-	if connection == "" && script == "" {
+	if script == "" {
 		return dbImportRequest{}, false, nil
-	}
-	if connection != "" && script != "" {
-		return dbImportRequest{}, false, errors.New("--connection and --script cannot be used together")
 	}
 	provider, err := providerOption(args)
 	if err != nil {
 		return dbImportRequest{}, false, err
 	}
 	if provider == "" {
-		return dbImportRequest{}, false, errors.New("--provider is required with --connection or --script")
+		return dbImportRequest{}, false, errors.New("--provider is required with --script")
 	}
 	tables, err := tablesOption(args)
 	if err != nil {
 		return dbImportRequest{}, false, err
 	}
-	return dbImportRequest{Provider: provider, Connection: connection, Script: script, Tables: tables}, true, nil
+	return dbImportRequest{Provider: provider, Script: script, Tables: tables}, true, nil
 }
 
-// runDBImport discovers table/column schema (live connection or SQL script)
-// and, for each selected table, synthesizes `col:type` property args and
+// runDBImport discovers table/column schema from the SQL script and, for
+// each selected table, synthesizes `col:type` property args and
 // calls addEntityCmd — the same call `add entity` itself makes — so every
 // backend profile addEntityCmd already supports works unmodified. It also
 // writes a `schema.sql` backup snapshot at the project root.
@@ -106,9 +98,6 @@ func runDBImport(project string, m *Manifest, backend string, req dbImportReques
 }
 
 func discoverTables(req dbImportRequest) ([]dbschema.Table, error) {
-	if req.Connection != "" {
-		return dbschema.Introspect(req.Provider, req.Connection, req.Tables)
-	}
 	script, err := os.ReadFile(req.Script)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", req.Script, err)
@@ -120,9 +109,7 @@ func discoverTables(req dbImportRequest) ([]dbschema.Table, error) {
 	return filterParsedTables(tables, req.Tables)
 }
 
-// filterParsedTables applies a --tables allow-list to script-parsed tables
-// (dbschema.Introspect already applies the equivalent allow-list itself for
-// the live-connection path).
+// filterParsedTables applies a --tables allow-list to script-parsed tables.
 func filterParsedTables(tables []dbschema.Table, wanted []string) ([]dbschema.Table, error) {
 	if len(wanted) == 0 {
 		return tables, nil
