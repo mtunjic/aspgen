@@ -448,7 +448,7 @@ Both `Program.cs`'s `// aspgen:features` marker and `App.xaml.cs`'s `// aspgen:m
 aspgen add entity-field Product notes:string --project ./WpfUiDemo
 ```
 
-This patches the entity, every CQRS command/handler that constructs or updates it, the WebApi request/response records, and the Desktop row/view/ViewModel — no manual file editing needed, safe to re-run for additional fields later.
+This patches the entity, every CQRS command/handler that constructs, updates, or maps it into a response — including `Create*Handler`, `Update*Handler`, `Get*ByIdHandler`, `Get*sHandler`, and `Search*sHandler` — plus the WebApi request/response records and the Desktop row/view/ViewModel. No manual file editing needed, safe to re-run for additional fields later.
 
 `Domain/Entities/Product.cs` (constructor + property + `Update` all gain the new field):
 
