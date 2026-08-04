@@ -1,0 +1,18 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+
+namespace {{ .Project }}.Persistence.Contexts.{{ .Context }};
+
+public sealed class {{ .Aggregate }}Configuration : IEntityTypeConfiguration<{{ .Aggregate }}>
+{
+    public void Configure(EntityTypeBuilder<{{ .Aggregate }}> builder)
+    {
+        builder.HasKey(x => x.Id);
+        builder.ComplexProperty(x => x.Created).IsRequired();
+        builder.ComplexProperty(x => x.LastUpdated).IsRequired();
+{{- range .Properties }}{{ if eq .CSharpType "string" }}
+        builder.Property(x => x.{{ .Name }}).HasMaxLength(200);
+{{- end }}{{- end }}
+    }
+}

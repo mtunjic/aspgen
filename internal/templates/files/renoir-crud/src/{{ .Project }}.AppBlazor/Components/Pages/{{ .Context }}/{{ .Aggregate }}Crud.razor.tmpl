@@ -58,8 +58,9 @@
         }
         else
         {
-            if (!await Service.UpdateAsync(editingId, new {{ .Aggregate }}Request(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }}))) return;
+            var result = await Service.UpdateAsync(editingId, new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }}));
+            if (!result.Success) return;
         }
         form = new();
         editingId = 0;
@@ -82,7 +83,8 @@
 
     private async Task DeleteAsync(long id)
     {
-        if (!await Service.DeleteAsync(id)) return;
+        var result = await Service.DeleteAsync(id);
+        if (!result.Success) return;
         await ReloadAsync();
     }
 

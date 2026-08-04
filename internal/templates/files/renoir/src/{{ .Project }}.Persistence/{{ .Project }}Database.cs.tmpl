@@ -9,9 +9,27 @@ public partial class {{ .Project }}Database(DbContextOptions<{{ .Project }}Datab
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<SampleRecord>().HasKey(x => x.Id);
-        modelBuilder.Entity<SampleRecord>().OwnsOne(x => x.Created);
-        modelBuilder.Entity<SampleRecord>().OwnsOne(x => x.LastUpdated);
+        modelBuilder.Entity<SampleRecord>(x =>
+        {
+            x.HasKey(r => r.Id);
+            x.ComplexProperty(r => r.Created).IsRequired();
+            x.ComplexProperty(r => r.LastUpdated).IsRequired();
+        });
+        // Per-aggregate mapping lives in IEntityTypeConfiguration classes under Contexts/*.
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof({{ .Project }}Database).Assembly);
+    }
+
+    public async Task<CommandResponse> TrySaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await SaveChangesAsync(cancellationToken);
+            return CommandResponse.Ok();
+        }
+        catch (Exception ex)
+        {
+            return CommandResponse.Fail().AddMessage("The operation failed.").AddExtra(ex.Message);
+        }
     }
 }
 
