@@ -19,6 +19,8 @@ If you run an `add` command without `--project`, aspgen searches the current dir
 
 Run `aspgen --help`, `aspgen new --help`, or `aspgen add --help` for a full flag reference. Every flag accepts three equivalent forms: `--flag value`, `--flag:value`, and `-flag:value`.
 
+See [doc/DEVOPS.md](doc/DEVOPS.md) for how CI and tagged releases work.
+
 For a WPF or fullstack project, add the WPF-UI Fluent theme with `--theme wpfui` (also accepted as `--theme:wpfui` or `-theme:wpfui`). This adds the `WPF-UI` NuGet package, theme resource dictionaries, and a themed `FluentWindow` shell. The generated app defaults to the Light palette; pass `--theme-mode dark` to generate the Dark palette instead (both are just the starting `ThemesDictionary` value — the shell also ships a runtime Light/Dark toggle).
 
 For a Web API or fullstack project, use `--backend ddd` (or `--backend:ddd`) to enable incremental DDD CRUD generation. Adding an entity then creates its Domain entity, repository contract, EF Core repository, separate CQRS commands/queries and handlers, FluentValidation validators, and Minimal API endpoints for list, get, create, update, and delete.
