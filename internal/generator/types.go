@@ -24,8 +24,9 @@ func parseProperties(args []string) ([]Property, error) {
 			skipNext = false
 			continue
 		}
-		if strings.HasPrefix(arg, "--") {
-			if arg == "--project" || arg == "--templates" || arg == "--framework" || arg == "--context" || arg == "--aggregate" {
+		if strings.HasPrefix(arg, "-") {
+			if arg == "--project" || arg == "--templates" || arg == "--framework" || arg == "--context" || arg == "--aggregate" ||
+				arg == "-project" || arg == "-templates" || arg == "-framework" || arg == "-context" || arg == "-aggregate" {
 				skipNext = true
 			}
 			continue

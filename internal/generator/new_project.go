@@ -8,7 +8,11 @@ import (
 
 func newProject(args []string) error {
 	if len(args) == 0 {
-		return errors.New("project name is required")
+		return errors.New("project name is required; run 'aspgen new --help' for usage")
+	}
+	if isHelp(args[0]) {
+		fmt.Print(newHelp)
+		return nil
 	}
 	name := args[0]
 	app := value(args[1:], "--app", "webapi")
@@ -34,7 +38,7 @@ func newProject(args []string) error {
 		return fmt.Errorf("invalid project name %q", name)
 	}
 	if app != "webapi" && app != "wpf" && app != "blazor" && app != "fullstack" {
-		return fmt.Errorf("unsupported app target %q", app)
+		return fmt.Errorf("unsupported app target %q; use webapi, wpf, blazor, or fullstack", app)
 	}
 	if theme != "" && app != "wpf" && app != "fullstack" {
 		return errors.New("--theme requires a wpf or fullstack application")

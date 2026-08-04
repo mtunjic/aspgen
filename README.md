@@ -17,6 +17,8 @@ go run ./cmd/aspgen add feature CreateCustomer name:string age:int active:bool -
 
 If you run an `add` command without `--project`, aspgen searches the current directory and its parents for `.aspgen/manifest.json`. The explicit form is recommended in scripts and from outside the project tree.
 
+Run `aspgen --help`, `aspgen new --help`, or `aspgen add --help` for a full flag reference. Every flag accepts three equivalent forms: `--flag value`, `--flag:value`, and `-flag:value`.
+
 For a WPF or fullstack project, add the WPF-UI Fluent theme with `--theme wpfui` (also accepted as `--theme:wpfui` or `-theme:wpfui`). This adds the `WPF-UI` NuGet package, theme resource dictionaries, and a themed `FluentWindow` shell.
 
 For a Web API or fullstack project, use `--backend ddd` (or `--backend:ddd`) to enable incremental DDD CRUD generation. Adding an entity then creates its Domain entity, repository contract, EF Core repository, separate CQRS commands/queries and handlers, FluentValidation validators, and Minimal API endpoints for list, get, create, update, and delete.

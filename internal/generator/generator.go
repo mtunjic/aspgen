@@ -9,6 +9,10 @@ func Run(args []string) error {
 	if len(args) == 0 {
 		return usage()
 	}
+	if isHelp(args[0]) {
+		fmt.Print(topLevelHelp)
+		return nil
+	}
 	switch args[0] {
 	case "new":
 		return newProject(args[1:])
@@ -25,5 +29,5 @@ func Run(args []string) error {
 }
 
 func usage() error {
-	return errors.New("usage: aspgen new NAME --app webapi|wpf|blazor|fullstack [--simple] [--backend ddd] [--database sqlite|postgres] [--seed dummy] [--theme wpfui] | aspgen add context|aggregate|value-object|domain-service|repository|event|entity|module|database|service ...")
+	return errors.New("usage: aspgen new NAME --app webapi|wpf|blazor|fullstack [flags] | aspgen add KIND NAME [flags]; run 'aspgen --help' for details")
 }

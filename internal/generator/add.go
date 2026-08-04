@@ -3,6 +3,8 @@ package generator
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 // addRequest carries the context shared by every `add` subcommand handler.
@@ -32,8 +34,12 @@ var addHandlers = map[string]func(addRequest, *Manifest, *data) error{
 }
 
 func add(args []string) error {
+	if len(args) > 0 && isHelp(args[0]) {
+		fmt.Print(addHelp)
+		return nil
+	}
 	if len(args) < 2 {
-		return errors.New("usage: aspgen add context|aggregate|value-object|domain-service|repository|event|feature|entity|module|database|service NAME --project PATH [--theme wpfui]")
+		return errors.New("usage: aspgen add KIND NAME --project PATH [flags]; run 'aspgen add --help' for details")
 	}
 	component, name := args[0], args[1]
 	project := value(args[2:], "--project", "")
@@ -79,7 +85,12 @@ func add(args []string) error {
 
 	handler, ok := addHandlers[component]
 	if !ok {
-		return fmt.Errorf("unsupported component %q", component)
+		kinds := make([]string, 0, len(addHandlers))
+		for k := range addHandlers {
+			kinds = append(kinds, k)
+		}
+		sort.Strings(kinds)
+		return fmt.Errorf("unsupported component %q; use one of: %s", component, strings.Join(kinds, ", "))
 	}
 	r := addRequest{Args: args[2:], Name: name, Project: project, DryRun: dryRun, Force: force, Theme: theme, Backend: backend}
 	if err := handler(r, &m, &d); err != nil {

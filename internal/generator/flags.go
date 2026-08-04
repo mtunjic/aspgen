@@ -8,38 +8,43 @@ import (
 	"strings"
 )
 
-func themeOption(args []string) (string, error) {
+// matchOption scans args for key in any of its three accepted forms
+// (--key value, --key:value, -key:value) and returns the raw value found.
+// ok is false when the flag is absent; err is set when the space-separated
+// form is used but no value follows.
+func matchOption(args []string, key string) (val string, ok bool, err error) {
+	short := "-" + strings.TrimPrefix(key, "--")
 	for i, arg := range args {
-		for _, key := range []string{"--theme", "-theme"} {
-			if arg == key {
-				if i+1 >= len(args) {
-					return "", errors.New("theme value is required")
-				}
-				return validateTheme(args[i+1])
+		if arg == key || arg == short {
+			if i+1 >= len(args) {
+				return "", true, fmt.Errorf("%s value is required", strings.TrimPrefix(key, "--"))
 			}
-			if strings.HasPrefix(arg, key+":") {
-				return validateTheme(strings.TrimPrefix(arg, key+":"))
-			}
+			return args[i+1], true, nil
+		}
+		if v, found := strings.CutPrefix(arg, key+":"); found {
+			return v, true, nil
+		}
+		if v, found := strings.CutPrefix(arg, short+":"); found {
+			return v, true, nil
 		}
 	}
-	return "", nil
+	return "", false, nil
+}
+
+func themeOption(args []string) (string, error) {
+	v, ok, err := matchOption(args, "--theme")
+	if err != nil || !ok {
+		return "", err
+	}
+	return validateTheme(v)
 }
 
 func backendOption(args []string) (string, error) {
-	for i, arg := range args {
-		for _, key := range []string{"--backend", "-backend"} {
-			if arg == key {
-				if i+1 >= len(args) {
-					return "", errors.New("backend value is required")
-				}
-				return validateBackend(args[i+1])
-			}
-			if strings.HasPrefix(arg, key+":") {
-				return validateBackend(strings.TrimPrefix(arg, key+":"))
-			}
-		}
+	v, ok, err := matchOption(args, "--backend")
+	if err != nil || !ok {
+		return "", err
 	}
-	return "", nil
+	return validateBackend(v)
 }
 
 func seedOption(args []string) (string, int, error) {
@@ -97,26 +102,17 @@ func validateSeed(seed string) (string, error) {
 		return "", nil
 	}
 	if seed != "dummy" {
-		return "", fmt.Errorf("unsupported seed profile %q", seed)
+		return "", fmt.Errorf("unsupported seed profile %q; use dummy", seed)
 	}
 	return seed, nil
 }
 
 func databaseOption(args []string) (string, error) {
-	for i, arg := range args {
-		for _, key := range []string{"--database", "-database"} {
-			if arg == key {
-				if i+1 >= len(args) {
-					return "", errors.New("database value is required")
-				}
-				return validateDatabase(args[i+1])
-			}
-			if strings.HasPrefix(arg, key+":") {
-				return validateDatabase(strings.TrimPrefix(arg, key+":"))
-			}
-		}
+	v, ok, err := matchOption(args, "--database")
+	if err != nil || !ok {
+		return "", err
 	}
-	return "", nil
+	return validateDatabase(v)
 }
 
 func validateDatabase(database string) (string, error) {
@@ -134,7 +130,7 @@ func validateBackend(backend string) (string, error) {
 		return "", nil
 	}
 	if backend != "ddd" {
-		return "", fmt.Errorf("unsupported backend %q", backend)
+		return "", fmt.Errorf("unsupported backend %q; use ddd", backend)
 	}
 	return backend, nil
 }
@@ -144,29 +140,38 @@ func validateTheme(theme string) (string, error) {
 		return "", nil
 	}
 	if theme != "wpfui" {
-		return "", fmt.Errorf("unsupported WPF theme %q", theme)
+		return "", fmt.Errorf("unsupported WPF theme %q; use wpfui", theme)
 	}
 	return theme, nil
 }
 
 func exists(path string) bool { _, err := os.Stat(path); return err == nil }
+
+// value returns the string value for key, accepting the same three forms as
+// matchOption (--key value, --key:value, -key:value). Returns fallback when
+// the flag is absent or given without a value in the space-separated form.
 func value(args []string, key, fallback string) string {
-	for i, a := range args {
-		if a == key && i+1 < len(args) {
-			return args[i+1]
-		}
+	v, ok, err := matchOption(args, key)
+	if err != nil || !ok {
+		return fallback
 	}
-	return fallback
+	return v
 }
 func templateDir(args []string) string { return value(args, "--templates", "") }
+
+// hasFlag reports whether a boolean flag is present as --flag or -flag.
 func hasFlag(args []string, flag string) bool {
+	short := "-" + strings.TrimPrefix(flag, "--")
 	for _, arg := range args {
-		if arg == flag {
+		if arg == flag || arg == short {
 			return true
 		}
 	}
 	return false
 }
+
+// isHelp reports whether s is a request for help (-h, --help, or help).
+func isHelp(s string) bool { return s == "-h" || s == "--help" || s == "help" }
 
 func appendUnique(xs []string, value string) []string {
 	for _, x := range xs {
