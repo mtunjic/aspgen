@@ -1,0 +1,336 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>aspgen WPF-UI Fullstack DDD Developer Guide</title><style>
+:root{--navy:#0b2545;--blue:#2e74b5;--gold:#b7831e;--ink:#182230;--muted:#5b6573;--pale:#f4f6f9;--line:#c8d0d9}*{box-sizing:border-box}body{margin:0;background:#eef2f6;color:var(--ink);font:16px/1.58 Calibri,Arial,sans-serif}.page{max-width:1040px;margin:32px auto;background:#fff;padding:52px 76px 70px;box-shadow:0 12px 38px #0b25451f}h1{color:var(--navy);font-size:2.5rem;line-height:1.1;margin:0 0 22px}h2{color:var(--blue);font-size:1.5rem;margin:36px 0 10px;border-bottom:1px solid #e0e6ec;padding-bottom:5px}h3{color:#1f4d78;font-size:1.15rem;margin:24px 0 7px}p{margin:0 0 11px}a{color:var(--blue)}ul,ol{margin:0 0 14px;padding-left:28px}li{margin:0 0 5px}code{background:#eef2f6;padding:1px 4px;border-radius:3px;font-family:Consolas,monospace;font-size:.9em}.code{background:#101b2d;color:#dbe7f4;padding:18px 20px;border-radius:8px;overflow:auto;font:13px/1.55 Consolas,monospace;margin:12px 0 20px;box-shadow:0 7px 20px #0b25451a}.code .lang{display:block;color:#7fa9d2;font:700 10px/1.2 Arial;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}.kw{color:#83d1ff}.str{color:#d8e99b}.table-wrap{overflow-x:auto;margin:14px 0 20px}table{border-collapse:collapse;width:100%;font-size:.91rem}th{background:var(--navy);color:#fff;text-align:left;padding:9px 10px}td{border:1px solid var(--line);padding:8px 10px;vertical-align:top}tbody tr:nth-child(even) td{background:var(--pale)}.mast{color:var(--gold);font-weight:700;letter-spacing:.12em;font-size:.8rem}.toc{background:var(--pale);border:1px solid #dfe5eb;padding:16px 22px;margin:15px 0 30px}.toc h2{font-size:1.1rem;margin:0 0 7px;border:0}.toc ul{columns:2;margin:0}footer{border-top:1px solid #dfe5eb;color:var(--muted);margin-top:44px;padding-top:14px;font-size:.85rem}@media(max-width:720px){.page{margin:0;padding:28px 21px 45px}.toc ul{columns:1}}@media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;padding:0}}
+</style></head><body><div class="page"><p class="mast">DEVELOPER GUIDE</p><h1>aspgen WPF-UI Fullstack DDD Developer Guide</h1><p>A practical, step-by-step guide to building and extending a fullstack (WebApi + WPF-UI desktop) Clean Architecture/DDD application with aspgen.</p><nav class="toc"><h2>Contents</h2><ul><li><a href="#s1">1. Architecture &amp; patterns</a></li><li><a href="#s2">2. Build a fullstack DDD WPF-UI app from scratch, step by step</a></li><li><a href="#s3">Step 1 — create the project</a></li><li><a href="#s4">Step 2 — add an entity</a></li><li><a href="#s5">Build and run</a></li><li><a href="#s6">3. Adding new features to an existing app</a></li><li><a href="#s7">Adding a second entity later</a></li><li><a href="#s8"><code>add entity-field</code> — adding a property to an existing entity</a></li><li><a href="#s9"><code>add module</code> — a navigation area with no backend entity</a></li><li><a href="#s10">4. Extending: entity vs module vs Renoir vs other backends</a></li><li><a href="#s11">5. Tips, tricks &amp; patching</a></li><li><a href="#s12">6. Appendix: command cheat sheet</a></li></ul></nav><main><p><strong>A practical, step-by-step guide to building and extending a fullstack (WebApi + WPF-UI desktop) Clean Architecture/DDD application with aspgen.</strong></p><p>Version 1.0  |  Architecture Theta  |  04 August 2026</p><p>This guide walks through generating a real <code>--app fullstack --backend ddd --theme wpfui</code> application from scratch, command by command, with the actual generated file trees and code. It then covers adding features to an existing app, contrasts this profile against aspgen&#x27;s other profiles, and closes with end-user tips and a copy-pasteable command cheat sheet. For the underlying architecture rationale see <code>doc/architecture-theta.md</code>; for the full flag/profile matrix across all <code>--app</code> targets see <code>doc/aspgen-generation-decision-guide.md</code>; for the separate Blazor/Renoir DDD profile see <code>doc/aspgen-renoir-developer-guide.md</code>.</p><h3 id="s1">1. Architecture &amp; patterns</h3><p><code>--app fullstack --backend ddd --theme wpfui</code> combines aspgen&#x27;s Clean Architecture/DDD Web API with a Prism/DryIoc WPF desktop client styled with the <code>Wpf.Ui</code> (&quot;WPF-UI&quot;) Fluent design library. Unlike Renoir, this profile has no bounded-context vocabulary — entities are added flat with <code>add entity</code>, and there is a real HTTP boundary: the desktop client never touches EF Core or the database directly, it talks to the Web API over <code>HttpClient</code>.</p><p>Dependency direction across the five generated projects:</p><pre class="code"><span class="lang">text</span>Desktop (Prism/DryIoc, WPF-UI Fluent controls)
+    |
+    v  (HttpClient, JSON over HTTP)
+WebApi (Minimal API endpoints, thin - only Result &lt;-&gt; Results.* mapping)
+    |
+    v
+Application (CQRS: Commands/Queries, Handlers, FluentValidation validators)
+    |
+    v
+Infrastructure (EF Core DbContext, per-entity repository implementations)
+    |
+    v
+Domain (entities, repository interfaces - no EF/HTTP dependency)</pre><p>Key conventions worth knowing before generating anything:</p><ul><li><strong><code>AuditableEntity</code></strong> — every domain entity inherits <code>CreatedOn</code>/<code>UpdatedOn</code> auditing from <code>AuditableEntity</code>; identity (<code>Id</code>) and mutation (<code>Update(...)</code>) are private-setter/method-only, matching Clean Architecture&#x27;s &quot;no anemic public setters&quot; rule.</li><li><strong>CQRS Features folder</strong> — each <code>add entity</code> generates a <code>Features/{Entity}/</code> folder in <code>Application</code> with one file per operation (<code>Create*Command</code>/<code>Handler</code>/<code>Validator</code>, <code>Update*</code>, <code>Delete*</code>, <code>Get*ById</code>, <code>Get*s</code>, <code>Search*</code>), all implementing the shared <code>IHandler&lt;TRequest, TResponse&gt;</code> returning <code>Result&lt;T&gt;</code>. The WebApi endpoints file is a thin adapter only — it maps <code>Result</code> to <code>Results.Ok</code>/<code>NotFound</code>/<code>ValidationProblem</code>, no business logic.</li><li><strong>Search + pagination is generated by default.</strong> Every entity gets a <code>Search{Entity}Query</code>/<code>Handler</code>/<code>{Entity}PagedResponse</code> (Application), a <code>/api/{entity}/search</code> endpoint with per-property filter query params (WebApi), and a matching <code>IProductStore.Search(criteria)</code> + <code>{Entity}SearchCriteria</code>/<code>{Entity}PageResult</code> (Desktop) — there&#x27;s no opt-out flag, this is the standard CRUD shape now.</li><li><strong>Desktop talks HTTP only, no local EF.</strong> <code>{Entity}Store</code> implements <code>I{Entity}Store</code> via <code>HttpClient</code> (<code>GetFromJsonAsync</code>/<code>PostAsJsonAsync</code>/<code>PutAsJsonAsync</code>/<code>DeleteAsync</code>) against <code>/api/{entity}</code> — it is generated even though the WebApi and Desktop live in the same solution, because a fullstack app is meant to be deployable as two separate processes (API server + desktop client hitting it over the network). The API base URL comes from the <code>ASPGENT_API_URL</code> environment variable (default <code>http://localhost:5000</code>), set once per Prism module (<code>{Entity}Module.RegisterTypes</code>).</li><li><strong><code>--theme wpfui</code> swaps XAML chrome only</strong>, not the MVVM shape. <code>Shell.xaml</code> becomes a <code>ui:FluentWindow</code> with <code>ui:TitleBar</code>/<code>ui:NavigationView</code>/<code>ui:ContentDialogHost</code>/<code>ui:SnackbarPresenter</code>; each entity view gains <code>ui:TextBlock</code> headers, <code>ui:Button Appearance=&quot;Primary|Danger&quot;</code>, and a busy-state <code>ui:ProgressRing</code>. <code>IContentDialogService</code> (destructive-action confirmation) and <code>ISnackbarService</code> (success/error toasts) are registered as singletons in <code>App.xaml.cs</code> only when the theme is <code>wpfui</code> — the plain theme falls back to <code>MessageBox.Show</code>/no toast at all, and both branches keep the same ViewModel command surface.</li><li><strong><code>--theme-mode light|dark</code></strong> (wpfui only, default <strong>light</strong>) only sets <code>App.xaml</code>&#x27;s <code>&lt;ui:ThemesDictionary Theme=&quot;...&quot;&gt;</code> — there&#x27;s no other startup code to configure; <code>ApplicationThemeManager.GetAppTheme()</code> is read at runtime by the Shell/Settings ViewModels so the UI self-corrects if the user later toggles it live.</li><li><strong><code>// aspgen:features</code> / <code>// aspgen:modules</code> / <code>// aspgen:seed</code> markers</strong> — <code>Program.cs</code> (WebApi) and <code>App.xaml.cs</code> (Desktop, <code>ConfigureModuleCatalog</code>) each carry a marker comment where <code>add entity</code>/<code>add module</code> insert their <code>Map*Endpoints()</code>/<code>AddModule&lt;T&gt;()</code> line. Never hand-edit around these; see section 5.</li><li><strong><code>add module</code> vs <code>add entity</code></strong> — a module is a Prism navigation area (views + ViewModel + region registration) with no backend entity attached; <code>add entity</code> (this profile) always creates the full five-layer CRUD slice plus its own Prism module folder under <code>Desktop/Modules/{Entity}/</code>.</li></ul><h3 id="s2">2. Build a fullstack DDD WPF-UI app from scratch, step by step</h3><p><strong>Prerequisites:</strong> .NET SDK (see <code>global.json</code>/README for the pinned version). Default database is SQLite (<code>--database sqlite</code>, no separate server needed); pass <code>--database postgres</code> for Postgres instead.</p><h4 id="s3">Step 1 — create the project</h4><pre class="code"><span class="lang">bash</span><span class="kw">aspgen</span> <span class="kw">new</span> WpfUiDemo --app fullstack --backend ddd --theme wpfui --theme-mode light --output ./WpfUiDemo</pre><p>This creates the full project skeleton plus <code>.aspgen/manifest.json</code>:</p><pre class="code"><span class="lang">text</span>WpfUiDemo/
+  .<span class="kw">aspgen</span>/manifest.json
+  README.md
+  WpfUiDemo.sln
+  src/
+    Application/
+      Application.csproj
+      DependencyInjection.cs
+      Result.cs
+    Desktop/
+      App.xaml, App.xaml.cs
+      Navigation/NavigationRegistry.cs
+      Shared/Events/AppEvent.cs
+      Shell.xaml, Shell.xaml.cs, ShellViewModel.cs
+      Views/DashboardView.xaml(.cs), DashboardViewModel.cs
+      Views/SettingsView.xaml(.cs), SettingsViewModel.cs
+      README.md
+      WpfUiDemo.Desktop.csproj
+    Domain/
+      Domain.csproj
+      Entities/AuditableEntity.cs
+    Infrastructure/
+      DependencyInjection.cs
+      Infrastructure.csproj
+      Persistence/AppDbContext.cs
+    WebApi/
+      appsettings.json
+      Program.cs
+      WebApi.csproj</pre><p>The manifest records every flag chosen at creation time:</p><pre class="code"><span class="lang">json</span>{
+  &quot;project&quot;: &quot;WpfUiDemo&quot;,
+  &quot;components&quot;: [
+    &quot;backend:ddd&quot;,
+    &quot;database:sqlite&quot;,
+    &quot;prism-dryioc&quot;,
+    &quot;theme-mode:light&quot;,
+    &quot;theme:wpfui&quot;,
+    &quot;webapi&quot;,
+    &quot;wpf&quot;
+  ]
+}</pre><p><code>Program.cs</code> already has the marker comments waiting for the first entity:</p><pre class="code"><span class="lang">csharp</span><span class="kw">var</span> builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi();
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+<span class="kw">var</span> app = builder.Build();
+
+app.MapOpenApi();
+app.MapScalarApiReference(options =&gt; options.WithTitle(&quot;WpfUiDemo API&quot;));
+app.MapHealthChecks(&quot;/health&quot;);
+// <span class="kw">aspgen</span>:seed
+// <span class="kw">aspgen</span>:features
+app.MapGet(&quot;/&quot;, () =&gt; Results.Ok(<span class="kw">new</span> { application = &quot;WpfUiDemo&quot; }));
+app.Run();</pre><p><code>Shell.xaml</code> shows the WPF-UI Fluent chrome — <code>FluentWindow</code>, <code>TitleBar</code>, <code>NavigationView</code>, plus the dialog/snackbar hosts that entity ViewModels will use later:</p><pre class="code"><span class="lang">xml</span>&lt;ui:FluentWindow x:Class=&quot;WpfUiDemo.Desktop.Shell&quot;
+    ...
+    ExtendsContentIntoTitleBar=&quot;True&quot;
+    WindowBackdropType=&quot;Mica&quot;
+    prism:ViewModelLocator.AutoWireViewModel=&quot;True&quot;
+    Title=&quot;WpfUiDemo&quot;&gt;
+    &lt;Grid&gt;
+        &lt;Grid.RowDefinitions&gt;
+            &lt;RowDefinition Height=&quot;Auto&quot; /&gt;
+            &lt;RowDefinition Height=&quot;*&quot; /&gt;
+        &lt;/Grid.RowDefinitions&gt;
+        &lt;ui:TitleBar Grid.Row=&quot;0&quot; Title=&quot;WpfUiDemo&quot; Icon=&quot;{ui:SymbolIcon DataHistogram24}&quot; /&gt;
+        &lt;Grid Grid.Row=&quot;1&quot; Margin=&quot;16&quot;&gt;
+            &lt;ui:NavigationView Grid.Column=&quot;0&quot; MenuItemsSource=&quot;{Binding NavigationItems}&quot; PaneDisplayMode=&quot;Left&quot; PaneTitle=&quot;WpfUiDemo&quot;&gt;
+                &lt;ui:NavigationView.PaneFooter&gt;
+                    &lt;StackPanel&gt;
+                        &lt;ui:NavigationViewItem Content=&quot;Settings&quot; Icon=&quot;{ui:SymbolIcon Settings24}&quot; Command=&quot;{Binding OpenSettingsCommand}&quot; /&gt;
+                        &lt;ui:Button Content=&quot;{Binding ThemeButtonText}&quot; Icon=&quot;{ui:SymbolIcon DarkTheme24}&quot; Command=&quot;{Binding ToggleThemeCommand}&quot; /&gt;
+                    &lt;/StackPanel&gt;
+                &lt;/ui:NavigationView.PaneFooter&gt;
+            &lt;/ui:NavigationView&gt;
+            &lt;ContentControl Grid.Column=&quot;1&quot; prism:RegionManager.RegionName=&quot;MainRegion&quot; /&gt;
+        &lt;/Grid&gt;
+        &lt;ui:ContentDialogHost x:Name=&quot;RootContentDialog&quot; Grid.Row=&quot;0&quot; Grid.RowSpan=&quot;2&quot; /&gt;
+        &lt;ui:SnackbarPresenter x:Name=&quot;RootSnackbar&quot; Grid.Row=&quot;1&quot; /&gt;
+    &lt;/Grid&gt;
+&lt;/ui:FluentWindow&gt;</pre><h4 id="s4">Step 2 — add an entity</h4><pre class="code"><span class="lang">bash</span><span class="kw">aspgen</span> <span class="kw">add</span> entity Product name:string price:decimal active:bool category:string --project ./WpfUiDemo</pre><p>This is the single command that produces the whole vertical slice — no separate &quot;aggregate&quot;/&quot;context&quot; steps like Renoir. New files:</p><pre class="code"><span class="lang">text</span>src/Application/Features/Product/
+  CreateProductCommand.cs, CreateProductHandler.cs, CreateProductValidator.cs
+  UpdateProductCommand.cs, UpdateProductHandler.cs, UpdateProductValidator.cs
+  DeleteProductCommand.cs, DeleteProductHandler.cs
+  GetProductByIdQuery.cs, GetProductByIdHandler.cs
+  GetProductsQuery.cs, GetProductsHandler.cs
+  SearchProductsQuery.cs, SearchProductsHandler.cs
+  ProductRequest.cs, ProductResponse.cs, ProductPagedResponse.cs
+src/Domain/
+  Entities/Product.cs
+  Repositories/IProductRepository.cs
+src/Infrastructure/Persistence/
+  Configurations/ProductConfiguration.cs
+  ProductRepository.cs
+src/WebApi/Features/Product/
+  ProductEndpoints.cs
+src/Desktop/Modules/Product/
+  Models/ProductRow.cs, ProductSearchCriteria.cs, ProductPageResult.cs
+  Services/IProductStore.cs, ProductStore.cs
+  ViewModels/ProductViewModel.cs, ProductMenuViewModel.cs, ProductDetailsViewModel.cs
+  Views/ProductView.xaml(.cs), ProductMenuView.xaml(.cs), ProductDetailsView.xaml(.cs)
+  ProductModule.cs</pre><p><code>Domain/Entities/Product.cs</code> — the entity, private-setter properties, <code>Update</code> is the only mutation path:</p><pre class="code"><span class="lang">csharp</span>namespace WpfUiDemo.Domain.Entities;
+
+<span class="kw">public</span> <span class="kw">sealed</span> <span class="kw">class</span> Product : AuditableEntity
+{
+    <span class="kw">private</span> Product() { }
+    <span class="kw">public</span> long Id { get; <span class="kw">private</span> set; }
+
+    <span class="kw">public</span> Product( string name, decimal price, bool active, string category)
+    {
+        Name = name;
+        Price = price;
+        Active = active;
+        Category = category;
+    }
+    <span class="kw">public</span> string Name { get; <span class="kw">private</span> set; } = default!;
+    <span class="kw">public</span> decimal Price { get; <span class="kw">private</span> set; } = default!;
+    <span class="kw">public</span> bool Active { get; <span class="kw">private</span> set; } = default!;
+    <span class="kw">public</span> string Category { get; <span class="kw">private</span> set; } = default!;
+
+    <span class="kw">public</span> <span class="kw">void</span> Update( string name, decimal price, bool active, string category)
+    {
+        Name = name;
+        Price = price;
+        Active = active;
+        Category = category;
+    }
+    // <span class="kw">aspgen</span>:navigation
+}</pre><p><code>Domain/Repositories/IProductRepository.cs</code> — the repository contract, including the search shape:</p><pre class="code"><span class="lang">csharp</span><span class="kw">public</span> interface IProductRepository
+{
+    Task&lt;List&lt;Product&gt;&gt; GetAllAsync(CancellationToken cancellationToken = default);
+    Task&lt;Product?&gt; GetByIdAsync(long id, CancellationToken cancellationToken = default);
+    Task AddAsync(Product entity, CancellationToken cancellationToken = default);
+    Task SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task DeleteAsync(Product entity, CancellationToken cancellationToken = default);
+
+    Task&lt;(List&lt;Product&gt; Items, long TotalCount)&gt; SearchAsync(string? search, string? nameContains,
+        decimal? priceMin, decimal? priceMax, bool? active, string? categoryContains,
+        int page, int pageSize, CancellationToken cancellationToken = default);
+}</pre><p><code>Application/Features/Product/CreateProductHandler.cs</code> — CQRS handler, primary-constructor DI, returns <code>Result&lt;T&gt;</code>:</p><pre class="code"><span class="lang">csharp</span><span class="kw">public</span> <span class="kw">sealed</span> <span class="kw">class</span> CreateProductHandler(Domain.Repositories.IProductRepository repository)
+    : IHandler&lt;CreateProductCommand, ProductResponse&gt;
+{
+    <span class="kw">public</span> <span class="kw">async</span> Task&lt;Result&lt;ProductResponse&gt;&gt; HandleAsync(CreateProductCommand request, CancellationToken cancellationToken = default)
+    {
+        <span class="kw">var</span> entity = <span class="kw">new</span> WpfUiDemo.Domain.Entities.Product( request.Name, request.Price, request.Active, request.Category);
+        <span class="kw">await</span> repository.AddAsync(entity, cancellationToken);
+        <span class="kw">await</span> repository.SaveChangesAsync(cancellationToken);
+        <span class="kw">return</span> Result&lt;ProductResponse&gt;.Success(<span class="kw">new</span> ProductResponse(entity.Id, entity.Name, entity.Price, entity.Active, entity.Category));
+    }
+}</pre><p><code>WebApi/Features/Product/ProductEndpoints.cs</code> — thin Minimal API adapter, one route per handler:</p><pre class="code"><span class="lang">csharp</span><span class="kw">public</span> static <span class="kw">class</span> ProductEndpoints
+{
+    <span class="kw">public</span> static IEndpointRouteBuilder MapProductEndpoints(this IEndpointRouteBuilder endpoints)
+    {
+        <span class="kw">var</span> group = endpoints.MapGroup(&quot;/api/product&quot;);
+        group.MapGet(&quot;/&quot;, <span class="kw">async</span> (IHandler&lt;GetProductsQuery, IReadOnlyList&lt;ProductResponse&gt;&gt; handler, CancellationToken ct) =&gt;
+        {
+            <span class="kw">var</span> result = <span class="kw">await</span> handler.HandleAsync(<span class="kw">new</span> GetProductsQuery(), ct);
+            <span class="kw">return</span> Results.Ok(result.Value);
+        });
+        group.MapGet(&quot;/search&quot;, <span class="kw">async</span> (string? search, string? nameContains, decimal? priceMin, decimal? priceMax,
+            bool? active, string? categoryContains, int page, int pageSize,
+            IHandler&lt;SearchProductsQuery, ProductPagedResponse&gt; handler, CancellationToken ct) =&gt;
+        {
+            <span class="kw">if</span> (page &lt; 1) page = 1;
+            <span class="kw">if</span> (pageSize &lt; 1) pageSize = 25;
+            <span class="kw">var</span> result = <span class="kw">await</span> handler.HandleAsync(<span class="kw">new</span> SearchProductsQuery(search, nameContains, priceMin, priceMax, active, categoryContains, page, pageSize), ct);
+            <span class="kw">return</span> Results.Ok(result.Value);
+        });
+        group.MapPost(&quot;/&quot;, <span class="kw">async</span> (ProductRequest request, IHandler&lt;CreateProductCommand, ProductResponse&gt; handler,
+            IValidator&lt;CreateProductCommand&gt; validator, CancellationToken ct) =&gt;
+        {
+            <span class="kw">var</span> command = <span class="kw">new</span> CreateProductCommand( request.Name, request.Price, request.Active, request.Category);
+            <span class="kw">var</span> validation = <span class="kw">await</span> validator.ValidateAsync(command, ct);
+            <span class="kw">if</span> (!validation.IsValid) <span class="kw">return</span> Results.ValidationProblem(validation.ToDictionary());
+            <span class="kw">var</span> result = <span class="kw">await</span> handler.HandleAsync(command, ct);
+            <span class="kw">return</span> Results.Created($&quot;/api/product/{result.Value!.Id}&quot;, result.Value);
+        });
+        // MapPut, MapDelete follow the same validate-then-handle shape
+        <span class="kw">return</span> group;
+    }
+}</pre><p><code>Infrastructure/Persistence/ProductRepository.cs</code> — the only layer that talks EF Core directly:</p><pre class="code"><span class="lang">csharp</span><span class="kw">public</span> <span class="kw">sealed</span> <span class="kw">class</span> ProductRepository(AppDbContext database) : IProductRepository
+{
+    <span class="kw">public</span> Task&lt;List&lt;Product&gt;&gt; GetAllAsync(CancellationToken cancellationToken = default) =&gt;
+        database.Products.AsNoTracking().ToListAsync(cancellationToken);
+
+    <span class="kw">public</span> Task&lt;Product?&gt; GetByIdAsync(long id, CancellationToken cancellationToken = default) =&gt;
+        database.Products.FirstOrDefaultAsync(x =&gt; x.Id == id, cancellationToken);
+
+    <span class="kw">public</span> Task AddAsync(Product entity, CancellationToken cancellationToken = default) =&gt;
+        database.Products.AddAsync(entity, cancellationToken).AsTask();
+
+    <span class="kw">public</span> <span class="kw">async</span> Task&lt;(List&lt;Product&gt; Items, long TotalCount)&gt; SearchAsync(string? search, string? nameContains,
+        decimal? priceMin, decimal? priceMax, bool? active, string? categoryContains,
+        int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        <span class="kw">var</span> query = database.Products.AsNoTracking().AsQueryable();
+        <span class="kw">if</span> (!string.IsNullOrWhiteSpace(search)) query = query.Where(x =&gt; x.Name.Contains(search) || x.Category.Contains(search));
+        <span class="kw">if</span> (priceMin.HasValue) query = query.Where(x =&gt; x.Price &gt;= priceMin.Value);
+        <span class="kw">if</span> (active.HasValue) query = query.Where(x =&gt; x.Active == active.Value);
+        <span class="kw">var</span> totalCount = <span class="kw">await</span> query.LongCountAsync(cancellationToken);
+        <span class="kw">var</span> items = <span class="kw">await</span> query.OrderBy(x =&gt; x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        <span class="kw">return</span> (items, totalCount);
+    }
+}</pre><p><code>Desktop/Modules/Product/Services/ProductStore.cs</code> — the desktop side of the same contract, over HTTP instead of EF:</p><pre class="code"><span class="lang">csharp</span><span class="kw">public</span> <span class="kw">sealed</span> <span class="kw">class</span> ProductStore(HttpClient http) : IProductStore
+{
+    <span class="kw">private</span> const string Path = &quot;/api/product&quot;;
+
+    <span class="kw">public</span> IReadOnlyList&lt;ProductRow&gt; GetAll() =&gt;
+        http.GetFromJsonAsync&lt;List&lt;ProductRow&gt;&gt;(Path).GetAwaiter().GetResult() ?? [];
+
+    <span class="kw">public</span> ProductPageResult Search(ProductSearchCriteria criteria)
+    {
+        <span class="kw">var</span> query = <span class="kw">new</span> List&lt;string&gt;();
+        <span class="kw">if</span> (!string.IsNullOrWhiteSpace(criteria.Search)) query.Add($&quot;search={Uri.EscapeDataString(criteria.Search)}&quot;);
+        query.Add($&quot;page={criteria.Page}&quot;);
+        query.Add($&quot;pageSize={criteria.PageSize}&quot;);
+        <span class="kw">var</span> url = $&quot;{Path}/search?{string.Join(&quot;&amp;&quot;, query)}&quot;;
+        <span class="kw">var</span> result = http.GetFromJsonAsync&lt;ProductPageResult&gt;(url).GetAwaiter().GetResult();
+        <span class="kw">return</span> result ?? <span class="kw">new</span> ProductPageResult([], 0, criteria.Page, criteria.PageSize);
+    }
+
+    <span class="kw">public</span> ProductRow Save(long editingId, ProductRow value)
+    {
+        <span class="kw">if</span> (editingId == 0)
+        {
+            <span class="kw">var</span> response = http.PostAsJsonAsync(Path, value).GetAwaiter().GetResult();
+            response.EnsureSuccessStatusCode();
+            <span class="kw">return</span> response.Content.ReadFromJsonAsync&lt;ProductRow&gt;().GetAwaiter().GetResult() ?? value;
+        }
+        <span class="kw">var</span> update = http.PutAsJsonAsync($&quot;{Path}/{editingId}&quot;, value).GetAwaiter().GetResult();
+        update.EnsureSuccessStatusCode();
+        <span class="kw">return</span> value with { Id = editingId };
+    }
+
+    <span class="kw">public</span> <span class="kw">void</span> Delete(long id)
+    {
+        <span class="kw">var</span> response = http.DeleteAsync($&quot;{Path}/{id}&quot;).GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+    }
+}</pre><p><code>Desktop/Modules/Product/ProductModule.cs</code> — where the <code>HttpClient</code> base address is configured, and the module wires itself into navigation:</p><pre class="code"><span class="lang">csharp</span><span class="kw">public</span> <span class="kw">sealed</span> <span class="kw">class</span> ProductModule : IModule
+{
+    <span class="kw">public</span> <span class="kw">void</span> RegisterTypes(IContainerRegistry containerRegistry)
+    {
+        <span class="kw">var</span> apiUrl = Environment.GetEnvironmentVariable(&quot;ASPGENT_API_URL&quot;) ?? &quot;http://localhost:5000&quot;;
+        containerRegistry.RegisterSingleton&lt;HttpClient&gt;(() =&gt; <span class="kw">new</span> HttpClient { BaseAddress = <span class="kw">new</span> Uri(apiUrl) });
+        containerRegistry.RegisterSingleton&lt;Services.IProductStore, Services.ProductStore&gt;();
+        containerRegistry.RegisterForNavigation&lt;Views.ProductView&gt;();
+        containerRegistry.RegisterForNavigation&lt;Views.ProductDetailsView&gt;(&quot;ProductDetailsView&quot;);
+    }
+
+    <span class="kw">public</span> <span class="kw">void</span> OnInitialized(IContainerProvider containerProvider)
+    {
+        <span class="kw">var</span> navigation = containerProvider.Resolve&lt;NavigationRegistry&gt;();
+        navigation.Register(&quot;Product&quot;, &quot;ProductView&quot;, SymbolRegular.Table24);
+    }
+}</pre><p><code>Desktop/Modules/Product/Views/ProductView.xaml</code> — the WPF-UI themed list page: primary/danger button appearances, a busy <code>ProgressRing</code>, a search box, and a collapsible advanced-filter <code>Expander</code>:</p><pre class="code"><span class="lang">xml</span>&lt;DockPanel&gt;
+    &lt;StackPanel DockPanel.Dock=&quot;Left&quot;&gt;
+        &lt;ui:TextBlock FontTypography=&quot;TitleLarge&quot; Text=&quot;Product&quot; /&gt;
+        &lt;ui:TextBlock Foreground=&quot;{DynamicResource TextFillColorSecondaryBrush}&quot; FontTypography=&quot;Body&quot; Text=&quot;Manage Product records.&quot; /&gt;
+    &lt;/StackPanel&gt;
+    &lt;StackPanel DockPanel.Dock=&quot;Right&quot; Orientation=&quot;Horizontal&quot;&gt;
+        &lt;ui:ProgressRing Width=&quot;20&quot; Height=&quot;20&quot; IsIndeterminate=&quot;True&quot; Visibility=&quot;{Binding IsBusy, Converter={StaticResource BoolToVisibility}}&quot; /&gt;
+        &lt;ui:Button Appearance=&quot;Primary&quot; Content=&quot;New&quot; Icon=&quot;{ui:SymbolIcon Add24}&quot; Command=&quot;{Binding NewCommand}&quot; /&gt;
+        &lt;ui:Button Content=&quot;Edit&quot; Icon=&quot;{ui:SymbolIcon Edit24}&quot; Command=&quot;{Binding EditCommand}&quot; /&gt;
+        &lt;ui:Button Appearance=&quot;Danger&quot; Content=&quot;Delete&quot; Icon=&quot;{ui:SymbolIcon Delete24}&quot; Command=&quot;{Binding DeleteCommand}&quot; /&gt;
+        &lt;ui:Button Content=&quot;Refresh&quot; Icon=&quot;{ui:SymbolIcon ArrowClockwise16}&quot; Command=&quot;{Binding RefreshCommand}&quot; /&gt;
+    &lt;/StackPanel&gt;
+&lt;/DockPanel&gt;
+&lt;Expander Header=&quot;Advanced filters&quot; IsExpanded=&quot;{Binding IsAdvancedFilterExpanded, Mode=TwoWay}&quot;&gt;
+    &lt;StackPanel Orientation=&quot;Horizontal&quot;&gt;
+        &lt;TextBox Text=&quot;{Binding Filter.NameContains, UpdateSourceTrigger=PropertyChanged}&quot; /&gt;
+        &lt;TextBox Text=&quot;{Binding Filter.PriceMin, UpdateSourceTrigger=PropertyChanged}&quot; /&gt;
+    &lt;/StackPanel&gt;
+&lt;/Expander&gt;</pre><p><code>Program.cs</code> and <code>App.xaml.cs</code> both gained their marker-anchored registration line:</p><pre class="code"><span class="lang">csharp</span>// <span class="kw">aspgen</span>:features
+app.MapProductEndpoints();</pre><pre class="code"><span class="lang">csharp</span>protected override <span class="kw">void</span> ConfigureModuleCatalog(IModuleCatalog moduleCatalog)
+{
+    // <span class="kw">aspgen</span>:modules
+    moduleCatalog.AddModule&lt;WpfUiDemo.Desktop.Modules.Product.ProductModule&gt;();
+}</pre><h4 id="s5">Build and run</h4><pre class="code"><span class="lang">bash</span>dotnet restore ./WpfUiDemo/WpfUiDemo.sln
+dotnet build ./WpfUiDemo/WpfUiDemo.sln
+dotnet run --project ./WpfUiDemo/src/WebApi
+dotnet run --project ./WpfUiDemo/src/Desktop</pre><p>Start the <code>WebApi</code> project first — the <code>Desktop</code> process needs it reachable at <code>http://localhost:5000</code> (or whatever <code>ASPGENT_API_URL</code> is set to) before its Prism modules can load data. SQLite is the default <code>Infrastructure</code> provider, so there is no separate database server to stand up; the connection string lives in <code>appsettings.json</code>.</p><h3 id="s6">3. Adding new features to an existing app</h3><h4 id="s7">Adding a second entity later</h4><p>Nothing is regenerated from scratch — <code>add</code> commands only append. A second entity follows the same shape with a new name:</p><pre class="code"><span class="lang">bash</span><span class="kw">aspgen</span> <span class="kw">add</span> entity Category name:string --project ./WpfUiDemo</pre><p>Both <code>Program.cs</code>&#x27;s <code>// aspgen:features</code> marker and <code>App.xaml.cs</code>&#x27;s <code>// aspgen:modules</code> marker grow one more line each; <code>Product</code>&#x27;s files are untouched.</p><h4 id="s8"><code>add entity-field</code> — adding a property to an existing entity</h4><pre class="code"><span class="lang">bash</span><span class="kw">aspgen</span> <span class="kw">add</span> entity-field Product notes:string --project ./WpfUiDemo</pre><p>This patches the entity, every CQRS command/handler that constructs or updates it, the WebApi request/response records, and the Desktop row/view/ViewModel — no manual file editing needed, safe to re-run for additional fields later.</p><p><code>Domain/Entities/Product.cs</code> (constructor + property + <code>Update</code> all gain the new field):</p><pre class="code"><span class="lang">diff</span>- <span class="kw">public</span> Product( string name, decimal price, bool active, string category)
++ <span class="kw">public</span> Product( string name, decimal price, bool active, string category, string notes)
+  {
+      Name = name;
+      Price = price;
+      Active = active;
+      Category = category;
++     Notes = notes;
+  }
+  <span class="kw">public</span> string Name { get; <span class="kw">private</span> set; } = default!;
+  <span class="kw">public</span> decimal Price { get; <span class="kw">private</span> set; } = default!;
+  <span class="kw">public</span> bool Active { get; <span class="kw">private</span> set; } = default!;
+  <span class="kw">public</span> string Category { get; <span class="kw">private</span> set; } = default!;
+
+- <span class="kw">public</span> <span class="kw">void</span> Update( string name, decimal price, bool active, string category)
++ <span class="kw">public</span> <span class="kw">void</span> Update( string name, decimal price, bool active, string category, string notes)
+  {
+      Name = name;
+      Price = price;
+      Active = active;
+      Category = category;
++     Notes = notes;
+  }
++ <span class="kw">public</span> string Notes { get; <span class="kw">private</span> set; } = default!;</pre><p><code>ProductRequest</code>/<code>ProductResponse</code> (Application) and <code>ProductRow</code> (Desktop) each pick up the matching <code>Notes</code> member, and <code>ProductView.xaml</code> gains a bound <code>TextBox</code>/label pair in the edit form, using the same <code>uiControl</code> mapping (<code>InputText</code> for <code>string</code>) recorded in the manifest.</p><h4 id="s9"><code>add module</code> — a navigation area with no backend entity</h4><pre class="code"><span class="lang">bash</span><span class="kw">aspgen</span> <span class="kw">add</span> module Reporting --project ./WpfUiDemo</pre><p>Use this for a Prism navigation area that isn&#x27;t backed by a CRUD entity at all (e.g. a dashboard, a settings screen, a reports page you&#x27;ll hand-write). It creates <code>Desktop/Modules/Reporting/</code> (view + ViewModel + <code>ReportingModule : IModule</code>) and registers it at the same <code>// aspgen:modules</code> marker <code>add entity</code> uses — but with no <code>Application</code>/<code>Domain</code>/<code>Infrastructure</code>/<code>WebApi</code> files at all, since there&#x27;s no data behind it yet.</p><h3 id="s10">4. Extending: entity vs module vs Renoir vs other backends</h3><p>aspgen&#x27;s &quot;add a building block&quot; command depends entirely on which <code>--app</code>/backend profile the project was created with. There is no migration command between profiles — the choice is made once, at <code>aspgen new</code> time.</p><div class="table-wrap"><table><thead><tr><th>Profile (<code>aspgen new</code> flags)</th><th>Command to add a feature</th><th>What it generates</th></tr></thead><tbody><tr><td>Fullstack DDD, any theme (<code>--app fullstack --backend ddd</code>)</td><td><code>add entity NAME prop:type...</code></td><td>Domain entity, repository, CQRS CRUD+search, Minimal API endpoints, and a full Prism/<code>Wpf.Ui</code> module — all in one command</td></tr><tr><td>Simple Web API/fullstack (<code>--app webapi --simple</code> / <code>--app fullstack --simple</code>)</td><td><code>add entity NAME prop:type...</code></td><td>EF model, <code>DbSet</code>, direct Minimal API CRUD — no CQRS handlers, no repository interface</td></tr><tr><td>WPF-only local DDD (<code>--app wpf --backend ddd</code>)</td><td><code>add entity NAME prop:type...</code></td><td>Same DDD layers as fullstack, minus <code>WebApi</code> — Desktop talks to <code>Infrastructure</code>/EF directly, no <code>HttpClient</code></td></tr><tr><td>Any WPF profile, new navigation area with no entity</td><td><code>add module NAME</code></td><td>Prism module: views, ViewModel, navigation registration, nothing else</td></tr><tr><td>Renoir / Blazor (<code>--app blazor</code>)</td><td><code>add context</code> then <code>add aggregate</code>/<code>value-object</code>/<code>domain-service</code>/<code>repository</code>/<code>event</code></td><td>DDD building blocks scoped to a bounded context — see <code>doc/aspgen-renoir-developer-guide.md</code></td></tr><tr><td>Any webapi profile, desktop added later</td><td><code>add ui --project PATH</code></td><td>Adds the Prism/DryIoc Desktop project onto an existing server-only project, without regenerating the server</td></tr></tbody></table></div><p>Switching between profiles (e.g. from fullstack DDD to Renoir, or dropping the WPF-only DDD app&#x27;s <code>HttpClient</code>-less Desktop into a fullstack one) is not supported as an in-place command — see <code>doc/aspgen-generation-decision-guide.md</code> for the full decision table if you&#x27;re choosing a profile for a new project.</p><h3 id="s11">5. Tips, tricks &amp; patching</h3><ul><li><strong>Never hand-edit around <code>// aspgen:features</code> or <code>// aspgen:modules</code>.</strong> Every <code>add entity</code>/<code>add module</code> command inserts its registration line directly at these markers in <code>Program.cs</code>/<code>App.xaml.cs</code>. Moving or deleting a marker comment breaks subsequent <code>add</code> commands&#x27; insertion point.</li><li><strong>The manifest is the source of truth, not the file tree.</strong> <code>.aspgen/manifest.json</code> records every entity, its properties, and every component flag (<code>theme</code>, <code>theme-mode</code>, <code>backend</code>, <code>database</code>) chosen at <code>new</code> time. <code>add</code> commands read it to validate preconditions — don&#x27;t hand-edit generated files in ways that make them inconsistent with what the manifest thinks exists.</li><li><strong>Run the <code>WebApi</code> project before the <code>Desktop</code> project.</strong> The Desktop client&#x27;s <code>HttpClient</code> fails silently (empty grids, no error dialog) if it can&#x27;t reach the API at startup, since <code>{Entity}Store.GetAll()</code> swallows <code>null</code> into an empty list. Set <code>ASPGENT_API_URL</code> if the API isn&#x27;t on the default <code>http://localhost:5000</code>.</li><li><strong><code>add entity-field</code> is the safe way to add a forgotten property</strong> rather than hand-editing the entity/handlers/endpoints/ViewModel — it keeps all five layers&#x27; shapes in sync, including the <code>uiControl</code> mapping.</li><li><strong><code>--theme-mode</code> only applies with <code>--theme wpfui</code>.</strong> Passing it with the plain theme (or omitting <code>--theme wpfui</code> entirely) is a validation error — there&#x27;s no dark/light concept for the plain WPF theme.</li><li><strong>Corporate NuGet restore workaround.</strong> If <code>dotnet restore</code>/<code>dotnet build</code> fails with <code>NU1301 &quot;No such host is known&quot;</code> behind a corporate proxy or VPN-only NuGet source, restore explicitly from nuget.org first, then build normally:</li></ul><p>  ``<code>bash   dotnet restore ./WpfUiDemo/WpfUiDemo.sln -s https://api.nuget.org/v3/index.json   dotnet build ./WpfUiDemo/WpfUiDemo.sln   </code>``</p><ul><li><strong>Avoid <code>Task</code> as an entity name.</strong> It collides with <code>System.Threading.Tasks.Task</code> in generated C# files that have a bare <code>using System.Threading.Tasks;</code> — use <code>TodoItem</code> or similar instead.</li><li><strong>Troubleshooting a build failure right after <code>add</code>:</strong> check the manifest first — confirm the entity you referenced actually exists there, and confirm the <code>// aspgen:features</code>/<code>// aspgen:modules</code> markers weren&#x27;t accidentally removed or duplicated. Most post-<code>add</code> compile errors trace back to one of those two things rather than a bug in the generated code itself.</li></ul><h3 id="s12">6. Appendix: command cheat sheet</h3><pre class="code"><span class="lang">bash</span># Create the project
+<span class="kw">aspgen</span> <span class="kw">new</span> WpfUiDemo --app fullstack --backend ddd --theme wpfui --theme-mode light --output ./WpfUiDemo
+
+# Add an entity (full CQRS + WebApi + Desktop module in one command)
+<span class="kw">aspgen</span> <span class="kw">add</span> entity Product name:string price:decimal active:bool category:string --project ./WpfUiDemo
+
+# Add a field to an existing entity later
+<span class="kw">aspgen</span> <span class="kw">add</span> entity-field Product notes:string --project ./WpfUiDemo
+
+# Add a navigation area with no backend entity
+<span class="kw">aspgen</span> <span class="kw">add</span> module Reporting --project ./WpfUiDemo
+
+# Build and run (API first, then desktop)
+dotnet restore ./WpfUiDemo/WpfUiDemo.sln
+dotnet build ./WpfUiDemo/WpfUiDemo.sln
+dotnet run --project ./WpfUiDemo/src/WebApi
+dotnet run --project ./WpfUiDemo/src/Desktop
+
+# Corporate NuGet restore workaround
+dotnet restore ./WpfUiDemo/WpfUiDemo.sln -s https://api.nuget.org/v3/index.json</pre></main><footer>Architecture Theta &bull; Version 1.0 &bull; Prepared 04 August 2026</footer></div></body></html>
