@@ -192,6 +192,12 @@ func prefixedPiece(prefix string) func(Property) string {
 	return func(p Property) string { return prefix + "." + p.Name }
 }
 
+// fileExists reports whether path exists and is a regular file.
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 // readPatchFile reads path and normalizes CRLF line endings to LF so every
 // patch primitive can rely on plain "\n" anchors regardless of how the file
 // happens to be saved on disk.
@@ -462,6 +468,12 @@ func patchDDDWebApiFeature(project, namespace string, existing EntityMeta, newPr
 	if err := patchArgListsInFile(filepath.Join(dir, "Get"+name+"sHandler.cs"), old, newProps,
 		[]argPatch{{prefixedPiece("entity"), tokenJoin("entity.Id")}}, dryRun); err != nil {
 		return err
+	}
+	if searchHandlerPath := filepath.Join(dir, "Search"+name+"sHandler.cs"); fileExists(searchHandlerPath) {
+		if err := patchArgListsInFile(searchHandlerPath, old, newProps,
+			[]argPatch{{prefixedPiece("entity"), tokenJoin("entity.Id")}}, dryRun); err != nil {
+			return err
+		}
 	}
 	if err := patchValidatorFile(filepath.Join(dir, "Create"+name+"Validator.cs"), "public Create"+name+"Validator()", newProps, false, dryRun); err != nil {
 		return err
