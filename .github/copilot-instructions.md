@@ -30,10 +30,27 @@ by searching parent directories).
 ## Code layout
 
 - [cmd/aspgen/main.go](cmd/aspgen/main.go) — trivial entrypoint, delegates to `generator.Run`.
-- [internal/generator/generator.go](internal/generator/generator.go) — the entire CLI: arg
-  parsing, `new`/`add` subcommands, manifest read/write, template rendering,
-  incremental file/`.csproj`/`.sln` updates. One large file (~60+ functions);
-  when adding a subcommand or entity kind, find the closest existing sibling
+- [internal/generator/generator.go](internal/generator/generator.go) — tiny dispatcher only
+  (`Run`, `usage`); routes to `new`/`add`/`templates`/`version`. The CLI
+  logic itself is split by concern across sibling files in
+  [internal/generator/](internal/generator):
+  [new_project.go](internal/generator/new_project.go) (`new` subcommand),
+  [add.go](internal/generator/add.go) (`add` dispatcher) plus
+  [add_entity.go](internal/generator/add_entity.go),
+  [add_module.go](internal/generator/add_module.go),
+  [add_webapi.go](internal/generator/add_webapi.go), and
+  [add_ddd.go](internal/generator/add_ddd.go) (context/aggregate/
+  value-object/domain-service/repository/event) for the individual `add`
+  kinds, [flags.go](internal/generator/flags.go) (flag parsing),
+  [manifest.go](internal/generator/manifest.go) (manifest read/write +
+  project discovery), [project_files.go](internal/generator/project_files.go)
+  (`.csproj` lookup/update), [project_markers.go](internal/generator/project_markers.go)
+  (marker-comment injection like `// aspgen:services`),
+  [render.go](internal/generator/render.go) (template rendering),
+  [solution.go](internal/generator/solution.go) (`.sln` generation),
+  [seed.go](internal/generator/seed.go) (dummy seed data), and
+  [types.go](internal/generator/types.go) (shared types, `parseProperties`).
+  When adding a subcommand or entity kind, find the closest existing sibling
   (e.g. `add entity` vs `add aggregate`) and mirror its pattern rather than
   inventing a new one.
 - [internal/templates/templates.go](internal/templates/templates.go) — `//go:embed files`
