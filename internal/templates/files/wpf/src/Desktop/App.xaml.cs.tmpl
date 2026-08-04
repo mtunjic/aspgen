@@ -1,0 +1,32 @@
+using System.Windows;
+using Prism.DryIoc;
+using Prism.Ioc;
+using Prism.Modularity;
+using Prism.Navigation.Regions;
+
+namespace {{ .Project }}.Desktop;
+
+public partial class App : PrismApplication
+{
+    protected override Window CreateShell() => Container.Resolve<Shell>();
+
+    protected override void RegisterTypes(IContainerRegistry containerRegistry)
+    {
+        containerRegistry.RegisterForNavigation<Views.DashboardView>();
+        containerRegistry.RegisterForNavigation<Views.SettingsView>();
+{{- if eq .Theme "wpfui" }}
+        containerRegistry.RegisterSingleton<Navigation.NavigationRegistry>();
+{{- end }}
+    }
+
+    protected override void OnInitialized()
+    {
+        Container.Resolve<IRegionManager>().RequestNavigate("MainRegion", "DashboardView");
+        base.OnInitialized();
+    }
+
+    protected override void ConfigureModuleCatalog(IModuleCatalog moduleCatalog)
+    {
+        // aspgen:modules
+    }
+}

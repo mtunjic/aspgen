@@ -1,0 +1,229 @@
+using System.Collections.ObjectModel;
+using Prism.Commands;
+using Prism.Mvvm;
+using {{ .Namespace }}.Models;
+using {{ .Namespace }}.Services;
+
+namespace {{ .Namespace }}.ViewModels;
+
+public sealed class {{ .Name }}ViewModel : BindableBase
+{
+    private readonly I{{ .Name }}Store store;
+    private {{ .Name }}Row? selectedItem;
+    private long editingId;
+    private string validationMessage = string.Empty;
+    private string operationMessage = string.Empty;
+
+    public {{ .Name }}ViewModel(I{{ .Name }}Store store)
+    {
+        this.store = store;
+        Form = new {{ .Name }}Editor();
+        NewCommand = new DelegateCommand(New);
+        EditCommand = new DelegateCommand(Edit, () => SelectedItem is not null);
+        DeleteCommand = new DelegateCommand(Delete, () => SelectedItem is not null);
+        RefreshCommand = new DelegateCommand(Refresh);
+        SaveCommand = new DelegateCommand(Save);
+        CancelCommand = new DelegateCommand(Cancel);
+        Reload();
+    }
+
+    public ObservableCollection<{{ .Name }}Row> Items { get; } = [];
+    public {{ .Name }}Editor Form { get; }
+    public bool IsEditing => editingId != 0;
+    public bool IsEmpty => Items.Count == 0;
+    public string ValidationMessage
+    {
+        get => validationMessage;
+        private set
+        {
+            if (SetProperty(ref validationMessage, value))
+            {
+                RaisePropertyChanged(nameof(HasValidationError));
+            }
+        }
+    }
+    public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationMessage);
+    public string OperationMessage
+    {
+        get => operationMessage;
+        private set
+        {
+            if (SetProperty(ref operationMessage, value))
+            {
+                RaisePropertyChanged(nameof(HasOperationMessage));
+            }
+        }
+    }
+    public bool HasOperationMessage => !string.IsNullOrWhiteSpace(OperationMessage);
+
+    public {{ .Name }}Row? SelectedItem
+    {
+        get => selectedItem;
+        set
+        {
+            if (SetProperty(ref selectedItem, value))
+            {
+                EditCommand.RaiseCanExecuteChanged();
+                DeleteCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public DelegateCommand NewCommand { get; }
+    public DelegateCommand EditCommand { get; }
+    public DelegateCommand DeleteCommand { get; }
+    public DelegateCommand RefreshCommand { get; }
+    public DelegateCommand SaveCommand { get; }
+    public DelegateCommand CancelCommand { get; }
+
+    private void Reload()
+    {
+        Items.Clear();
+        foreach (var item in store.GetAll()) Items.Add(item);
+        RaisePropertyChanged(nameof(IsEmpty));
+    }
+
+    private void Refresh()
+    {
+        SelectedItem = null;
+        Reload();
+        OperationMessage = string.Empty;
+    }
+
+    private void New()
+    {
+        editingId = 0;
+        Form.Reset(null);
+        ValidationMessage = string.Empty;
+        OperationMessage = string.Empty;
+        RaisePropertyChanged(nameof(IsEditing));
+    }
+
+    private void Edit()
+    {
+        if (SelectedItem is null) return;
+        editingId = SelectedItem.Id;
+        Form.Reset(SelectedItem);
+        ValidationMessage = string.Empty;
+        OperationMessage = string.Empty;
+        RaisePropertyChanged(nameof(IsEditing));
+    }
+
+    private void Save()
+    {
+        if (!TryBuild(out var value)) return;
+        var operation = editingId == 0 ? "created" : "updated";
+        store.Save(editingId, value);
+        SelectedItem = null;
+        editingId = 0;
+        Form.Reset(null);
+        ValidationMessage = string.Empty;
+        OperationMessage = $"{{ .Name }} {operation} successfully.";
+        Reload();
+        RaisePropertyChanged(nameof(IsEditing));
+    }
+
+    private void Delete()
+    {
+        if (SelectedItem is null) return;
+        store.Delete(SelectedItem.Id);
+        SelectedItem = null;
+        OperationMessage = "{{ .Name }} deleted successfully.";
+        Reload();
+    }
+
+    private void Cancel()
+    {
+        editingId = 0;
+        SelectedItem = null;
+        Form.Reset(null);
+        ValidationMessage = string.Empty;
+        OperationMessage = string.Empty;
+        RaisePropertyChanged(nameof(IsEditing));
+    }
+
+    private bool Invalid(string propertyName)
+    {
+        OperationMessage = string.Empty;
+        ValidationMessage = $"{propertyName} is invalid.";
+        return false;
+    }
+
+    private bool TryBuild(out {{ .Name }}Row value)
+    {
+        value = default!;
+{{- range .Properties }}
+{{- if eq .CSharpType "string" }}
+        var {{ camel .Name }} = Form.{{ .Name }}.Trim();
+        if ({{ camel .Name }}.Length == 0) return Invalid(nameof(Form.{{ .Name }}));
+{{- else if eq .CSharpType "string?" }}
+        var {{ camel .Name }} = string.IsNullOrWhiteSpace(Form.{{ .Name }}) ? null : Form.{{ .Name }}!.Trim();
+{{- else if eq .CSharpType "bool" }}
+        var {{ camel .Name }} = Form.{{ .Name }};
+{{- else if eq .CSharpType "DateOnly" }}
+        if (Form.{{ .Name }} is null) return Invalid(nameof(Form.{{ .Name }}));
+        var {{ camel .Name }} = DateOnly.FromDateTime(Form.{{ .Name }}.Value);
+{{- else if eq .CSharpType "DateTime" }}
+        if (Form.{{ .Name }} is null) return Invalid(nameof(Form.{{ .Name }}));
+        if (Form.{{ .Name }}Time is null) return Invalid(nameof(Form.{{ .Name }}));
+        var {{ camel .Name }} = DateTime.SpecifyKind(Form.{{ .Name }}.Value.Date + Form.{{ .Name }}Time.Value, DateTimeKind.Unspecified);
+{{- else if or (eq .CSharpType "int") (eq .CSharpType "long") (eq .CSharpType "decimal") (eq .CSharpType "float") (eq .CSharpType "Guid") }}
+        if (!{{ .CSharpType }}.TryParse(Form.{{ .Name }}, out var {{ camel .Name }})) return Invalid(nameof(Form.{{ .Name }}));
+{{- else if eq .CSharpType "DateOnly?" }}
+        DateOnly? {{ camel .Name }} = Form.{{ .Name }} is null ? null : DateOnly.FromDateTime(Form.{{ .Name }}.Value);
+{{- else if eq .CSharpType "DateTime?" }}
+        DateTime? {{ camel .Name }} = Form.{{ .Name }} is null || Form.{{ .Name }}Time is null ? null : DateTime.SpecifyKind(Form.{{ .Name }}.Value.Date + Form.{{ .Name }}Time.Value, DateTimeKind.Unspecified);
+{{- else if or (eq .CSharpType "int?") (eq .CSharpType "long?") (eq .CSharpType "decimal?") (eq .CSharpType "float?") (eq .CSharpType "Guid?") }}
+        {{ .CSharpType }} {{ camel .Name }} = null;
+        if (!string.IsNullOrWhiteSpace(Form.{{ .Name }}))
+        {
+            if (!{{ trimSuffix .CSharpType "?" }}.TryParse(Form.{{ .Name }}, out var parsed{{ .Name }})) return Invalid(nameof(Form.{{ .Name }}));
+            {{ camel .Name }} = parsed{{ .Name }};
+        }
+{{- end }}
+{{- end }}
+        value = new {{ .Name }}Row(editingId{{ range .Properties }}, {{ camel .Name }}{{ end }});
+        return true;
+    }
+}
+
+public sealed class {{ .Name }}Editor : BindableBase
+{
+{{- range .Properties }}
+{{- if eq .CSharpType "bool" }}
+    private bool {{ camel .Name }};
+    public bool {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- else if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
+    private DateTime? {{ camel .Name }};
+    public DateTime? {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- if or (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
+    private TimeSpan? {{ camel .Name }}Time;
+    public TimeSpan? {{ .Name }}Time { get => {{ camel .Name }}Time; set => SetProperty(ref {{ camel .Name }}Time, value); }
+{{- end }}
+{{- else }}
+    private string {{ camel .Name }} = string.Empty;
+    public string {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- end }}
+{{- end }}
+
+    public void Reset({{ .Name }}Row? item)
+    {
+{{- range .Properties }}
+{{- if eq .CSharpType "bool" }}
+        {{ .Name }} = item?.{{ .Name }} ?? false;
+{{- else if eq .CSharpType "DateOnly" }}
+        {{ .Name }} = item is null ? null : item.{{ .Name }}.ToDateTime(TimeOnly.MinValue);
+{{- else if eq .CSharpType "DateOnly?" }}
+        {{ .Name }} = item?.{{ .Name }}?.ToDateTime(TimeOnly.MinValue);
+{{- else if eq .CSharpType "DateTime" }}
+        {{ .Name }} = item?.{{ .Name }};
+        {{ .Name }}Time = item?.{{ .Name }}.TimeOfDay;
+{{- else if eq .CSharpType "DateTime?" }}
+        {{ .Name }} = item?.{{ .Name }};
+        {{ .Name }}Time = item?.{{ .Name }}?.TimeOfDay;
+{{- else }}
+        {{ .Name }} = item is null ? string.Empty : item.{{ .Name }}.ToString();
+{{- end }}
+{{- end }}
+    }
+}

@@ -1,0 +1,12 @@
+namespace {{ .Project }}.Application.Features.{{ .Name }};
+
+public sealed class Get{{ .Name }}sHandler(Domain.Repositories.I{{ .Name }}Repository repository)
+    : IHandler<Get{{ .Name }}sQuery, IReadOnlyList<{{ .Name }}Response>>
+{
+    public async Task<Result<IReadOnlyList<{{ .Name }}Response>>> HandleAsync(Get{{ .Name }}sQuery request, CancellationToken cancellationToken = default)
+    {
+        var entities = await repository.GetAllAsync(cancellationToken);
+        IReadOnlyList<{{ .Name }}Response> result = entities.Select(entity => new {{ .Name }}Response(entity.Id{{ range .Properties }}, entity.{{ .Name }}{{ end }})).ToList();
+        return Result<IReadOnlyList<{{ .Name }}Response>>.Success(result);
+    }
+}

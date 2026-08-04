@@ -1,0 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+
+namespace {{ .Project }}.WebApi.Data;
+
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+{
+    // aspgen:entities
+}

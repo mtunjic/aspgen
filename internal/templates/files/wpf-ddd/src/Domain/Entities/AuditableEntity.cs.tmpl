@@ -1,0 +1,7 @@
+namespace {{ .Project }}.Domain.Entities;
+
+public abstract class AuditableEntity
+{
+    public DateTime CreatedOn { get; private set; } = DateTime.UtcNow;
+    public DateTime UpdatedOn { get; private set; } = DateTime.UtcNow;
+}

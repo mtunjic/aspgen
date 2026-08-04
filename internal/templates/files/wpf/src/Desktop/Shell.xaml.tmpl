@@ -1,0 +1,68 @@
+<{{ if eq .Theme "wpfui" }}ui:FluentWindow{{ else }}Window{{ end }} x:Class="{{ .Project }}.Desktop.Shell"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:prism="http://prismlibrary.com/"{{ if eq .Theme "wpfui" }}
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    ExtendsContentIntoTitleBar="True"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
+    Background="{DynamicResource ApplicationBackgroundBrush}"
+    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+    Width="1100"
+    Height="700"
+    MinWidth="820"
+    MinHeight="520"
+    WindowStartupLocation="CenterScreen"{{ end }}
+{{- if eq .Theme "wpfui" }}
+    prism:ViewModelLocator.AutoWireViewModel="True"
+{{- end }}
+    Title="{{ .Project }}">
+{{- if eq .Theme "wpfui" }}
+    <ui:FluentWindow.InputBindings>
+        <KeyBinding Key="Home" Modifiers="Alt" Command="{Binding GoHomeCommand}" />
+        <KeyBinding Key="OemComma" Modifiers="Control" Command="{Binding OpenSettingsCommand}" />
+    </ui:FluentWindow.InputBindings>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <ui:TitleBar Grid.Row="0" Title="{{ .Project }}" Icon="{ui:SymbolIcon DataHistogram24}" />
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ui:NavigationView Grid.Column="0" FrameMargin="0" IsFooterSeparatorVisible="True" IsPaneOpen="True" IsPaneToggleVisible="True" IsTopSeparatorVisible="False" MenuItemsSource="{Binding NavigationItems}" OpenPaneLength="240" PaneDisplayMode="Left" PaneTitle="{{ .Project }}">
+                <ui:NavigationView.AutoSuggestBox>
+                    <ui:AutoSuggestBox PlaceholderText="Search modules" OriginalItemsSource="{Binding NavigationSearchItems}" ClearButtonEnabled="True" QuerySubmitted="OnNavigationQuerySubmitted" SuggestionChosen="OnNavigationSuggestionChosen">
+                        <ui:AutoSuggestBox.Icon>
+                            <ui:IconSourceElement>
+                                <ui:SymbolIconSource Symbol="Search24" />
+                            </ui:IconSourceElement>
+                        </ui:AutoSuggestBox.Icon>
+                    </ui:AutoSuggestBox>
+                </ui:NavigationView.AutoSuggestBox>
+                <ui:NavigationView.PaneFooter>
+                    <StackPanel>
+                        <ui:NavigationViewItem Content="Settings" Icon="{ui:SymbolIcon Settings24}" ToolTip="Open application settings" Command="{Binding OpenSettingsCommand}" />
+                        <ui:Button Margin="4" Content="{Binding ThemeButtonText}" Icon="{ui:SymbolIcon DarkTheme24}" ToolTip="Switch between light and dark theme" Command="{Binding ToggleThemeCommand}" />
+                    </StackPanel>
+                </ui:NavigationView.PaneFooter>
+            </ui:NavigationView>
+            <ContentControl Grid.Column="1" Margin="16,0,0,0" prism:RegionManager.RegionName="MainRegion" />
+        </Grid>
+    </Grid>
+{{- else }}
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Padding="8" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+            <ItemsControl prism:RegionManager.RegionName="MenuRegion" />
+        </Border>
+        <ContentControl Grid.Column="1" Margin="16,0,0,0" prism:RegionManager.RegionName="MainRegion" />
+    </Grid>
+{{- end }}
+</{{ if eq .Theme "wpfui" }}ui:FluentWindow{{ else }}Window{{ end }}>

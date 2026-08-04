@@ -1,0 +1,9 @@
+namespace {{ .Project }}.WebApi.Models;
+
+public sealed class {{ .Name }}
+{
+    public long Id { get; set; }
+{{- range .Properties }}
+    public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
+{{- end }}
+}

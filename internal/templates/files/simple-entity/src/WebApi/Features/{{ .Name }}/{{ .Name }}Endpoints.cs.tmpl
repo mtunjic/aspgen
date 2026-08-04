@@ -1,0 +1,45 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.WebApi.Data;
+using {{ .Project }}.WebApi.Models;
+
+namespace {{ .Project }}.WebApi.Features.{{ .Name }};
+
+public static class {{ .Name }}Endpoints
+{
+    public static void Map{{ .Name }}Endpoints(this WebApplication app)
+    {
+        var group = app.MapGroup("/api/{{ kebab .Name }}");
+        group.MapGet("/", async (AppDbContext db, CancellationToken cancellationToken) =>
+            Results.Ok(await db.{{ .Name }}s.AsNoTracking().ToListAsync(cancellationToken)));
+        group.MapGet("/{id:long}", async (long id, AppDbContext db, CancellationToken cancellationToken) =>
+        {
+            var entity = await db.{{ .Name }}s.FindAsync([id], cancellationToken);
+            return entity is null ? Results.NotFound() : Results.Ok(entity);
+        });
+        group.MapPost("/", async ({{ .Project }}.WebApi.Models.{{ .Name }} request, AppDbContext db, CancellationToken cancellationToken) =>
+        {
+            request.Id = 0;
+            db.{{ .Name }}s.Add(request);
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Created($"/api/{{ kebab .Name }}/{request.Id}", request);
+        });
+        group.MapPut("/{id:long}", async (long id, {{ .Project }}.WebApi.Models.{{ .Name }} request, AppDbContext db, CancellationToken cancellationToken) =>
+        {
+            var entity = await db.{{ .Name }}s.FindAsync([id], cancellationToken);
+            if (entity is null) return Results.NotFound();
+{{- range .Properties }}
+            entity.{{ .Name }} = request.{{ .Name }};
+{{- end }}
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.NoContent();
+        });
+        group.MapDelete("/{id:long}", async (long id, AppDbContext db, CancellationToken cancellationToken) =>
+        {
+            var entity = await db.{{ .Name }}s.FindAsync([id], cancellationToken);
+            if (entity is null) return Results.NotFound();
+            db.{{ .Name }}s.Remove(entity);
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.NoContent();
+        });
+    }
+}

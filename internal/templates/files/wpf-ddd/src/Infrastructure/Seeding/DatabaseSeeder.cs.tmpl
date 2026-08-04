@@ -1,0 +1,13 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.Infrastructure.Persistence;
+
+namespace {{ .Project }}.Infrastructure.Seeding;
+
+public static class DatabaseSeeder
+{
+    public static void Seed(AppDbContext db)
+    {
+        // aspgen:seed
+        db.SaveChanges();
+    }
+}

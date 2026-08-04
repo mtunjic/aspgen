@@ -1,0 +1,4 @@
+namespace {{ .Project }}.Application.Features.{{ .Name }};
+
+public sealed record Update{{ .Name }}Command(
+    long Id{{ range .Properties }}, {{ .CSharpType }} {{ .Name }}{{ end }});

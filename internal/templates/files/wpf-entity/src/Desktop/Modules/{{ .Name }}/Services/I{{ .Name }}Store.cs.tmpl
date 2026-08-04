@@ -1,0 +1,10 @@
+using {{ .Namespace }}.Models;
+
+namespace {{ .Namespace }}.Services;
+
+public interface I{{ .Name }}Store
+{
+    IReadOnlyList<{{ .Name }}Row> GetAll();
+    {{ .Name }}Row Save(long editingId, {{ .Name }}Row value);
+    void Delete(long id);
+}

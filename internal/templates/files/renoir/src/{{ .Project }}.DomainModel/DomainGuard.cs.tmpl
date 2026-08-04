@@ -1,0 +1,36 @@
+namespace {{ .Project }}.DomainModel;
+
+public static class DomainGuard
+{
+    public static string Required(string? value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new DomainException($"{parameterName} is required.");
+
+        return value.Trim();
+    }
+
+    public static Guid Required(Guid value, string parameterName)
+    {
+        if (value == Guid.Empty)
+            throw new DomainException($"{parameterName} must not be empty.");
+
+        return value;
+    }
+
+    public static DateOnly Required(DateOnly value, string parameterName)
+    {
+        if (value == default)
+            throw new DomainException($"{parameterName} must be a valid date.");
+
+        return value;
+    }
+
+    public static DateTime Required(DateTime value, string parameterName)
+    {
+        if (value == default)
+            throw new DomainException($"{parameterName} must be a valid date and time.");
+
+        return value;
+    }
+}

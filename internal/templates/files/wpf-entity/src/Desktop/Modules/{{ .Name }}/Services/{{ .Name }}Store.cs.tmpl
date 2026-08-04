@@ -1,0 +1,103 @@
+using System.Net.Http;
+using System.Net.Http.Json;
+using {{ .Namespace }}.Models;
+
+namespace {{ .Namespace }}.Services;
+
+{{- if or (eq .Backend "simple") (eq .Backend "ddd") }}
+public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
+{
+    private const string Path = "/api/{{ kebab .Name }}";
+
+    public IReadOnlyList<{{ .Name }}Row> GetAll() =>
+        http.GetFromJsonAsync<List<{{ .Name }}Row>>(Path).GetAwaiter().GetResult() ?? [];
+
+    public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
+    {
+        if (editingId == 0)
+        {
+            var response = http.PostAsJsonAsync(Path, value).GetAwaiter().GetResult();
+            response.EnsureSuccessStatusCode();
+            return response.Content.ReadFromJsonAsync<{{ .Name }}Row>().GetAwaiter().GetResult() ?? value;
+        }
+
+        var update = http.PutAsJsonAsync($"{Path}/{editingId}", value).GetAwaiter().GetResult();
+        update.EnsureSuccessStatusCode();
+        return value with { Id = editingId };
+    }
+
+    public void Delete(long id)
+    {
+        var response = http.DeleteAsync($"{Path}/{id}").GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+    }
+}
+{{- else if eq .Backend "ddd-local" }}
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.Domain.Entities;
+using {{ .Project }}.Infrastructure.Persistence;
+
+public sealed class {{ .Name }}Store(AppDbContext db) : I{{ .Name }}Store
+{
+    public IReadOnlyList<{{ .Name }}Row> GetAll() => db.Set<{{ .Name }}>()
+        .AsNoTracking()
+        .OrderBy(x => x.Id)
+        .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}))
+        .ToList();
+
+    public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
+    {
+        {{- if .Properties }}
+        if (editingId == 0)
+        {
+            var created = new {{ .Name }}({{ range $index, $property := .Properties }}{{ if $index }}, {{ end }}value.{{ $property.Name }}{{ end }});
+            db.Add(created);
+            db.SaveChanges();
+            return new {{ .Name }}Row(created.Id{{ range .Properties }}, created.{{ .Name }}{{ end }});
+        }
+
+        var existing = db.Set<{{ .Name }}>().SingleOrDefault(x => x.Id == editingId);
+        if (existing is null) return value;
+        existing.Update({{ range $index, $property := .Properties }}{{ if $index }}, {{ end }}value.{{ $property.Name }}{{ end }});
+        db.SaveChanges();
+        return new {{ .Name }}Row(existing.Id{{ range .Properties }}, existing.{{ .Name }}{{ end }});
+        {{- end }}
+    }
+
+    public void Delete(long id)
+    {
+        var existing = db.Set<{{ .Name }}>().SingleOrDefault(x => x.Id == id);
+        if (existing is null) return;
+        db.Remove(existing);
+        db.SaveChanges();
+    }
+}
+{{- else }}
+public sealed class {{ .Name }}Store : I{{ .Name }}Store
+{
+    private readonly List<{{ .Name }}Row> items = [];
+    private long nextId = 1;
+
+    public IReadOnlyList<{{ .Name }}Row> GetAll() => items.ToArray();
+
+    public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
+    {
+        if (editingId == 0)
+        {
+            value = value with { Id = nextId++ };
+            items.Add(value);
+            return value;
+        }
+
+        var index = items.FindIndex(x => x.Id == editingId);
+        if (index < 0) return value;
+        items[index] = value with { Id = editingId };
+        return items[index];
+    }
+
+    public void Delete(long id)
+    {
+        items.RemoveAll(x => x.Id == id);
+    }
+}
+{{- end }}

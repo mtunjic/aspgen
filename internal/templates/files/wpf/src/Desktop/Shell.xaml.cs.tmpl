@@ -1,0 +1,29 @@
+using System.Windows;
+{{- if eq .Theme "wpfui" }}
+using Wpf.Ui.Controls;
+{{- end }}
+
+namespace {{ .Project }}.Desktop;
+
+public partial class Shell{{ if eq .Theme "wpfui" }} : Wpf.Ui.Controls.FluentWindow{{ else }} : Window{{ end }}
+{
+    public Shell() => InitializeComponent();
+{{- if eq .Theme "wpfui" }}
+
+    private void OnNavigationSuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
+    {
+        if (DataContext is ShellViewModel viewModel && args.SelectedItem is string title)
+        {
+            viewModel.NavigateTo(title);
+        }
+    }
+
+    private void OnNavigationQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        if (DataContext is ShellViewModel viewModel)
+        {
+            viewModel.NavigateTo(args.QueryText);
+        }
+    }
+{{- end }}
+}

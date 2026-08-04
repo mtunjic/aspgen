@@ -1,0 +1,9 @@
+{
+  "ConnectionStrings": {
+{{- if eq .Database "postgres" }}
+    "DefaultConnection": "Host=localhost;Database={{ kebab .Project }};Username=postgres;Password=postgres"
+{{- else }}
+    "DefaultConnection": "Data Source={{ kebab .Project }}.db"
+{{- end }}
+  }
+}

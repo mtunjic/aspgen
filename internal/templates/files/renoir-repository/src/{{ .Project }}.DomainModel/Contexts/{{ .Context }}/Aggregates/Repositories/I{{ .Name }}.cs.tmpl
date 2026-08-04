@@ -1,0 +1,11 @@
+using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+
+namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+
+// Repository contract belongs to the domain; its implementation belongs to persistence.
+public interface I{{ .Name }}
+{
+    Task<{{ .Aggregate }}?> GetByIdAsync(long id, CancellationToken cancellationToken = default);
+    Task AddAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default);
+    Task SaveAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default);
+}

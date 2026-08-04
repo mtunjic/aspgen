@@ -1,0 +1,4 @@
+namespace {{ .Project }}.Application.Features.{{ .Name }};
+
+public sealed record {{ .Name }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});

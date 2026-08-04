@@ -1,0 +1,99 @@
+@using Microsoft.AspNetCore.Components.Forms
+@page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s"
+@using {{ .Project }}.Application.Contexts.{{ .Context }}
+@inject {{ .Project }}.Application.Contexts.{{ .Context }}.{{ .Aggregate }}CrudService Service
+
+<h1>{{ .Aggregate }}s</h1>
+<EditForm Model="form" OnValidSubmit="SaveAsync">
+    <DataAnnotationsValidator />
+{{- range .Properties }}
+    <div class="mb-3">
+        <label>{{ .DisplayName }}</label>
+{{- if eq .CSharpType "Guid" }}
+        <InputText @bind-Value="form.{{ .Name }}Text" class="form-control" />
+{{- else }}
+        <{{ .UIControl }} @bind-Value="form.{{ .Name }}" class="form-control" />
+{{- end }}
+    </div>
+{{- end }}
+    <button class="btn btn-primary" type="submit">Save</button>
+</EditForm>
+
+<table class="table">
+    <tbody>
+{{- range .Properties }}{{ if eq .Name "Name" }}{{ end }}{{ end }}
+    @foreach (var item in items)
+    {
+        <tr>
+{{- range .Properties }}
+            <td>@item.{{ .Name }}</td>
+{{- end }}
+            <td>
+                <button class="btn btn-secondary" @onclick="() => EditAsync(item.Id)">Edit</button>
+                <button class="btn btn-danger" @onclick="() => DeleteAsync(item.Id)">Delete</button>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private List<{{ .Aggregate }}View> items = [];
+    private {{ .Aggregate }}Editor form = new();
+    private long editingId;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        items = await Service.GetAllAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (editingId == 0)
+        {
+            await Service.CreateAsync(new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }}));
+        }
+        else
+        {
+            if (!await Service.UpdateAsync(editingId, new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }}))) return;
+        }
+        form = new();
+        editingId = 0;
+        await ReloadAsync();
+    }
+
+    private async Task EditAsync(long id)
+    {
+        var item = items.FirstOrDefault(x => x.Id == id);
+        if (item is null) return;
+        editingId = id;
+{{- range .Properties }}
+{{- if eq .CSharpType "Guid" }}
+        form.{{ .Name }}Text = item.{{ .Name }}.ToString();
+{{- else }}
+        form.{{ .Name }} = item.{{ .Name }};
+{{- end }}
+{{- end }}
+    }
+
+    private async Task DeleteAsync(long id)
+    {
+        if (!await Service.DeleteAsync(id)) return;
+        await ReloadAsync();
+    }
+
+    private sealed class {{ .Aggregate }}Editor
+    {
+{{- range .Properties }}
+{{- if eq .CSharpType "Guid" }}
+        public string {{ .Name }}Text { get; set; } = "";
+{{- else }}
+        public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
+{{- end }}
+{{- end }}
+    }
+}

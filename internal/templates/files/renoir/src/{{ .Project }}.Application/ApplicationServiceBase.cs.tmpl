@@ -1,0 +1,8 @@
+using {{ .Project }}.Application.Settings;
+
+namespace {{ .Project }}.Application;
+
+public class ApplicationServiceBase(RenoirSettings settings)
+{
+    protected RenoirSettings Settings { get; } = settings;
+}

@@ -1,0 +1,6 @@
+namespace {{ .Namespace }}.Application.Services;
+
+public interface I{{ .Name }}Service
+{
+    Task ExecuteAsync(CancellationToken cancellationToken = default);
+}

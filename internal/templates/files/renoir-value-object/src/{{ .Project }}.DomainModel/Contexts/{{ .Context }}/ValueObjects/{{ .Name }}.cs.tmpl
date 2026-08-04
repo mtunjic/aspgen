@@ -1,0 +1,23 @@
+using {{ .Project }}.DomainModel;
+
+namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.ValueObjects;
+
+// Immutable, identity-less domain concept. Construction is the invariant boundary.
+public sealed record {{ .Name }}
+{
+    private {{ .Name }}(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }})
+    {
+{{- range .Properties }}
+        {{ .Name }} = {{ if eq .CSharpType "string" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "Guid" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "DateOnly" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else if eq .CSharpType "DateTime" }}DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }})){{ else }}{{ camel .Name }}{{ end }};
+{{- end }}
+    }
+
+    public static {{ .Name }} Create(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }}) => new(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ camel $property.Name }}{{ end }});
+
+{{- range .Properties }}
+    public {{ .CSharpType }} {{ .Name }} { get; }
+{{- end }}
+}

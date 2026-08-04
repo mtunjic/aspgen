@@ -1,0 +1,86 @@
+{{- if eq .Theme "wpfui" }}
+using System.Collections.ObjectModel;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using Prism.Commands;
+using Prism.Navigation.Regions;
+using Wpf.Ui.Controls;
+
+namespace {{ .Project }}.Desktop.Navigation;
+
+public sealed class NavigationRegistry
+{
+    public sealed record ModuleCard(string Title, string ViewName, SymbolRegular Icon);
+
+    private readonly IRegionManager regionManager;
+    private readonly Dictionary<string, string> routes = new(StringComparer.OrdinalIgnoreCase);
+    private NavigationViewItem? modulesGroup;
+    private bool modulesSeparatorAdded;
+    public ObservableCollection<object> Items { get; } = [];
+    public ObservableCollection<string> SearchItems { get; } = [];
+    public ObservableCollection<ModuleCard> Modules { get; } = [];
+
+    public NavigationRegistry(IRegionManager regionManager)
+    {
+        this.regionManager = regionManager;
+        EnsureHomeItem();
+    }
+
+    public void Register(string title, string viewName, SymbolRegular icon)
+    {
+        var displayTitle = Humanize(title);
+        routes[title] = viewName;
+        routes[displayTitle] = viewName;
+        SearchItems.Add(displayTitle);
+        Modules.Add(new ModuleCard(displayTitle, viewName, icon));
+        var item = new NavigationViewItem
+        {
+            Content = displayTitle,
+            Icon = new SymbolIcon { Symbol = icon },
+            ToolTip = $"Open {title} module",
+            Command = new DelegateCommand(() => regionManager.RequestNavigate("MainRegion", viewName))
+        };
+        modulesGroup ??= new NavigationViewItem
+        {
+            Content = "Modules",
+            Icon = new SymbolIcon { Symbol = SymbolRegular.Table24 },
+            IsExpanded = true
+        };
+        if (!modulesSeparatorAdded)
+        {
+            Items.Add(new NavigationViewItemSeparator());
+            modulesSeparatorAdded = true;
+        }
+        if (!Items.Contains(modulesGroup)) Items.Add(modulesGroup);
+        modulesGroup.MenuItems.Add(item);
+    }
+
+    public bool Navigate(string title)
+    {
+        if (!routes.TryGetValue(title.Trim(), out var viewName)) return false;
+        regionManager.RequestNavigate("MainRegion", viewName);
+        return true;
+    }
+
+    public void NavigateView(string viewName) => regionManager.RequestNavigate("MainRegion", viewName);
+
+    private void EnsureHomeItem()
+    {
+        if (Items.Count > 0) return;
+        Items.Add(new NavigationViewItem
+        {
+            Content = "Home",
+            Icon = new SymbolIcon { Symbol = SymbolRegular.Home24 },
+            ToolTip = "Open dashboard",
+            Command = new DelegateCommand(() => NavigateView("DashboardView"))
+        });
+    }
+
+    private static string Humanize(string value)
+    {
+        var result = Regex.Replace(value.Replace("_", " ").Replace("-", " "), "([a-z0-9])([A-Z])", "$1 $2");
+        result = Regex.Replace(result, "([A-Z])([A-Z][a-z])", "$1 $2");
+        return result.Trim();
+    }
+}
+{{- end }}

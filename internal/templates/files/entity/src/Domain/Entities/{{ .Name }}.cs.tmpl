@@ -1,0 +1,26 @@
+namespace {{ .Namespace }}.Domain.Entities;
+
+public sealed class {{ .Name }} : AuditableEntity
+{
+    private {{ .Name }}() { }
+    public long Id { get; private set; }
+
+    public {{ .Name }}(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }})
+    {
+{{- range .Properties }}
+        {{ .Name }} = {{ camel .Name }};
+{{- end }}
+    }
+{{- range .Properties }}
+    public {{ .CSharpType }} {{ .Name }} { get; private set; } = default!;
+{{- end }}
+
+    public void Update(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }})
+    {
+{{- range .Properties }}
+        {{ .Name }} = {{ camel .Name }};
+{{- end }}
+    }
+}

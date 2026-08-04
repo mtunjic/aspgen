@@ -1,0 +1,30 @@
+using Prism.Mvvm;
+{{- if eq .Theme "wpfui" }}
+using System.Collections.ObjectModel;
+using Prism.Commands;
+using {{ .Project }}.Desktop.Navigation;
+{{- end }}
+
+namespace {{ .Project }}.Desktop.Views;
+
+public sealed class DashboardViewModel : BindableBase
+{
+{{- if eq .Theme "wpfui" }}
+    private readonly NavigationRegistry navigation;
+
+    public DashboardViewModel(NavigationRegistry navigation)
+    {
+        this.navigation = navigation;
+        Modules = navigation.Modules;
+        OpenModuleCommand = new DelegateCommand<string>(OpenModule);
+    }
+
+    public ObservableCollection<NavigationRegistry.ModuleCard> Modules { get; }
+    public DelegateCommand<string> OpenModuleCommand { get; }
+
+    private void OpenModule(string? title)
+    {
+        if (!string.IsNullOrWhiteSpace(title)) navigation.Navigate(title);
+    }
+{{- end }}
+}

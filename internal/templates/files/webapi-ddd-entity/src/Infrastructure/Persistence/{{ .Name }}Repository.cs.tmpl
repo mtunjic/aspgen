@@ -1,0 +1,25 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.Domain.Entities;
+using {{ .Project }}.Domain.Repositories;
+
+namespace {{ .Project }}.Infrastructure.Persistence;
+
+public sealed class {{ .Name }}Repository(AppDbContext database) : I{{ .Name }}Repository
+{
+    public Task<List<{{ .Name }}>> GetAllAsync(CancellationToken cancellationToken = default) =>
+        database.{{ .Name }}s.AsNoTracking().ToListAsync(cancellationToken);
+
+    public Task<{{ .Name }}?> GetByIdAsync(long id, CancellationToken cancellationToken = default) =>
+        database.{{ .Name }}s.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+    public Task AddAsync({{ .Name }} entity, CancellationToken cancellationToken = default) =>
+        database.{{ .Name }}s.AddAsync(entity, cancellationToken).AsTask();
+
+    public Task DeleteAsync({{ .Name }} entity, CancellationToken cancellationToken = default)
+    {
+        database.{{ .Name }}s.Remove(entity);
+        return Task.CompletedTask;
+    }
+
+    public Task SaveChangesAsync(CancellationToken cancellationToken = default) => database.SaveChangesAsync(cancellationToken);
+}

@@ -1,0 +1,5 @@
+namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Events;
+
+// A completed business fact. Keep this immutable and free of infrastructure dependencies.
+public sealed record {{ .Name }}(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});

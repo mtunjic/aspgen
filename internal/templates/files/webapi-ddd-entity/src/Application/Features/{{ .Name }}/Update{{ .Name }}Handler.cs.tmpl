@@ -1,0 +1,16 @@
+namespace {{ .Project }}.Application.Features.{{ .Name }};
+
+public sealed class Update{{ .Name }}Handler(Domain.Repositories.I{{ .Name }}Repository repository)
+    : IHandler<Update{{ .Name }}Command, bool>
+{
+    public async Task<Result<bool>> HandleAsync(Update{{ .Name }}Command request, CancellationToken cancellationToken = default)
+    {
+        var entity = await repository.GetByIdAsync(request.Id, cancellationToken);
+        if (entity is null)
+            return Result<bool>.Failure(new Error("not_found", "{{ .Name }} was not found."));
+        entity.Update(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        await repository.SaveChangesAsync(cancellationToken);
+        return Result<bool>.Success(true);
+    }
+}

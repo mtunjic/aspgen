@@ -1,0 +1,4 @@
+namespace {{ .Namespace }}.Models;
+
+public sealed record {{ .Name }}Row(
+    long Id{{ range .Properties }}, {{ .CSharpType }} {{ .Name }}{{ end }});

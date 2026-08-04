@@ -1,0 +1,9 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+
+namespace {{ .Project }}.Persistence;
+
+public partial class {{ .Project }}Database
+{
+    public DbSet<{{ .Aggregate }}> {{ .Aggregate }}s => Set<{{ .Aggregate }}>();
+}

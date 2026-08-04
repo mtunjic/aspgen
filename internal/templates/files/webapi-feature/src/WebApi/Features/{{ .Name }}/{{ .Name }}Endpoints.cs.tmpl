@@ -1,0 +1,29 @@
+using {{ .Project }}.Application;
+using {{ .Project }}.Application.Features.{{ .Name }};
+using FluentValidation;
+
+namespace {{ .Project }}.WebApi.Features.{{ .Name }};
+
+public static class {{ .Name }}Endpoints
+{
+    public static IEndpointRouteBuilder Map{{ .Name }}Endpoints(this IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapPost("/api/{{ kebab .Name }}", async (
+            {{ .Name }}Request request,
+            IHandler<{{ .Name }}Request, {{ .Name }}Response> handler,
+            IValidator<{{ .Name }}Request> validator,
+            CancellationToken cancellationToken) =>
+        {
+            var validation = await validator.ValidateAsync(request, cancellationToken);
+            if (!validation.IsValid)
+            {
+                return Results.ValidationProblem(validation.ToDictionary());
+            }
+            var result = await handler.HandleAsync(request, cancellationToken);
+            return result.IsSuccess
+                ? Results.Ok(result.Value)
+                : Results.BadRequest(result.Error);
+        });
+        return endpoints;
+    }
+}

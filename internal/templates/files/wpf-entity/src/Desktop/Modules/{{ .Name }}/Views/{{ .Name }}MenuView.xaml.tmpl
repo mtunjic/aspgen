@@ -1,0 +1,12 @@
+<UserControl x:Class="{{ .Namespace }}.Views.{{ .Name }}MenuView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:prism="http://prismlibrary.com/"{{ if eq .Theme "wpfui" }}
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"{{ end }}
+    prism:ViewModelLocator.AutoWireViewModel="True">
+{{- if eq .Theme "wpfui" }}
+    <ui:Button Margin="4" Padding="12,8" HorizontalContentAlignment="Left" Content="{{ .Name }}" Icon="{ui:SymbolIcon Table24}" ToolTip="Open {{ .Name }} module" Command="{Binding OpenCommand}" />
+{{- else }}
+    <Button Margin="4" Padding="12,8" HorizontalContentAlignment="Left" Content="{{ .Name }}" Command="{Binding OpenCommand}" />
+{{- end }}
+</UserControl>

@@ -1,0 +1,46 @@
+using Prism.Commands;
+using Prism.Mvvm;
+{{- if eq .Theme "wpfui" }}
+using System.Collections.ObjectModel;
+using {{ .Project }}.Desktop.Navigation;
+using Wpf.Ui.Appearance;
+{{- end }}
+
+namespace {{ .Project }}.Desktop;
+
+public sealed class ShellViewModel : BindableBase
+{
+{{- if eq .Theme "wpfui" }}
+    private readonly NavigationRegistry navigation;
+    private string currentTheme = ApplicationThemeManager.GetAppTheme().ToString();
+
+    public ShellViewModel(NavigationRegistry navigation)
+    {
+        this.navigation = navigation;
+        NavigationItems = navigation.Items;
+        NavigationSearchItems = navigation.SearchItems;
+        ToggleThemeCommand = new DelegateCommand(ToggleTheme);
+        GoHomeCommand = new DelegateCommand(() => navigation.NavigateView("DashboardView"));
+        OpenSettingsCommand = new DelegateCommand(() => navigation.NavigateView("SettingsView"));
+    }
+
+    public ObservableCollection<object> NavigationItems { get; }
+    public ObservableCollection<string> NavigationSearchItems { get; }
+    public DelegateCommand ToggleThemeCommand { get; }
+    public DelegateCommand GoHomeCommand { get; }
+    public DelegateCommand OpenSettingsCommand { get; }
+    public string ThemeButtonText => $"Theme: {currentTheme}";
+
+    public void NavigateTo(string title) => navigation.Navigate(title);
+
+    private void ToggleTheme()
+    {
+        var next = ApplicationThemeManager.GetAppTheme() == ApplicationTheme.Light
+            ? ApplicationTheme.Dark
+            : ApplicationTheme.Light;
+        ApplicationThemeManager.Apply(next, updateAccent: false);
+        currentTheme = next.ToString();
+        RaisePropertyChanged(nameof(ThemeButtonText));
+    }
+{{- end }}
+}

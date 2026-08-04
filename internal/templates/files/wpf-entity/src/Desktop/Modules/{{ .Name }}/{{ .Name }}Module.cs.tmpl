@@ -1,0 +1,59 @@
+using Prism.Ioc;
+using Prism.Modularity;
+using Prism.Navigation.Regions;
+{{- if eq .Backend "ddd-local" }}
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.Infrastructure.Persistence;
+{{- if eq .Seed "dummy" }}
+using {{ .Project }}.Infrastructure.Seeding;
+{{- end }}
+{{- end }}
+{{- if or (eq .Backend "simple") (eq .Backend "ddd") }}
+using System.Net.Http;
+{{- end }}
+{{- if eq .Theme "wpfui" }}
+using {{ .Project }}.Desktop.Navigation;
+using Wpf.Ui.Controls;
+{{- end }}
+
+namespace {{ .Namespace }};
+
+public sealed class {{ .Name }}Module : IModule
+{
+    public void RegisterTypes(IContainerRegistry containerRegistry)
+    {
+{{- if or (eq .Backend "simple") (eq .Backend "ddd") }}
+        var apiUrl = Environment.GetEnvironmentVariable("ASPGENT_API_URL") ?? "http://localhost:5000";
+        containerRegistry.RegisterSingleton<HttpClient>(() => new HttpClient { BaseAddress = new Uri(apiUrl) });
+{{- end }}
+{{- if eq .Backend "ddd-local" }}
+        containerRegistry.RegisterSingleton<AppDbContext>(() =>
+        {
+            var options = new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlite("Data Source={{ kebab .Project }}.db")
+                .Options;
+            var db = new AppDbContext(options);
+            db.Database.EnsureCreated();
+{{- if eq .Seed "dummy" }}
+            DatabaseSeeder.Seed(db);
+{{- end }}
+            return db;
+        });
+{{- end }}
+        containerRegistry.RegisterSingleton<Services.I{{ .Name }}Store, Services.{{ .Name }}Store>();
+        containerRegistry.RegisterForNavigation<Views.{{ .Name }}View>();
+    }
+
+    public void OnInitialized(IContainerProvider containerProvider)
+    {
+{{- if ne .Theme "wpfui" }}
+        var regionManager = containerProvider.Resolve<IRegionManager>();
+{{- end }}
+{{- if eq .Theme "wpfui" }}
+        var navigation = containerProvider.Resolve<NavigationRegistry>();
+        navigation.Register("{{ .Name }}", "{{ .Name }}View", SymbolRegular.Table24);
+{{- else }}
+        regionManager.RegisterViewWithRegion("MenuRegion", typeof(Views.{{ .Name }}MenuView));
+{{- end }}
+    }
+}

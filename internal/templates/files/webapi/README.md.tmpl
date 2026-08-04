@@ -1,0 +1,40 @@
+# {{ .Project }} API
+
+Generated with aspgen using Clean Architecture. The dependency direction is:
+
+```text
+WebApi -> Infrastructure -> Application -> Domain
+```
+
+## Build
+
+Run these commands from the generated project root:
+
+```powershell
+dotnet restore .\{{ .Project }}.sln
+dotnet build .\{{ .Project }}.sln
+```
+
+## Run the API
+
+```powershell
+dotnet run --project .\src\WebApi\WebApi.csproj --urls http://localhost:5000
+```
+
+Useful endpoints:
+
+- Health: `http://localhost:5000/health`
+- OpenAPI: `http://localhost:5000/openapi/v1.json`
+- Scalar UI: `http://localhost:5000/scalar/v1`
+
+The default database is SQLite. Its database file is configured in `src/WebApi/appsettings.json`.
+For PostgreSQL, generate with `--database postgres` and update the connection string before running.
+
+## Add a feature or entity
+
+```powershell
+aspgen add entity Book title:string pages:int published:date --project .
+aspgen add feature SearchBooks title:string --project .
+```
+
+Run `aspgen new` before any `add` command. Incremental files are registered in their owning project file.

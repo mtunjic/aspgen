@@ -1,0 +1,16 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.WebApi.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddDbContext<AppDbContext>(options =>
+{{- if eq .Database "postgres" }}
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+{{- else }}
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+{{- end }}
+var app = builder.Build();
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+// aspgen:seed
+// aspgen:features
+app.MapGet("/", () => Results.Ok(new { application = "{{ .Project }}" }));
+app.Run();

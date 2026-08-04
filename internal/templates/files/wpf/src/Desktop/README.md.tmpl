@@ -1,0 +1,38 @@
+# {{ .Project }} Desktop
+
+Generated with Prism and DryIoc.
+
+## Build and run
+
+From the generated project root:
+
+```powershell
+dotnet restore .\{{ .Project }}.sln
+dotnet build .\src\Desktop\{{ .Project }}.Desktop.csproj
+dotnet run --project .\src\Desktop\{{ .Project }}.Desktop.csproj
+```
+
+For fullstack projects, start the API first in another terminal:
+
+```powershell
+dotnet run --project .\src\WebApi\WebApi.csproj --urls http://localhost:5000
+```
+
+The generated entity modules use `http://localhost:5000` by default. Set `ASPGENT_API_URL` when the API uses another address:
+
+```powershell
+$env:ASPGENT_API_URL = "https://localhost:7001"
+dotnet run --project .\src\Desktop\{{ .Project }}.Desktop.csproj
+```
+
+{{- if eq .Theme "wpfui" }}
+WPF-UI theme is enabled with the `WPF-UI` NuGet package. Theme resources are configured in `App.xaml`, and the shell uses `FluentWindow`, `TitleBar`, `NavigationView`, `AutoSuggestBox` module search, grouped module navigation, Fluent resource brushes, and Prism regions.
+
+The dashboard is the initial landing page. It includes a Fluent hero banner and responsive cards for generated modules. The left navigation can collapse with its hamburger button, modules are grouped under **Modules**, PascalCase names are displayed as readable labels, and **Settings** is available in the footer. The initial theme is Dark; use the **Toggle theme** button or Settings page to switch between Light and Dark themes at runtime.
+
+Generated entity forms use WPF-UI controls based on property type: `TextBox`, `NumberBox`, `CalendarDatePicker`, `TimePicker`, and `ToggleSwitch`. Lists use a themed `DataGrid` with typed columns, empty-state feedback, validation and success `InfoBar` messages, and Fluent action icons.
+
+CRUD keyboard shortcuts are available in each module: `Ctrl+N` (new), `Ctrl+S` (save), `F5` (refresh), `Delete` (delete selected), and `Escape` (cancel). Double-click a grid row to edit it.
+
+Global shell shortcuts are also available: `Alt+Home` returns to the dashboard and `Ctrl+,` opens Settings.
+{{- end }}

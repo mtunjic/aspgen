@@ -1,0 +1,18 @@
+using Scalar.AspNetCore;
+using {{ .Project }}.Application;
+using {{ .Project }}.Infrastructure;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi();
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+var app = builder.Build();
+
+app.MapOpenApi();
+app.MapScalarApiReference(options => options.WithTitle("{{ .Project }} API"));
+app.MapHealthChecks("/health");
+// aspgen:seed
+// aspgen:features
+app.MapGet("/", () => Results.Ok(new { application = "{{ .Project }}" }));
+app.Run();

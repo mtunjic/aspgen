@@ -1,0 +1,17 @@
+namespace {{ .Project }}.DomainModel;
+
+public partial class BaseEntity
+{
+    public virtual void Init(string author) { Created.Mark(author); LastUpdated.Mark(author); }
+    public void Mark(string author) => LastUpdated.Mark(author);
+    public virtual bool IsValid() => true;
+    public virtual void Normalize() { }
+    public virtual void Import(BaseEntity entity)
+    {
+        Deleted = entity.Deleted;
+        Created = entity.Created;
+        LastUpdated = entity.LastUpdated;
+    }
+    public void SoftDelete() => Deleted = true;
+    public void SoftUndelete() => Deleted = false;
+}

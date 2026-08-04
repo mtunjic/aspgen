@@ -1,0 +1,22 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.DomainModel;
+
+namespace {{ .Project }}.Persistence;
+
+public partial class {{ .Project }}Database(DbContextOptions<{{ .Project }}Database> options) : DbContext(options)
+{
+    public DbSet<SampleRecord> SampleRecords => Set<SampleRecord>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SampleRecord>().HasKey(x => x.Id);
+        modelBuilder.Entity<SampleRecord>().OwnsOne(x => x.Created);
+        modelBuilder.Entity<SampleRecord>().OwnsOne(x => x.LastUpdated);
+    }
+}
+
+public sealed class SampleRecord : BaseEntity
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+}

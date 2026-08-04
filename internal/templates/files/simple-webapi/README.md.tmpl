@@ -1,0 +1,30 @@
+# {{ .Project }} Simple API
+
+Rails-style classic CRUD profile using EF Core and direct Minimal API endpoints. Entities are simple Active Record-like models backed by `AppDbContext`.
+
+## Build and run
+
+Run from the generated project root:
+
+```powershell
+dotnet restore .\{{ .Project }}.sln
+dotnet build .\{{ .Project }}.sln
+dotnet run --project .\src\WebApi\WebApi.csproj --urls http://localhost:5000
+```
+
+Check the API at `http://localhost:5000/health`. The default database is SQLite and is stored as `{{ kebab .Project }}.db` in the Web API working directory.
+
+Add a CRUD entity after the project exists:
+
+```powershell
+aspgen add entity Book title:string author:string pages:int published:date available:bool --project .
+```
+
+The generated WPF client uses the API when the project is `fullstack`. Set `ASPGENT_API_URL` before starting the desktop app to override the default `http://localhost:5000`.
+
+Example:
+
+```text
+$env:ASPGENT_API_URL = "https://localhost:7001"
+dotnet run --project src/Desktop/{{ .Project }}.Desktop.csproj
+```

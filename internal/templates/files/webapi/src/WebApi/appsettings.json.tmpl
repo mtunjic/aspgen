@@ -1,0 +1,15 @@
+{
+  "ConnectionStrings": {
+{{- if eq .Database "postgres" }}
+    "DefaultConnection": "Host=localhost;Port=5432;Database={{ kebab .Project }};Username=postgres;Password=postgres"
+{{- else }}
+    "DefaultConnection": "Data Source={{ kebab .Project }}.db"
+{{- end }}
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  }
+}

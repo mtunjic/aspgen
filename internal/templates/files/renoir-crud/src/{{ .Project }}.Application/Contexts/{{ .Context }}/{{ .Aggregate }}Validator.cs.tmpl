@@ -1,0 +1,19 @@
+using FluentValidation;
+
+namespace {{ .Project }}.Application.Contexts.{{ .Context }};
+
+public sealed class {{ .Aggregate }}Validator : AbstractValidator<{{ .Aggregate }}Request>
+{
+    public {{ .Aggregate }}Validator()
+    {
+{{- range .Properties }}{{ if eq .CSharpType "string" }}
+        RuleFor(x => x.{{ .Name }}).NotEmpty().WithMessage("{{ .Name }} is required.");
+{{- else if eq .CSharpType "Guid" }}
+        RuleFor(x => x.{{ .Name }}).NotEmpty().WithMessage("{{ .Name }} must not be empty.");
+{{- else if eq .CSharpType "DateOnly" }}
+        RuleFor(x => x.{{ .Name }}).Must(value => value != default).WithMessage("{{ .Name }} must be a valid date.");
+{{- else if eq .CSharpType "DateTime" }}
+        RuleFor(x => x.{{ .Name }}).Must(value => value != default).WithMessage("{{ .Name }} must be a valid date and time.");
+{{- end }}{{- end }}
+    }
+}

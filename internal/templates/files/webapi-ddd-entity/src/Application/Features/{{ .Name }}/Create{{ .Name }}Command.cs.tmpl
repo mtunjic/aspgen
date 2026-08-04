@@ -1,0 +1,6 @@
+using {{ .Project }}.Application;
+
+namespace {{ .Project }}.Application.Features.{{ .Name }};
+
+public sealed record Create{{ .Name }}Command(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});

@@ -1,0 +1,13 @@
+using {{ .Project }}.Application;
+
+namespace {{ .Project }}.Application.Features.{{ .Name }};
+
+public sealed class {{ .Name }}Handler : IHandler<{{ .Name }}Request, {{ .Name }}Response>
+{
+    public Task<Result<{{ .Name }}Response>> HandleAsync({{ .Name }}Request request, CancellationToken cancellationToken = default)
+    {
+        var response = new {{ .Name }}Response(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        return Task.FromResult(Result<{{ .Name }}Response>.Success(response));
+    }
+}

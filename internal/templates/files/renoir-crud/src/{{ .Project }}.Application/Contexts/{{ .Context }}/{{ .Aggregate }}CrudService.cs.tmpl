@@ -1,0 +1,57 @@
+using Microsoft.EntityFrameworkCore;
+using FluentValidation;
+using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+using {{ .Project }}.Persistence;
+
+namespace {{ .Project }}.Application.Contexts.{{ .Context }};
+
+public sealed class {{ .Aggregate }}CrudService({{ .Project }}Database database, IValidator<{{ .Aggregate }}Request> validator)
+{
+    public Task<List<{{ .Aggregate }}View>> GetAllAsync(CancellationToken cancellationToken = default) =>
+        database.{{ .Aggregate }}s.Where(x => !x.Deleted).Select(x => new {{ .Aggregate }}View(x.Id,
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }})).ToListAsync(cancellationToken);
+
+    public async Task<{{ .Aggregate }}View?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
+        return entity is null ? null : new {{ .Aggregate }}View(entity.Id,
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }});
+    }
+
+    public async Task<{{ .Aggregate }}View> CreateAsync({{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
+    {
+        await validator.ValidateAndThrowAsync(request, cancellationToken);
+        var entity = new {{ .Aggregate }}(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        database.Add(entity);
+        await database.SaveChangesAsync(cancellationToken);
+        return new {{ .Aggregate }}View(entity.Id,
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }});
+    }
+
+    public async Task<bool> UpdateAsync(long id, {{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
+    {
+        await validator.ValidateAndThrowAsync(request, cancellationToken);
+        var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
+        if (entity is null) return false;
+        entity.Update(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        await database.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> DeleteAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
+        if (entity is null) return false;
+        entity.SoftDelete();
+        await database.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+}
+
+public sealed record {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});
+
+public sealed record {{ .Aggregate }}View(
+    long Id{{ range .Properties }}, {{ .CSharpType }} {{ .Name }}{{ end }});

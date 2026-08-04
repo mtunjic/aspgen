@@ -1,0 +1,32 @@
+using Prism.Mvvm;
+{{- if eq .Theme "wpfui" }}
+using Prism.Commands;
+using Wpf.Ui.Appearance;
+{{- end }}
+
+namespace {{ .Project }}.Desktop.Views;
+
+public sealed class SettingsViewModel : BindableBase
+{
+{{- if eq .Theme "wpfui" }}
+    private string currentTheme = ApplicationThemeManager.GetAppTheme().ToString();
+
+    public SettingsViewModel() => ToggleThemeCommand = new DelegateCommand(ToggleTheme);
+
+    public DelegateCommand ToggleThemeCommand { get; }
+    public string CurrentTheme
+    {
+        get => currentTheme;
+        private set => SetProperty(ref currentTheme, value);
+    }
+
+    private void ToggleTheme()
+    {
+        var next = ApplicationThemeManager.GetAppTheme() == ApplicationTheme.Light
+            ? ApplicationTheme.Dark
+            : ApplicationTheme.Light;
+        ApplicationThemeManager.Apply(next, updateAccent: false);
+        CurrentTheme = next.ToString();
+    }
+{{- end }}
+}

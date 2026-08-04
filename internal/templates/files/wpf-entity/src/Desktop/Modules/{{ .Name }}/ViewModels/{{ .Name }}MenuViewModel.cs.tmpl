@@ -1,0 +1,15 @@
+using Prism.Commands;
+using Prism.Mvvm;
+using Prism.Navigation.Regions;
+
+namespace {{ .Namespace }}.ViewModels;
+
+public sealed class {{ .Name }}MenuViewModel : BindableBase
+{
+    public {{ .Name }}MenuViewModel(IRegionManager regionManager)
+    {
+        OpenCommand = new DelegateCommand(() => regionManager.RequestNavigate("MainRegion", "{{ .Name }}View"));
+    }
+
+    public DelegateCommand OpenCommand { get; }
+}
