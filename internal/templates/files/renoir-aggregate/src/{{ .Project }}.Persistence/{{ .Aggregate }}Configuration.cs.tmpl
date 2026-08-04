@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+using {{ .Project }}.DomainModel.{{ .Context }};
 
-namespace {{ .Project }}.Persistence.Contexts.{{ .Context }};
+namespace {{ .Project }}.Persistence;
 
 public sealed class {{ .Aggregate }}Configuration : IEntityTypeConfiguration<{{ .Aggregate }}>
 {

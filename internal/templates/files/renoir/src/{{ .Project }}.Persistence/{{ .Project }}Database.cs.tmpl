@@ -15,7 +15,7 @@ public partial class {{ .Project }}Database(DbContextOptions<{{ .Project }}Datab
             x.ComplexProperty(r => r.Created).IsRequired();
             x.ComplexProperty(r => r.LastUpdated).IsRequired();
         });
-        // Per-aggregate mapping lives in IEntityTypeConfiguration classes under Contexts/*.
+        // Per-aggregate mapping lives in IEntityTypeConfiguration classes discovered by assembly scan.
         modelBuilder.ApplyConfigurationsFromAssembly(typeof({{ .Project }}Database).Assembly);
     }
 

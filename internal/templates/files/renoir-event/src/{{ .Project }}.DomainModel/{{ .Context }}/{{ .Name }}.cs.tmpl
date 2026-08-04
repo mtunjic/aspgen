@@ -1,4 +1,4 @@
-namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Events;
+namespace {{ .Project }}.DomainModel.{{ .Context }};
 
 // A completed business fact. Keep this immutable and free of infrastructure dependencies.
 public sealed record {{ .Name }}(

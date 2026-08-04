@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using {{ .Project }}.DomainModel;
-using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+using {{ .Project }}.DomainModel.{{ .Context }};
 
-namespace {{ .Project }}.Persistence.Contexts.{{ .Context }}.Repositories;
+namespace {{ .Project }}.Persistence.Repositories;
 
 public sealed class {{ .Name }}({{ .Project }}Database database) : I{{ .Name }}
 {

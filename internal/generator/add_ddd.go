@@ -60,14 +60,14 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 			return err
 		}
 		appBlazorDir := m.Project + ".AppBlazor"
-		using := "using " + m.Project + ".Application.Contexts." + contextName + ";\n"
+		using := "using " + m.Project + ".Application;\n"
 		registration := "        builder.Services.AddScoped<" + r.Name + "CrudService>();"
 		if err := updateBlazorServiceHost(r.Project, appBlazorDir, []string{using}, registration, r.DryRun); err != nil {
 			return err
 		}
 	}
 	for _, rel := range relations {
-		path := filepath.Join(r.Project, "src", m.Project+".DomainModel", "Contexts", contextName, "Aggregates", rel.Target+".cs")
+		path := filepath.Join(r.Project, "src", m.Project+".DomainModel", contextName, rel.Target+".cs")
 		if err := updateInverseNavigation(path, rel.Target+".cs", r.Name, r.DryRun); err != nil {
 			return err
 		}
@@ -138,11 +138,14 @@ func addRepositoryCmd(r addRequest, m *Manifest, d *data) error {
 	}
 	appBlazorDir := m.Project + ".AppBlazor"
 	usings := []string{
-		"using " + m.Project + ".DomainModel.Contexts." + contextName + ".Aggregates;\n",
-		"using " + m.Project + ".Persistence.Contexts." + contextName + ".Repositories;\n",
+		"using " + m.Project + ".DomainModel." + contextName + ";\n",
+		"using " + m.Project + ".Persistence.Repositories;\n",
 	}
 	registration := "        builder.Services.AddScoped<I" + r.Name + ", " + r.Name + ">();"
 	if err := updateBlazorServiceHost(r.Project, appBlazorDir, usings, registration, r.DryRun); err != nil {
+		return err
+	}
+	if err := wireCrudServiceToRepository(r, m, aggregateName, r.Name); err != nil {
 		return err
 	}
 	m.Components = appendUnique(m.Components, "repository:"+contextName+":"+aggregateName)

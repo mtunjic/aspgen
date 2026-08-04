@@ -456,7 +456,7 @@ func TestEntityRelationshipGenerationRenoir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	aggregate, err := os.ReadFile(filepath.Join(project, "src", "RenoirDemo.DomainModel", "Contexts", "Sales", "Aggregates", "Order.cs"))
+	aggregate, err := os.ReadFile(filepath.Join(project, "src", "RenoirDemo.DomainModel", "Sales", "Order.cs"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +464,7 @@ func TestEntityRelationshipGenerationRenoir(t *testing.T) {
 		t.Fatalf("expected foreign key and navigation property in Order.cs: %s", aggregate)
 	}
 
-	config, err := os.ReadFile(filepath.Join(project, "src", "RenoirDemo.Persistence", "Contexts", "Sales", "OrderConfiguration.cs"))
+	config, err := os.ReadFile(filepath.Join(project, "src", "RenoirDemo.Persistence", "OrderConfiguration.cs"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,12 +476,12 @@ func TestEntityRelationshipGenerationRenoir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(page), "@inject RenoirDemo.Application.Contexts.Sales.CustomerCrudService CustomerService") ||
+	if !strings.Contains(string(page), "@inject RenoirDemo.Application.CustomerCrudService CustomerService") ||
 		!strings.Contains(string(page), `<InputSelect @bind-Value="form.CustomerId" class="form-control">`) {
 		t.Fatalf("expected a Customer picker InputSelect in OrderCrud.razor: %s", page)
 	}
 
-	customerAggregate, err := os.ReadFile(filepath.Join(project, "src", "RenoirDemo.DomainModel", "Contexts", "Sales", "Aggregates", "Customer.cs"))
+	customerAggregate, err := os.ReadFile(filepath.Join(project, "src", "RenoirDemo.DomainModel", "Sales", "Customer.cs"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -495,7 +495,7 @@ func TestEntityRelationshipGenerationRenoir(t *testing.T) {
 	if err := Run([]string{"add", "aggregate", "Ticket", "subject:string", "customer:Customer", "--context", "Support", "--project", project}); err == nil {
 		t.Fatal("expected a cross-context relation to be rejected")
 	}
-	if _, err := os.Stat(filepath.Join(project, "src", "RenoirDemo.DomainModel", "Contexts", "Support", "Aggregates", "Ticket.cs")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(project, "src", "RenoirDemo.DomainModel", "Support", "Ticket.cs")); !os.IsNotExist(err) {
 		t.Fatalf("rejected cross-context aggregate generation left files behind: %v", err)
 	}
 }

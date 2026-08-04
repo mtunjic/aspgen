@@ -1,11 +1,12 @@
 using {{ .Project }}.DomainModel;
 
-namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.ValueObjects;
+namespace {{ .Project }}.DomainModel.{{ .Context }};
 
-// Immutable, identity-less domain concept. Construction is the invariant boundary.
-public sealed record {{ .Name }}
+public sealed partial class {{ .Aggregate }} : BaseEntity
 {
-    private {{ .Name }}(
+    private {{ .Aggregate }}() { }
+
+    public {{ .Aggregate }}(
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }})
     {
 {{- range .Properties }}
@@ -13,11 +14,12 @@ public sealed record {{ .Name }}
 {{- end }}
     }
 
-    public static {{ .Name }} Create(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }}) => new(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ camel $property.Name }}{{ end }});
-
+    public long Id { get; private set; }
 {{- range .Properties }}
-    public {{ .CSharpType }} {{ .Name }} { get; }
+    public {{ .CSharpType }} {{ .Name }} { get; private set; } = default!;
 {{- end }}
+{{- range .Relations }}
+    public {{ .Target }}? {{ .Name }} { get; private set; }
+{{- end }}
+    // aspgen:navigation
 }

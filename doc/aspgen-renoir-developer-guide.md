@@ -12,7 +12,7 @@ Renoir (`--app blazor`) is aspgen's DDD/Blazor profile. It has no `--simple`/`--
 
 The vocabulary, in dependency order:
 
-- **Bounded context** — a named grouping (`add context Catalog`) that becomes a folder under `Contexts/` in each project. Contexts hold no code of their own; they exist to namespace the aggregates, value objects, services, repositories, and events that belong together.
+- **Bounded context** — a named grouping (`add context Catalog`) that becomes a direct subfolder of `DomainModel` (e.g. `DomainModel/Catalog/`) once its first aggregate/value object/service/event is added. Contexts hold no code of their own; they exist to namespace the aggregates, value objects, services, repositories, and events that belong together. `Application` and `Persistence` are **not** nested by context — CRUD services, validators, EF configurations, and repository implementations sit flat at the project root, matching the reference Renoir project.
 - **Aggregate** — the consistency boundary and CRUD root (`add aggregate Product ... --context Catalog`). Generates a domain entity, an EF configuration, a CRUD service, and Blazor CRUD/detail pages.
 - **Value object** — an immutable, identity-less concept (`add value-object Money ... --context Catalog`). Construction is the invariant boundary; there is no public setter.
 - **Domain service** — a stateless policy that coordinates domain objects when a behavior doesn't belong naturally to one entity (`add domain-service PricingPolicy --context Catalog`).
@@ -78,7 +78,7 @@ RenoirDemo/
     RenoirDemo.Resources/
 ```
 
-No `Contexts/` folder exists yet in any project — it's created the first time you add a context.
+No context folder exists under `DomainModel/` yet in any project — it's created the first time you add a context's first aggregate/value object/service/event.
 
 ### Step 2 — add a bounded context
 
@@ -108,13 +108,13 @@ New files (the CRUD-default shape — see `--no-crud` in section 3, Adding new f
 src/RenoirDemo.AppBlazor/Components/Pages/Catalog/
   ProductCrud.razor
   ProductDetails.razor
-src/RenoirDemo.Application/Contexts/Catalog/
+src/RenoirDemo.Application/
   ProductCrudService.cs
   ProductValidator.cs
-src/RenoirDemo.DomainModel/Contexts/Catalog/Aggregates/
+src/RenoirDemo.DomainModel/Catalog/
   Product.cs
   Product.Methods.cs
-src/RenoirDemo.Persistence/Contexts/Catalog/
+src/RenoirDemo.Persistence/
   ProductConfiguration.cs
   ProductPersistence.cs
 ```
@@ -162,7 +162,7 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
 aspgen add value-object Money amount:decimal currency:string --context Catalog --project ./RenoirDemo
 ```
 
-New file: `src/RenoirDemo.DomainModel/Contexts/Catalog/ValueObjects/Money.cs`
+New file: `src/RenoirDemo.DomainModel/Catalog/Money.cs`
 
 ```csharp
 public sealed record Money
@@ -187,7 +187,7 @@ Value objects are generated standalone — wiring `Money` into `Product` (e.g. r
 aspgen add domain-service PricingPolicy --context Catalog --project ./RenoirDemo
 ```
 
-New file: `src/RenoirDemo.DomainModel/Contexts/Catalog/Services/PricingPolicy.cs`
+New file: `src/RenoirDemo.DomainModel/Catalog/PricingPolicy.cs`
 
 ```csharp
 public sealed class PricingPolicy
@@ -207,8 +207,8 @@ aspgen add repository ProductRepository --aggregate Product --context Catalog --
 New files — interface in the domain, implementation in persistence:
 
 ```text
-src/RenoirDemo.DomainModel/Contexts/Catalog/Aggregates/Repositories/IProductRepository.cs
-src/RenoirDemo.Persistence/Contexts/Catalog/Repositories/ProductRepository.cs
+src/RenoirDemo.DomainModel/Catalog/IProductRepository.cs
+src/RenoirDemo.Persistence/Repositories/ProductRepository.cs
 ```
 
 ```csharp
@@ -237,7 +237,7 @@ This also inserts a DI registration at the `// aspgen:services` marker in `Progr
 aspgen add event ProductCreated productId:long productName:string --context Catalog --project ./RenoirDemo
 ```
 
-New file: `src/RenoirDemo.DomainModel/Contexts/Catalog/Events/ProductCreated.cs`
+New file: `src/RenoirDemo.DomainModel/Catalog/ProductCreated.cs`
 
 ```csharp
 // A completed business fact. Keep this immutable and free of infrastructure dependencies.
@@ -255,18 +255,17 @@ src/
   RenoirDemo.AppBlazor/Components/Pages/Catalog/
     ProductCrud.razor
     ProductDetails.razor
-  RenoirDemo.Application/Contexts/Catalog/
+  RenoirDemo.Application/
     ProductCrudService.cs
     ProductValidator.cs
-  RenoirDemo.DomainModel/Contexts/Catalog/
-    Aggregates/
-      Product.cs
-      Product.Methods.cs
-      Repositories/IProductRepository.cs
-    Events/ProductCreated.cs
-    Services/PricingPolicy.cs
-    ValueObjects/Money.cs
-  RenoirDemo.Persistence/Contexts/Catalog/
+  RenoirDemo.DomainModel/Catalog/
+    Product.cs
+    Product.Methods.cs
+    IProductRepository.cs
+    ProductCreated.cs
+    PricingPolicy.cs
+    Money.cs
+  RenoirDemo.Persistence/
     ProductConfiguration.cs
     ProductPersistence.cs
     Repositories/ProductRepository.cs

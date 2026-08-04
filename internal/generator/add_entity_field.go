@@ -872,7 +872,7 @@ func patchRenoirCrudService(path string, existing EntityMeta, newProps []Propert
 
 func patchRenoirAggregateField(r addRequest, m *Manifest, existing EntityMeta, newProps []Property) error {
 	project := r.Project
-	dir := filepath.Join(project, "src", m.Project+".DomainModel", "Contexts", existing.Context, "Aggregates")
+	dir := filepath.Join(project, "src", m.Project+".DomainModel", existing.Context)
 	aggPath := filepath.Join(dir, existing.Name+".cs")
 	methodsPath := filepath.Join(dir, existing.Name+".Methods.cs")
 
@@ -937,12 +937,12 @@ func patchRenoirAggregateField(r addRequest, m *Manifest, existing EntityMeta, n
 		return err
 	}
 
-	configPath := filepath.Join(project, "src", m.Project+".Persistence", "Contexts", existing.Context, existing.Name+"Configuration.cs")
+	configPath := filepath.Join(project, "src", m.Project+".Persistence", existing.Name+"Configuration.cs")
 	if err := patchRenoirConfiguration(configPath, existing.Name, newProps, r.DryRun); err != nil {
 		return err
 	}
 
-	appDir := filepath.Join(project, "src", m.Project+".Application", "Contexts", existing.Context)
+	appDir := filepath.Join(project, "src", m.Project+".Application")
 	crudPath := filepath.Join(appDir, existing.Name+"CrudService.cs")
 	if _, err := os.Stat(crudPath); err == nil {
 		if err := patchRenoirCrudService(crudPath, existing, newProps, r.DryRun); err != nil {

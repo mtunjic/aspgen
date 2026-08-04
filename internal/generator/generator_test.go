@@ -619,26 +619,26 @@ func TestDddAggregateGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
-		"src/RenoirDemo.DomainModel/Contexts/Catalog/Aggregates/Product.cs",
+		"src/RenoirDemo.DomainModel/Catalog/Product.cs",
 		"src/RenoirDemo.DomainModel/DomainException.cs",
 		"src/RenoirDemo.DomainModel/DomainGuard.cs",
-		"src/RenoirDemo.Application/Contexts/Catalog/ProductCrudService.cs",
-		"src/RenoirDemo.Application/Contexts/Catalog/ProductValidator.cs",
+		"src/RenoirDemo.Application/ProductCrudService.cs",
+		"src/RenoirDemo.Application/ProductValidator.cs",
 		"src/RenoirDemo.AppBlazor/Components/Pages/Catalog/ProductCrud.razor",
 	} {
 		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
 			t.Fatalf("missing DDD file %s: %v", path, err)
 		}
 	}
-	service, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.Application/Contexts/Catalog/ProductCrudService.cs"))
+	service, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.Application/ProductCrudService.cs"))
 	if err != nil || !strings.Contains(string(service), "public sealed record ProductRequest") || !strings.Contains(string(service), "public sealed record ProductView") {
 		t.Fatalf("CRUD service should expose separate input and view records: %v", err)
 	}
-	aggregate, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.DomainModel/Contexts/Catalog/Aggregates/Product.cs"))
+	aggregate, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.DomainModel/Catalog/Product.cs"))
 	if err != nil || !strings.Contains(string(aggregate), "DomainGuard.Required(name, nameof(name))") {
 		t.Fatalf("aggregate should enforce required string invariants: %v", err)
 	}
-	validator, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.Application/Contexts/Catalog/ProductValidator.cs"))
+	validator, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.Application/ProductValidator.cs"))
 	if err != nil || !strings.Contains(string(validator), "RuleFor(x => x.Name).NotEmpty()") {
 		t.Fatalf("CRUD request should have FluentValidation rules: %v", err)
 	}

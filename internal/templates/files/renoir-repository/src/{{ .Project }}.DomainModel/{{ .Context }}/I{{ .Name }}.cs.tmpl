@@ -1,6 +1,6 @@
 using {{ .Project }}.DomainModel;
 
-namespace {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+namespace {{ .Project }}.DomainModel.{{ .Context }};
 
 // Repository contract belongs to the domain; its implementation belongs to persistence.
 public interface I{{ .Name }}

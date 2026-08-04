@@ -1,10 +1,10 @@
 @using Microsoft.AspNetCore.Components.Forms
 @page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s"
-@using {{ .Project }}.Application.Contexts.{{ .Context }}
-@inject {{ .Project }}.Application.Contexts.{{ .Context }}.{{ .Aggregate }}CrudService Service
+@using {{ .Project }}.Application
+@inject {{ .Project }}.Application.{{ .Aggregate }}CrudService Service
 @inject NavigationManager Navigation
 {{- range .Relations }}
-@inject {{ $.Project }}.Application.Contexts.{{ $.Context }}.{{ .Target }}CrudService {{ .Target }}Service
+@inject {{ $.Project }}.Application.{{ .Target }}CrudService {{ .Target }}Service
 {{- end }}
 
 <h1>{{ .Aggregate }}s</h1>

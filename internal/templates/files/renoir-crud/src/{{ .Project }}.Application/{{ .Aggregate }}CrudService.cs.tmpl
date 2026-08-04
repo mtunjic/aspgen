@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using FluentValidation;
 using {{ .Project }}.DomainModel;
-using {{ .Project }}.DomainModel.Contexts.{{ .Context }}.Aggregates;
+using {{ .Project }}.DomainModel.{{ .Context }};
 using {{ .Project }}.Persistence;
 
-namespace {{ .Project }}.Application.Contexts.{{ .Context }};
+namespace {{ .Project }}.Application;
 
 public sealed class {{ .Aggregate }}CrudService({{ .Project }}Database database, IValidator<{{ .Aggregate }}Request> validator)
 {
