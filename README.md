@@ -67,6 +67,21 @@ The `webapi` target generates Domain, Application, Infrastructure, and WebApi pr
 
 SQLite is the default database for `webapi`, `fullstack`, `--simple`, and `--backend ddd` generation. Use `--database postgres` (also accepted as `--database:postgres`) when PostgreSQL is required. The selected provider is recorded in `.aspgen/manifest.json` and is emitted into the generated EF Core project, connection string, and dependency-injection setup.
 
+### Generating entities from an existing database
+
+Instead of hand-typing `name:type` properties, aspgen can scaffold entities from an existing database schema — either a live connection or a static SQL DDL script — for `webapi`/`fullstack`/`--simple`/`--backend ddd` projects (not yet the `blazor`/Renoir profile). Supported providers are `sqlite`, `postgres`, `sqlserver`, and `mysql`.
+
+```text
+go run ./cmd/aspgen new MyApp --app webapi --simple --script schema.sql --provider postgres --tables all --output ./MyApp
+go run ./cmd/aspgen import-db --project ./MyApp --connection "file:demo.db" --provider sqlite --tables Customers,Orders
+```
+
+`--tables` accepts `all` (the default) or a comma-separated list of table names. `--connection` and `--script` are mutually exclusive and both require `--provider`. Each selected table becomes one entity (its name PascalCased and best-effort singularized) via the same code path `add entity` uses, so the resulting Domain/Application/Infrastructure/WebApi/WPF layers match the target project's existing backend profile. Primary-key columns and (on `--backend ddd`) conventional audit columns (`created_on`/`updated_on` and similar) are skipped since generated entities already provide them; columns with no known type mapping (e.g. `json`, `blob`) are skipped with a warning rather than failing the whole table.
+
+A `schema.sql` backup snapshot of the discovered tables is written at the project root on every run. It's a reference artifact only — aspgen never invokes `dotnet ef`; run `dotnet ef migrations add`/`dotnet ef database update` yourself against the generated entities and `DbContext`. Connection strings are never written to `.aspgen/manifest.json`, `schema.sql`, or any generated file.
+
+Run `aspgen import-db --help` for the full flag reference.
+
 Web API features are generated as vertical slices with request/response records, a FluentValidation validator, a CQRS handler returning `Result<T>`, and a Minimal API endpoint. Feature endpoints are registered incrementally in `Program.cs`.
 
 The `blazor` target is a Renoir-style profile with DomainModel, Application, Infrastructure, Persistence, Resources, and AppBlazor projects. It includes soft-delete and `TimeStamp` domain conventions, settings binding, SQL Server EF Core persistence, and a layered Blazor host.

@@ -18,6 +18,8 @@ func Run(args []string) error {
 		return newProject(args[1:])
 	case "add":
 		return add(args[1:])
+	case "import-db":
+		return importDBCmd(args[1:])
 	case "templates":
 		return templateCommand(args[1:])
 	case "version":
@@ -29,5 +31,5 @@ func Run(args []string) error {
 }
 
 func usage() error {
-	return errors.New("usage: aspgen new NAME --app webapi|wpf|blazor|fullstack [flags] | aspgen add KIND NAME [flags]; run 'aspgen --help' for details")
+	return errors.New("usage: aspgen new NAME --app webapi|wpf|blazor|fullstack [flags] | aspgen add KIND NAME [flags] | aspgen import-db --project PATH [flags]; run 'aspgen --help' for details")
 }

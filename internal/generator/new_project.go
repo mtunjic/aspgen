@@ -34,6 +34,10 @@ func newProject(args []string) error {
 	if err != nil {
 		return err
 	}
+	dbImport, dbImportRequested, err := parseDBImportFlags(args[1:])
+	if err != nil {
+		return err
+	}
 	if !validProjectName(name) {
 		return fmt.Errorf("invalid project name %q", name)
 	}
@@ -60,6 +64,14 @@ func newProject(args []string) error {
 	}
 	if seed != "" && !simple && backend == "" {
 		return errors.New("--seed requires --simple or --backend ddd")
+	}
+	if dbImportRequested {
+		if app != "webapi" && app != "fullstack" && !(app == "wpf" && backend == "ddd") {
+			return errors.New("--connection/--script requires a webapi, fullstack, or local DDD wpf application")
+		}
+		if !simple && backend == "" {
+			return errors.New("--connection/--script requires --simple or --backend ddd")
+		}
 	}
 	if database == "" {
 		database = "sqlite"
@@ -127,6 +139,18 @@ func newProject(args []string) error {
 	if app == "blazor" {
 		manifest.Components = append(manifest.Components, "renoir")
 		if err := renderTree(out, "renoir", data{Project: name, Namespace: name}, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+	}
+	if dbImportRequested {
+		resolvedBackend := backend
+		if simple {
+			resolvedBackend = "simple"
+		}
+		if err := runDBImport(out, &manifest, resolvedBackend, dbImport, dryRun, force); err != nil {
+			return err
+		}
+		if err := registerGeneratedProjectFiles(out, dryRun); err != nil {
 			return err
 		}
 	}

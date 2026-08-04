@@ -21,11 +21,14 @@ Run the CLI directly for manual testing:
 ```powershell
 go run ./cmd/aspgen new MyApp --app fullstack --simple --output ./MyApp
 go run ./cmd/aspgen add entity Customer name:string age:int active:bool --project ./MyApp
+go run ./cmd/aspgen import-db --project ./MyApp --script schema.sql --provider sqlite --tables all
 ```
 
 `new` bootstraps a project + `.aspgen/manifest.json`; `add` commands mutate an
 existing generated project and require that manifest (found via `--project` or
-by searching parent directories).
+by searching parent directories). `import-db` (and `new --connection`/`--script`)
+scaffold entities from an existing DB schema — see [internal/dbschema/](internal/dbschema)
+and `import_db*.go` in generator.
 
 ## Code layout
 
