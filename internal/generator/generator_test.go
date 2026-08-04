@@ -32,6 +32,95 @@ func TestParsePropertiesRejectsUnknownType(t *testing.T) {
 	}
 }
 
+func TestSplitRelationArgs(t *testing.T) {
+	entities := []EntityMeta{
+		{Name: "Customer", Properties: []Property{{Name: "Name", CSharpType: "string"}}},
+	}
+	remaining, relations, manyToMany, err := splitRelationArgs("Order", []string{"total:decimal", "customer:Customer", "notes:string?"}, entities, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 2 || remaining[0] != "total:decimal" || remaining[1] != "notes:string?" {
+		t.Fatalf("unexpected remaining args: %#v", remaining)
+	}
+	if len(relations) != 1 {
+		t.Fatalf("expected one relation, got %#v", relations)
+	}
+	if len(manyToMany) != 0 {
+		t.Fatalf("expected no many-to-many relations, got %#v", manyToMany)
+	}
+	rel := relations[0]
+	if rel.Name != "Customer" || rel.Target != "Customer" || rel.FKProperty != "CustomerId" || rel.DisplayProperty != "Name" || rel.Optional {
+		t.Fatalf("unexpected relation: %#v", rel)
+	}
+}
+
+func TestSplitRelationArgsManyToMany(t *testing.T) {
+	entities := []EntityMeta{
+		{Name: "Tag", Properties: []Property{{Name: "Name", CSharpType: "string"}}},
+	}
+	remaining, relations, manyToMany, err := splitRelationArgs("Post", []string{"title:string", "tags:Tag[]"}, entities, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 1 || remaining[0] != "title:string" {
+		t.Fatalf("unexpected remaining args: %#v", remaining)
+	}
+	if len(relations) != 0 {
+		t.Fatalf("expected no many-to-one relations, got %#v", relations)
+	}
+	if len(manyToMany) != 1 {
+		t.Fatalf("expected one many-to-many relation, got %#v", manyToMany)
+	}
+	rel := manyToMany[0]
+	if rel.Name != "Tags" || rel.Target != "Tag" || rel.JoinEntity != "PostTag" || rel.DisplayProperty != "Name" {
+		t.Fatalf("unexpected many-to-many relation: %#v", rel)
+	}
+}
+
+func TestSplitRelationArgsOptional(t *testing.T) {
+	entities := []EntityMeta{{Name: "Customer"}}
+	_, relations, _, err := splitRelationArgs("Order", []string{"customer:Customer?"}, entities, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(relations) != 1 || !relations[0].Optional {
+		t.Fatalf("expected optional relation, got %#v", relations)
+	}
+	if relations[0].DisplayProperty != "Id" {
+		t.Fatalf("expected fallback display property Id, got %q", relations[0].DisplayProperty)
+	}
+}
+
+func TestSplitRelationArgsLeavesUnknownTargetForParseProperties(t *testing.T) {
+	remaining, relations, _, err := splitRelationArgs("Order", []string{"customer:Customer"}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(relations) != 0 || len(remaining) != 1 {
+		t.Fatalf("expected token left for parseProperties to reject, got remaining=%#v relations=%#v", remaining, relations)
+	}
+	if _, err := parseProperties(remaining); err == nil {
+		t.Fatal("expected parseProperties to reject the unknown type")
+	}
+}
+
+func TestSplitRelationArgsRejectsCrossContextTarget(t *testing.T) {
+	entities := []EntityMeta{{Name: "Customer", Context: "Sales"}}
+	if _, _, _, err := splitRelationArgs("Order", []string{"customer:Customer"}, entities, "Billing"); err == nil {
+		t.Fatal("expected an error for a cross-context relation target")
+	}
+}
+
+func TestHasScalarPropertyArgs(t *testing.T) {
+	if hasScalarPropertyArgs([]string{"--project", "./demo"}) {
+		t.Fatal("expected no scalar property args")
+	}
+	if !hasScalarPropertyArgs([]string{"--project", "./demo", "name:string"}) {
+		t.Fatal("expected scalar property arg to be detected")
+	}
+}
+
 func TestSeedCountOptions(t *testing.T) {
 	seed, count, err := seedOption([]string{"--seed", "dummy", "200"})
 	if err != nil || seed != "dummy" || count != 200 {

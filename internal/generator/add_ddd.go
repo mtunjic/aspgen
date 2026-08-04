@@ -3,6 +3,7 @@ package generator
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 )
 
 func addContextCmd(r addRequest, m *Manifest, d *data) error {
@@ -25,14 +26,29 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 	if !contextExists(m.Contexts, contextName) {
 		return fmt.Errorf("bounded context %q does not exist; add it first", contextName)
 	}
-	props, err := parseProperties(r.Args)
+	remainingArgs, relations, manyToMany, err := splitRelationArgs(r.Name, r.Args, m.Entities, contextName)
 	if err != nil {
 		return err
+	}
+	if len(manyToMany) > 0 {
+		return errors.New("many-to-many relations (Entity[]) are not yet supported for Renoir aggregates")
+	}
+	var props []Property
+	if hasScalarPropertyArgs(remainingArgs) {
+		if props, err = parseProperties(remainingArgs); err != nil {
+			return err
+		}
 	}
 	if err := rejectAggregateReservedProperties(props); err != nil {
 		return err
 	}
-	d.Context, d.Aggregate, d.Properties, d.Crud = contextName, r.Name, props, !hasFlag(r.Args, "--no-crud")
+	for _, rel := range relations {
+		props = append(props, synthesizeRelationProperty(rel))
+	}
+	if len(props) == 0 {
+		return errors.New("at least one property or relation is required, e.g. name:string or customer:Customer")
+	}
+	d.Context, d.Aggregate, d.Properties, d.Relations, d.Crud = contextName, r.Name, props, relations, !hasFlag(r.Args, "--no-crud")
 	if !isRenoir(*m) {
 		return errors.New("DDD aggregate generation currently requires the blazor/Renoir profile")
 	}
@@ -50,6 +66,13 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 			return err
 		}
 	}
+	for _, rel := range relations {
+		path := filepath.Join(r.Project, "src", m.Project+".DomainModel", "Contexts", contextName, "Aggregates", rel.Target+".cs")
+		if err := updateInverseNavigation(path, rel.Target+".cs", r.Name, r.DryRun); err != nil {
+			return err
+		}
+	}
+	m.Entities = appendEntityMeta(m.Entities, EntityMeta{Name: r.Name, Context: contextName, Properties: props})
 	m.Contexts = appendAggregate(m.Contexts, contextName, r.Name)
 	m.Components = appendUnique(m.Components, "aggregate:"+contextName+":"+r.Name)
 	return nil

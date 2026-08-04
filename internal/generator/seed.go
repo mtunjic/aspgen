@@ -16,7 +16,7 @@ func renderSeedBlock(backend, entity string, properties []Property, count int) s
 				if i > 0 {
 					b.WriteString(", ")
 				}
-				b.WriteString(seedLiteral(property.CSharpType, property.Name, row))
+				b.WriteString(seedValueFor(property, row, count))
 			}
 			b.WriteString(")")
 			if row < count-1 {
@@ -40,7 +40,7 @@ func renderSeedBlock(backend, entity string, properties []Property, count int) s
 			if i > 0 {
 				b.WriteString(",")
 			}
-			value := seedLiteral(property.CSharpType, property.Name, row)
+			value := seedValueFor(property, row, count)
 			if backend == "ddd" {
 				b.WriteString(" ")
 				b.WriteString(value)
@@ -60,6 +60,17 @@ func renderSeedBlock(backend, entity string, properties []Property, count int) s
 	}
 	b.WriteString("            );\n        }\n")
 	return b.String()
+}
+
+// seedValueFor returns the seed literal for property at row. A relation's
+// foreign key cycles through the already-seeded target rows (1..count)
+// instead of using the generic numeric literal, which could reference a row
+// that was never seeded.
+func seedValueFor(property Property, row, count int) string {
+	if property.RelationTarget != "" {
+		return fmt.Sprintf("%dL", (row%count)+1)
+	}
+	return seedLiteral(property.CSharpType, property.Name, row)
 }
 
 func seedLiteral(csharpType, property string, row int) string {

@@ -17,14 +17,17 @@ type data struct {
 	Namespace  string
 	Name       string
 	Properties []Property
-	Context    string
-	Aggregate  string
-	Crud       bool
-	Theme      string
-	Backend    string
-	Database   string
-	Seed       string
-	SeedCount  int
+	// Relations holds many-to-one references declared on this entity;
+	// the corresponding foreign key is also present in Properties.
+	Relations []Relation
+	Context   string
+	Aggregate string
+	Crud      bool
+	Theme     string
+	Backend   string
+	Database  string
+	Seed      string
+	SeedCount int
 }
 
 func renderTree(root, group string, d data, override string, dryRun, force bool) error {

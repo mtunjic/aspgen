@@ -14,5 +14,8 @@ public sealed class {{ .Aggregate }}Configuration : IEntityTypeConfiguration<{{ 
 {{- range .Properties }}{{ if eq .CSharpType "string" }}
         builder.Property(x => x.{{ .Name }}).HasMaxLength(200);
 {{- end }}{{- end }}
+{{- range .Relations }}
+        builder.HasOne(x => x.{{ .Name }}).WithMany().HasForeignKey(x => x.{{ .FKProperty }});
+{{- end }}
     }
 }

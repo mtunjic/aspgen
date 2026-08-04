@@ -26,6 +26,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <DockPanel Margin="0,0,0,12">
 {{- if eq .Theme "wpfui" }}
@@ -96,7 +97,9 @@
 {{- else }}
                     <TextBlock Text="{{ .DisplayName }}" />
 {{- end }}
-{{- if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") }}
+{{- if .RelationTarget }}
+                    <ComboBox Margin="0,4,0,0" ItemsSource="{Binding {{ .RelationTarget }}Items}" DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
+{{- else if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") }}
 {{- if eq $.Theme "wpfui" }}
                     <ui:CalendarDatePicker Margin="0,4,0,0" Date="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
 {{- else }}
@@ -149,5 +152,6 @@
             </StackPanel>
             </ScrollViewer>
         </Border>
+        <!-- aspgen:related -->
     </Grid>
 </UserControl>

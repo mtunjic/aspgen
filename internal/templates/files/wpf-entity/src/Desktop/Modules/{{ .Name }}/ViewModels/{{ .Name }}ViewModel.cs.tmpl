@@ -11,12 +11,21 @@ using Prism.Commands;
 using Prism.Mvvm;
 using {{ .Namespace }}.Models;
 using {{ .Namespace }}.Services;
+{{- range .Relations }}
+using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Models;
+{{- end }}
+// aspgen:relatedUsings
 
 namespace {{ .Namespace }}.ViewModels;
 
 public sealed class {{ .Name }}ViewModel : BindableBase
 {
     private readonly I{{ .Name }}Store store;
+{{- range .Relations }}
+    private readonly I{{ .Target }}Store {{ camel .Target }}Store;
+{{- end }}
+    // aspgen:relatedStores
 {{- if eq .Theme "wpfui" }}
     private readonly IContentDialogService dialogService;
     private readonly ISnackbarService snackbarService;
@@ -26,9 +35,13 @@ public sealed class {{ .Name }}ViewModel : BindableBase
     private string validationMessage = string.Empty;
     private bool isBusy;
 
-    public {{ .Name }}ViewModel(I{{ .Name }}Store store{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }})
+    public {{ .Name }}ViewModel(I{{ .Name }}Store store{{ range .Relations }}, I{{ .Target }}Store {{ camel .Target }}Store{{ end }}{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }}/* aspgen:relatedParams */)
     {
         this.store = store;
+{{- range .Relations }}
+        this.{{ camel .Target }}Store = {{ camel .Target }}Store;
+{{- end }}
+        // aspgen:relatedAssignments
 {{- if eq .Theme "wpfui" }}
         this.dialogService = dialogService;
         this.snackbarService = snackbarService;
@@ -40,10 +53,15 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         RefreshCommand = new DelegateCommand(Refresh, () => !IsBusy);
         SaveCommand = new DelegateCommand(Save, () => !IsBusy);
         CancelCommand = new DelegateCommand(Cancel, () => !IsBusy);
+        LoadRelated();
         Reload();
     }
 
     public ObservableCollection<{{ .Name }}Row> Items { get; } = [];
+{{- range .Relations }}
+    public ObservableCollection<{{ .Target }}Row> {{ .Target }}Items { get; } = [];
+{{- end }}
+    // aspgen:relatedCollections
     public {{ .Name }}Editor Form { get; }
     public bool IsEditing => editingId != 0;
     public bool IsEmpty => Items.Count == 0;
@@ -95,6 +113,15 @@ public sealed class {{ .Name }}ViewModel : BindableBase
     public DelegateCommand RefreshCommand { get; }
     public DelegateCommand SaveCommand { get; }
     public DelegateCommand CancelCommand { get; }
+
+    private void LoadRelated()
+    {
+{{- range .Relations }}
+        {{ .Target }}Items.Clear();
+        foreach (var item in {{ camel .Target }}Store.GetAll()) {{ .Target }}Items.Add(item);
+{{- end }}
+        // aspgen:relatedLoads
+    }
 
     private void Reload()
     {

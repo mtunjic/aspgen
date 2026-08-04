@@ -2,6 +2,9 @@
 @page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s"
 @using {{ .Project }}.Application.Contexts.{{ .Context }}
 @inject {{ .Project }}.Application.Contexts.{{ .Context }}.{{ .Aggregate }}CrudService Service
+{{- range .Relations }}
+@inject {{ $.Project }}.Application.Contexts.{{ $.Context }}.{{ .Target }}CrudService {{ .Target }}Service
+{{- end }}
 
 <h1>{{ .Aggregate }}s</h1>
 <EditForm Model="form" OnValidSubmit="SaveAsync">
@@ -9,7 +12,14 @@
 {{- range .Properties }}
     <div class="mb-3">
         <label>{{ .DisplayName }}</label>
-{{- if eq .CSharpType "Guid" }}
+{{- if .RelationTarget }}
+        <InputSelect @bind-Value="form.{{ .Name }}" class="form-control">
+            @foreach (var option in {{ .RelationTarget }}Items)
+            {
+                <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
+            }
+        </InputSelect>
+{{- else if eq .CSharpType "Guid" }}
         <InputText @bind-Value="form.{{ .Name }}Text" class="form-control" />
 {{- else }}
         <{{ .UIControl }} @bind-Value="form.{{ .Name }}" class="form-control" />
@@ -39,6 +49,9 @@
 
 @code {
     private List<{{ .Aggregate }}View> items = [];
+{{- range .Relations }}
+    private List<{{ .Target }}View> {{ .Target }}Items = [];
+{{- end }}
     private {{ .Aggregate }}Editor form = new();
     private long editingId;
 
@@ -47,6 +60,9 @@
     private async Task ReloadAsync()
     {
         items = await Service.GetAllAsync();
+{{- range .Relations }}
+        {{ .Target }}Items = await {{ .Target }}Service.GetAllAsync();
+{{- end }}
     }
 
     private async Task SaveAsync()

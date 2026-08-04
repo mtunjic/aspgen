@@ -5,4 +5,9 @@ namespace {{ .Project }}.WebApi.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     // aspgen:entities
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        // aspgen:relations
+    }
 }

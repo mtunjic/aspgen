@@ -18,4 +18,8 @@ public sealed partial class {{ .Aggregate }} : BaseEntity
 {{- range .Properties }}
     public {{ .CSharpType }} {{ .Name }} { get; private set; } = default!;
 {{- end }}
+{{- range .Relations }}
+    public {{ .Target }}? {{ .Name }} { get; private set; }
+{{- end }}
+    // aspgen:navigation
 }

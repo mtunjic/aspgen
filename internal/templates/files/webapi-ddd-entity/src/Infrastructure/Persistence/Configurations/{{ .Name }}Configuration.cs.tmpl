@@ -1,0 +1,15 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using {{ .Project }}.Domain.Entities;
+
+namespace {{ .Project }}.Infrastructure.Persistence.Configurations;
+
+public sealed class {{ .Name }}Configuration : IEntityTypeConfiguration<{{ .Name }}>
+{
+    public void Configure(EntityTypeBuilder<{{ .Name }}> builder)
+    {
+{{- range .Relations }}
+        builder.HasOne(x => x.{{ .Name }}).WithMany().HasForeignKey(x => x.{{ .FKProperty }});
+{{- end }}
+    }
+}

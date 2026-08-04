@@ -13,14 +13,37 @@ import (
 )
 
 type Manifest struct {
-	Project    string    `json:"project"`
-	Components []string  `json:"components"`
-	Contexts   []Context `json:"contexts,omitempty"`
+	Project    string       `json:"project"`
+	Components []string     `json:"components"`
+	Contexts   []Context    `json:"contexts,omitempty"`
+	Entities   []EntityMeta `json:"entities,omitempty"`
 }
 
 type Context struct {
 	Name       string   `json:"name"`
 	Aggregates []string `json:"aggregates,omitempty"`
+}
+
+// EntityMeta records enough about a previously-added entity/aggregate to let
+// a later `add entity`/`add aggregate` declare a relation to it (validate it
+// exists and pick a display property for picker controls).
+type EntityMeta struct {
+	Name       string     `json:"name"`
+	Context    string     `json:"context,omitempty"`
+	Properties []Property `json:"properties,omitempty"`
+}
+
+// appendEntityMeta records name/context/properties in entities, replacing
+// any existing entry for the same name so re-running `add entity` (--force)
+// keeps the recorded properties current.
+func appendEntityMeta(entities []EntityMeta, meta EntityMeta) []EntityMeta {
+	for i := range entities {
+		if entities[i].Name == meta.Name {
+			entities[i] = meta
+			return entities
+		}
+	}
+	return append(entities, meta)
 }
 
 func loadManifest(root string) (Manifest, error) {

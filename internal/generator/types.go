@@ -9,10 +9,14 @@ import (
 )
 
 type Property struct {
-	Name        string
-	DisplayName string
-	CSharpType  string
-	UIControl   string
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	CSharpType  string `json:"csharpType"`
+	UIControl   string `json:"uiControl"`
+	// RelationTarget is the referenced entity name for a synthesized foreign
+	// key property, empty for plain scalar properties.
+	RelationTarget          string `json:"relationTarget,omitempty"`
+	RelationDisplayProperty string `json:"relationDisplayProperty,omitempty"`
 }
 
 func parseProperties(args []string) ([]Property, error) {

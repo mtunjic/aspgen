@@ -214,6 +214,36 @@ func updateSimpleDbContext(project, namespace, entity string, dryRun bool) error
 	return writeMarkerFile(path, textContent, dryRun)
 }
 
+// updateSimpleDbContextRelations inserts one HasOne/WithMany/HasForeignKey
+// fluent configuration line per many-to-one relation declared on entity into
+// the simple AppDbContext's OnModelCreating override.
+func updateSimpleDbContextRelations(project, entity string, relations []Relation, dryRun bool) error {
+	if len(relations) == 0 {
+		return nil
+	}
+	path := filepath.Join(project, "src", "WebApi", "Data", "AppDbContext.cs")
+	textContent, err := readMarkerFile(path, "simple database context")
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, rel := range relations {
+		line := "        modelBuilder.Entity<" + entity + ">().HasOne(x => x." + rel.Name + ").WithMany().HasForeignKey(x => x." + rel.FKProperty + ");"
+		if strings.Contains(textContent, line) {
+			continue
+		}
+		if !strings.Contains(textContent, "        // aspgen:relations") {
+			return missingMarkerErr("simple AppDbContext.cs", "// aspgen:relations")
+		}
+		textContent = strings.Replace(textContent, "        // aspgen:relations", "        // aspgen:relations\n"+line, 1)
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return writeMarkerFile(path, textContent, dryRun)
+}
+
 func updateEntityDependencyInjection(project, namespace, entity string, dryRun bool) error {
 	registrations := []struct {
 		path, marker, line string
@@ -237,4 +267,107 @@ func updateEntityDependencyInjection(project, namespace, entity string, dryRun b
 		}
 	}
 	return nil
+}
+
+// updateInverseNavigation adds a read-only inverse collection navigation
+// property for childEntity onto the parent's already-generated model,
+// domain entity, or aggregate class at path, guarded by the
+// // aspgen:navigation marker.
+func updateInverseNavigation(path, description, childEntity string, dryRun bool) error {
+	textContent, err := readMarkerFile(path, description)
+	if err != nil {
+		return err
+	}
+	property := "    public ICollection<" + childEntity + "> " + childEntity + "s { get; set; } = [];"
+	if strings.Contains(textContent, property) {
+		return nil
+	}
+	if !strings.Contains(textContent, "    // aspgen:navigation") {
+		return missingMarkerErr(description, "// aspgen:navigation")
+	}
+	textContent = strings.Replace(textContent, "    // aspgen:navigation", "    // aspgen:navigation\n"+property, 1)
+	return writeMarkerFile(path, textContent, dryRun)
+}
+
+// updateRelatedGrid adds a read-only DataGrid displaying childEntity records
+// related to parentEntity onto the parent's already-generated wpf-entity
+// view, guarded by the <!-- aspgen:related --> marker.
+func updateRelatedGrid(project, parentEntity, childEntity, theme string, dryRun bool) error {
+	path := filepath.Join(project, "src", "Desktop", "Modules", parentEntity, "Views", parentEntity+"View.xaml")
+	textContent, err := readMarkerFile(path, parentEntity+"View.xaml")
+	if err != nil {
+		return err
+	}
+	if strings.Contains(textContent, "Header=\""+childEntity+"s\"") {
+		return nil
+	}
+	marker := "        <!-- aspgen:related -->"
+	if !strings.Contains(textContent, marker) {
+		return missingMarkerErr(parentEntity+"View.xaml", marker)
+	}
+	gridTag := "DataGrid"
+	if theme == "wpfui" {
+		gridTag = "ui:DataGrid"
+	}
+	block := "        <GroupBox Grid.Row=\"3\" Margin=\"0,12,0,0\" Header=\"" + childEntity + "s\">\n" +
+		"            <" + gridTag + " ItemsSource=\"{Binding " + childEntity + "s}\" AutoGenerateColumns=\"True\" CanUserAddRows=\"False\" IsReadOnly=\"True\" />\n" +
+		"        </GroupBox>"
+	textContent = strings.Replace(textContent, marker, block+"\n"+marker, 1)
+	return writeMarkerFile(path, textContent, dryRun)
+}
+
+// updateRelatedStore wires an injected childEntity store, a read-only
+// display collection, and its population into the parent's already-generated
+// wpf-entity view model, guarded by the aspgen:related* markers.
+func updateRelatedStore(project, namespace, parentEntity, childEntity string, dryRun bool) error {
+	path := filepath.Join(project, "src", "Desktop", "Modules", parentEntity, "ViewModels", parentEntity+"ViewModel.cs")
+	textContent, err := readMarkerFile(path, parentEntity+"ViewModel.cs")
+	if err != nil {
+		return err
+	}
+	childCamel := camel(childEntity)
+	field := "    private readonly I" + childEntity + "Store " + childCamel + "Store;"
+	if strings.Contains(textContent, field) {
+		return nil
+	}
+	usingMarker := "// aspgen:relatedUsings"
+	if !strings.Contains(textContent, usingMarker) {
+		return missingMarkerErr(parentEntity+"ViewModel.cs", usingMarker)
+	}
+	usings := "using " + namespace + ".Desktop.Modules." + childEntity + ".Services;\n" +
+		"using " + namespace + ".Desktop.Modules." + childEntity + ".Models;\n" + usingMarker
+	textContent = strings.Replace(textContent, usingMarker, usings, 1)
+
+	storeMarker := "    // aspgen:relatedStores"
+	if !strings.Contains(textContent, storeMarker) {
+		return missingMarkerErr(parentEntity+"ViewModel.cs", storeMarker)
+	}
+	textContent = strings.Replace(textContent, storeMarker, field+"\n"+storeMarker, 1)
+
+	paramMarker := "/* aspgen:relatedParams */"
+	if !strings.Contains(textContent, paramMarker) {
+		return missingMarkerErr(parentEntity+"ViewModel.cs", paramMarker)
+	}
+	textContent = strings.Replace(textContent, paramMarker, ", I"+childEntity+"Store "+childCamel+"Store"+paramMarker, 1)
+
+	assignMarker := "        // aspgen:relatedAssignments"
+	if !strings.Contains(textContent, assignMarker) {
+		return missingMarkerErr(parentEntity+"ViewModel.cs", assignMarker)
+	}
+	textContent = strings.Replace(textContent, assignMarker, "        this."+childCamel+"Store = "+childCamel+"Store;\n"+assignMarker, 1)
+
+	collectionMarker := "    // aspgen:relatedCollections"
+	if !strings.Contains(textContent, collectionMarker) {
+		return missingMarkerErr(parentEntity+"ViewModel.cs", collectionMarker)
+	}
+	textContent = strings.Replace(textContent, collectionMarker, "    public ObservableCollection<"+childEntity+"Row> "+childEntity+"s { get; } = [];\n"+collectionMarker, 1)
+
+	loadMarker := "        // aspgen:relatedLoads"
+	if !strings.Contains(textContent, loadMarker) {
+		return missingMarkerErr(parentEntity+"ViewModel.cs", loadMarker)
+	}
+	load := "        " + childEntity + "s.Clear();\n        foreach (var item in " + childCamel + "Store.GetAll()) " + childEntity + "s.Add(item);\n" + loadMarker
+	textContent = strings.Replace(textContent, loadMarker, load, 1)
+
+	return writeMarkerFile(path, textContent, dryRun)
 }
