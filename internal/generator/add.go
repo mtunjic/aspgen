@@ -9,13 +9,14 @@ import (
 
 // addRequest carries the context shared by every `add` subcommand handler.
 type addRequest struct {
-	Args    []string // flags following the component and name (original args[2:])
-	Name    string
-	Project string
-	DryRun  bool
-	Force   bool
-	Theme   string
-	Backend string
+	Args      []string // flags following the component and name (original args[2:])
+	Name      string
+	Project   string
+	DryRun    bool
+	Force     bool
+	Theme     string
+	ThemeMode string
+	Backend   string
 }
 
 var addHandlers = map[string]func(addRequest, *Manifest, *data) error{
@@ -66,6 +67,15 @@ func add(args []string) error {
 		theme = componentTheme(m.Components)
 	}
 	d.Theme = theme
+	themeMode, err := themeModeOption(args[2:])
+	if err != nil {
+		return err
+	}
+	if themeMode == "" {
+		themeMode = componentThemeMode(m.Components)
+	}
+	themeMode, themeModeValue := resolveThemeMode(theme, themeMode)
+	d.ThemeMode = themeModeValue
 	backend, err := backendOption(args[2:])
 	if err != nil {
 		return err
@@ -93,7 +103,7 @@ func add(args []string) error {
 		sort.Strings(kinds)
 		return fmt.Errorf("unsupported component %q; use one of: %s", component, strings.Join(kinds, ", "))
 	}
-	r := addRequest{Args: args[2:], Name: name, Project: project, DryRun: dryRun, Force: force, Theme: theme, Backend: backend}
+	r := addRequest{Args: args[2:], Name: name, Project: project, DryRun: dryRun, Force: force, Theme: theme, ThemeMode: themeMode, Backend: backend}
 	if err := handler(r, &m, &d); err != nil {
 		return err
 	}

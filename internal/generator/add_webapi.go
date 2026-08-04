@@ -51,6 +51,7 @@ func addUICmd(r addRequest, m *Manifest, d *data) error {
 	m.Components = appendUnique(m.Components, "prism-dryioc")
 	if theme != "" {
 		m.Components = appendUnique(m.Components, "theme:"+theme)
+		m.Components = appendUnique(m.Components, "theme-mode:"+r.ThemeMode)
 	}
 	if isWebAPI(*m) {
 		if err := writeSolution(r.Project, m.Project, "fullstack", true, hasComponent(m.Components, "backend:simple"), componentBackend(m.Components)); err != nil {

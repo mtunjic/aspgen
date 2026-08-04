@@ -21,6 +21,10 @@ func newProject(args []string) error {
 	if err != nil {
 		return err
 	}
+	themeMode, err := themeModeOption(args[1:])
+	if err != nil {
+		return err
+	}
 	backend, err := backendOption(args[1:])
 	if err != nil {
 		return err
@@ -46,6 +50,9 @@ func newProject(args []string) error {
 	}
 	if theme != "" && app != "wpf" && app != "fullstack" {
 		return errors.New("--theme requires a wpf or fullstack application")
+	}
+	if themeMode != "" && theme != "wpfui" {
+		return errors.New("--theme-mode requires --theme wpfui")
 	}
 	if backend != "" && app != "webapi" && app != "fullstack" && !(app == "wpf" && backend == "ddd") {
 		return errors.New("--backend ddd requires a webapi, fullstack, or local DDD wpf application")
@@ -76,6 +83,7 @@ func newProject(args []string) error {
 	if database == "" {
 		database = "sqlite"
 	}
+	themeMode, themeModeValue := resolveThemeMode(theme, themeMode)
 	if exists(filepath.Join(out, ".aspgen", "manifest.json")) {
 		return fmt.Errorf("%s is already an aspgen project", out)
 	}
@@ -130,9 +138,9 @@ func newProject(args []string) error {
 	if app == "wpf" || app == "fullstack" {
 		manifest.Components = append(manifest.Components, "wpf", "prism-dryioc")
 		if theme != "" {
-			manifest.Components = append(manifest.Components, "theme:"+theme)
+			manifest.Components = append(manifest.Components, "theme:"+theme, "theme-mode:"+themeMode)
 		}
-		if err := renderTree(out, "wpf", data{Project: name, Namespace: name, Theme: theme, Backend: backend, Seed: seed, SeedCount: seedCount}, templateDir(args), dryRun, force); err != nil {
+		if err := renderTree(out, "wpf", data{Project: name, Namespace: name, Theme: theme, ThemeMode: themeModeValue, Backend: backend, Seed: seed, SeedCount: seedCount}, templateDir(args), dryRun, force); err != nil {
 			return err
 		}
 	}

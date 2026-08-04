@@ -39,6 +39,14 @@ func themeOption(args []string) (string, error) {
 	return validateTheme(v)
 }
 
+func themeModeOption(args []string) (string, error) {
+	v, ok, err := matchOption(args, "--theme-mode")
+	if err != nil || !ok {
+		return "", err
+	}
+	return validateThemeMode(v)
+}
+
 func backendOption(args []string) (string, error) {
 	v, ok, err := matchOption(args, "--backend")
 	if err != nil || !ok {
@@ -179,6 +187,31 @@ func validateTheme(theme string) (string, error) {
 		return "", fmt.Errorf("unsupported WPF theme %q; use wpfui", theme)
 	}
 	return theme, nil
+}
+
+func validateThemeMode(mode string) (string, error) {
+	if mode == "" {
+		return "", nil
+	}
+	if mode != "light" && mode != "dark" {
+		return "", fmt.Errorf("unsupported theme mode %q; use light or dark", mode)
+	}
+	return mode, nil
+}
+
+// resolveThemeMode defaults mode to "light" whenever theme is wpfui and
+// returns both the lowercase manifest value and the PascalCase template value.
+func resolveThemeMode(theme, mode string) (string, string) {
+	if theme != "wpfui" {
+		return "", ""
+	}
+	if mode == "" {
+		mode = "light"
+	}
+	if mode == "light" {
+		return mode, "Light"
+	}
+	return mode, "Dark"
 }
 
 func exists(path string) bool { _, err := os.Stat(path); return err == nil }

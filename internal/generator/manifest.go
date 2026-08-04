@@ -138,6 +138,15 @@ func componentTheme(components []string) string {
 	return ""
 }
 
+func componentThemeMode(components []string) string {
+	for _, component := range components {
+		if strings.HasPrefix(component, "theme-mode:") {
+			return strings.TrimPrefix(component, "theme-mode:")
+		}
+	}
+	return ""
+}
+
 func componentBackend(components []string) string {
 	for _, component := range components {
 		if strings.HasPrefix(component, "backend:") {

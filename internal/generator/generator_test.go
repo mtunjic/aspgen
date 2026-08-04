@@ -211,7 +211,7 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 		t.Fatalf("WPF-UI package was not added: %v", err)
 	}
 	app, err := os.ReadFile(filepath.Join(project, "src/Desktop/App.xaml"))
-	if err != nil || !strings.Contains(string(app), `<ui:ThemesDictionary Theme="Dark" />`) || !strings.Contains(string(app), `<ui:ControlsDictionary />`) {
+	if err != nil || !strings.Contains(string(app), `<ui:ThemesDictionary Theme="Light" />`) || !strings.Contains(string(app), `<ui:ControlsDictionary />`) {
 		t.Fatalf("WPF-UI resources were not added: %v", err)
 	}
 	shell, err := os.ReadFile(filepath.Join(project, "src/Desktop/Shell.xaml"))
@@ -262,7 +262,7 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 		}
 	}
 	manifest, err := os.ReadFile(filepath.Join(project, ".aspgen/manifest.json"))
-	if err != nil || !strings.Contains(string(manifest), `"theme:wpfui"`) {
+	if err != nil || !strings.Contains(string(manifest), `"theme:wpfui"`) || !strings.Contains(string(manifest), `"theme-mode:light"`) {
 		t.Fatalf("WPF-UI theme was not recorded in the manifest: %v", err)
 	}
 	if err := Run([]string{"add", "entity", "Event", "title:string", "count:int", "price:decimal", "eventDate:date", "startsAt:datetime", "active:bool", "externalId:guid", "--project", project}); err != nil {
@@ -304,6 +304,25 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 	module, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/EventModule.cs"))
 	if err != nil || !strings.Contains(string(module), `navigation.Register("Event", "EventView"`) {
 		t.Fatalf("WPF-UI module was not registered with NavigationView: %v", err)
+	}
+}
+
+func TestWpfUIThemeModeGeneration(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "DarkDemo")
+	if err := Run([]string{"new", "DarkDemo", "--app", "wpf", "--theme:wpfui", "--theme-mode:dark", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	app, err := os.ReadFile(filepath.Join(project, "src/Desktop/App.xaml"))
+	if err != nil || !strings.Contains(string(app), `<ui:ThemesDictionary Theme="Dark" />`) {
+		t.Fatalf("WPF-UI dark theme was not generated: %v", err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(project, ".aspgen/manifest.json"))
+	if err != nil || !strings.Contains(string(manifest), `"theme-mode:dark"`) {
+		t.Fatalf("WPF-UI dark theme mode was not recorded in the manifest: %v", err)
+	}
+
+	if err := Run([]string{"new", "NoThemeDemo", "--app", "wpf", "--theme-mode:light", "--output", filepath.Join(t.TempDir(), "NoThemeDemo")}); err == nil {
+		t.Fatal("expected --theme-mode without --theme wpfui to fail")
 	}
 }
 

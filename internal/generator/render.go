@@ -24,6 +24,7 @@ type data struct {
 	Aggregate string
 	Crud      bool
 	Theme     string
+	ThemeMode string
 	Backend   string
 	Database  string
 	Seed      string

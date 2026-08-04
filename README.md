@@ -19,7 +19,7 @@ If you run an `add` command without `--project`, aspgen searches the current dir
 
 Run `aspgen --help`, `aspgen new --help`, or `aspgen add --help` for a full flag reference. Every flag accepts three equivalent forms: `--flag value`, `--flag:value`, and `-flag:value`.
 
-For a WPF or fullstack project, add the WPF-UI Fluent theme with `--theme wpfui` (also accepted as `--theme:wpfui` or `-theme:wpfui`). This adds the `WPF-UI` NuGet package, theme resource dictionaries, and a themed `FluentWindow` shell.
+For a WPF or fullstack project, add the WPF-UI Fluent theme with `--theme wpfui` (also accepted as `--theme:wpfui` or `-theme:wpfui`). This adds the `WPF-UI` NuGet package, theme resource dictionaries, and a themed `FluentWindow` shell. The generated app defaults to the Light palette; pass `--theme-mode dark` to generate the Dark palette instead (both are just the starting `ThemesDictionary` value — the shell also ships a runtime Light/Dark toggle).
 
 For a Web API or fullstack project, use `--backend ddd` (or `--backend:ddd`) to enable incremental DDD CRUD generation. Adding an entity then creates its Domain entity, repository contract, EF Core repository, separate CQRS commands/queries and handlers, FluentValidation validators, and Minimal API endpoints for list, get, create, update, and delete.
 
@@ -42,6 +42,8 @@ Aggregate generation creates the domain aggregate root, persistence mapping, app
 DDD building blocks are incremental and context-scoped. Value objects are immutable records, domain services are stateless policies, repository contracts are aggregate-specific and live in the domain layer, and events are immutable completed business facts. Use `--no-crud` on an aggregate when the use case should be modeled explicitly instead of starting with generated CRUD.
 
 Generated Renoir CRUD keeps boundaries explicit: the application service exposes immutable `Request` and `View` records, while the Blazor page uses a local editable form model and never binds directly to the domain aggregate.
+
+See [doc/aspgen-renoir-developer-guide.md](doc/aspgen-renoir-developer-guide.md) for a full step-by-step walkthrough of building and extending a Renoir app, with real generated code and file-tree diagrams.
 
 Supported application targets are `webapi`, `wpf`, `blazor`, and `fullstack`.
 

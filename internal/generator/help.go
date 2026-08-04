@@ -25,6 +25,7 @@ Flags:
   --backend ddd      Clean Architecture DDD/CQRS layers (webapi/fullstack, or wpf for local-only DDD)
   --database DB      sqlite | postgres (default sqlite; webapi/fullstack/wpf+ddd only)
   --theme wpfui      WPF-UI Fluent theme (wpf/fullstack only)
+  --theme-mode MODE  light | dark (default light; requires --theme wpfui)
   --seed dummy [N]   N sample records per entity, default 3 (needs --simple or --backend ddd)
   --connection CONN  Live DB connection string to import entities from (needs --provider)
   --script PATH      SQL DDL script to import entities from instead of --connection (needs --provider)
@@ -63,6 +64,7 @@ Kinds:
 Common flags:
   --project PATH     Path to the generated project (default: search this dir and parents for .aspgen/manifest.json)
   --theme wpfui      WPF-UI Fluent theme (ui/module)
+  --theme-mode MODE  light | dark (default light; requires --theme wpfui)
   --dry-run          Print what would change without writing files
   --force            Overwrite existing files
 
