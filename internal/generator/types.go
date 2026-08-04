@@ -161,6 +161,21 @@ func quickSearchExpr(properties []Property, varName string) string {
 	return strings.Join(parts, " || ")
 }
 
+// hasQuickSearchField reports whether any property is a plain string (the
+// only kind quickSearchExpr searches); templates must gate the "if
+// (!string.IsNullOrWhiteSpace(search)) query = query.Where(...)" line on
+// this, since quickSearchExpr falls back to the literal "false" when there's
+// nothing to search, which would otherwise zero out every result the moment
+// a user types anything into the search box.
+func hasQuickSearchField(properties []Property) bool {
+	for _, p := range properties {
+		if filterKind(p.CSharpType) == "string" {
+			return true
+		}
+	}
+	return false
+}
+
 // filterFieldNamesAndType returns the derived advanced-filter field name(s)
 // (PascalCase, based on p.Name) and their shared nullable C# type for
 // property p, e.g. Name(string) -> (["NameContains"], "string?"),

@@ -16,7 +16,9 @@ public static class {{ .Name }}Endpoints
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 25;
             var query = db.{{ .Name }}s.AsNoTracking().AsQueryable();
+{{- if hasQuickSearchField .Properties }}
             if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});
+{{- end }}
             {{ filterWhereClauses .Properties "x" "" }}
             var totalCount = await query.LongCountAsync(cancellationToken);
             var items = await query.OrderBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);

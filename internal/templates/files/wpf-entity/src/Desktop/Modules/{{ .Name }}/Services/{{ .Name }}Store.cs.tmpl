@@ -75,7 +75,9 @@ public sealed class {{ .Name }}Store(AppDbContext db) : I{{ .Name }}Store
     {
         var search = criteria.Search;
         var query = db.Set<{{ .Name }}>().AsNoTracking().AsQueryable();
+{{- if hasQuickSearchField .Properties }}
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});
+{{- end }}
         {{ filterWhereClauses .Properties "x" "criteria." }}
         var totalCount = query.LongCount();
         var items = query.OrderBy(x => x.Id).Skip((criteria.Page - 1) * criteria.PageSize).Take(criteria.PageSize)
@@ -123,7 +125,9 @@ public sealed class {{ .Name }}Store : I{{ .Name }}Store
     {
         var search = criteria.Search;
         var query = items.AsEnumerable();
+{{- if hasQuickSearchField .Properties }}
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});
+{{- end }}
         {{ filterWhereClauses .Properties "x" "criteria." }}
         var filtered = query.ToList();
         var paged = filtered.Skip((criteria.Page - 1) * criteria.PageSize).Take(criteria.PageSize).ToList();
