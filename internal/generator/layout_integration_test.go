@@ -388,6 +388,66 @@ func TestManyToManyRelationGeneration(t *testing.T) {
 	}
 }
 
+func TestManyToManyRelationGenerationRenoir(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "M2MRenoirDemo")
+	if err := Run([]string{"new", "M2MRenoirDemo", "--app", "blazor", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "context", "Catalog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Catalog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Catalog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+
+	joinAggregate, err := os.ReadFile(filepath.Join(project, "src", "M2MRenoirDemo.DomainModel", "Catalog", "PostTag.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(joinAggregate), "PostId") || !strings.Contains(string(joinAggregate), "TagId") {
+		t.Fatalf("expected both foreign keys in the PostTag join aggregate: %s", joinAggregate)
+	}
+
+	crudService, err := os.ReadFile(filepath.Join(project, "src", "M2MRenoirDemo.Application", "PostTagCrudService.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(crudService), "PostId") || !strings.Contains(string(crudService), "TagId") {
+		t.Fatalf("expected both foreign keys in PostTagCrudService.cs: %s", crudService)
+	}
+
+	postAggregate, err := os.ReadFile(filepath.Join(project, "src", "M2MRenoirDemo.DomainModel", "Catalog", "Post.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(postAggregate), "PostTag") {
+		t.Fatalf("expected an inverse PostTag navigation on Post: %s", postAggregate)
+	}
+
+	tagAggregate, err := os.ReadFile(filepath.Join(project, "src", "M2MRenoirDemo.DomainModel", "Catalog", "Tag.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(tagAggregate), "PostTag") {
+		t.Fatalf("expected an inverse PostTag navigation on Tag: %s", tagAggregate)
+	}
+
+	manifestBytes, err := os.ReadFile(filepath.Join(project, ".aspgen", "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Entities) != 3 {
+		t.Fatalf("expected three recorded entities (Tag, Post, PostTag), got %#v", manifest.Entities)
+	}
+}
+
 func TestEntityRelationshipGenerationDDD(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "DddRelDemo")
 	if err := Run([]string{"new", "DddRelDemo", "--app", "fullstack", "--backend:ddd", "--output", project}); err != nil {

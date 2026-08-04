@@ -30,6 +30,7 @@ Flags:
   --script PATH      SQL DDL script to import entities from (needs --provider)
   --provider P       sqlite | postgres | sqlserver | mysql (required with --script)
   --tables T         all (default) or a comma list of table names to import
+  --context CTX      Bounded context imported tables become aggregates in (blazor only, required with --script there)
   --output PATH      Output directory (default: project NAME)
   --templates PATH   Use a custom template directory instead of the embedded set
   --dry-run          Print what would be created without writing files
@@ -40,6 +41,7 @@ Examples:
   aspgen new MyApp --app webapi --backend ddd --database postgres
   aspgen new MyApp --app webapi --simple --script schema.sql --provider postgres --tables all
   aspgen new RenoirDemo --app blazor
+  aspgen new RenoirDemo --app blazor --script schema.sql --provider sqlserver --context Catalog
 `
 
 // addHelp is printed for `aspgen add --help`.
@@ -48,6 +50,7 @@ const addHelp = `Usage:
 
 Kinds:
   entity NAME prop:type...      Simple-profile entity (Domain + API + seed)
+  entity-field NAME prop:type... Add properties to an existing entity/aggregate
   module NAME                   WPF Prism module (run "add ui" first)
   database NAME                 Register/switch the persistence provider
   service NAME                  Application service (non-simple webapi/fullstack)
@@ -69,6 +72,7 @@ Common flags:
 
 Examples:
   aspgen add entity Customer name:string age:int active:bool --project ./MyApp
+  aspgen add entity-field Customer notes:string --project ./MyApp
   aspgen add context Catalog --project ./RenoirDemo
   aspgen add aggregate Product name:string price:decimal --context Catalog --project ./RenoirDemo
 `
@@ -77,11 +81,12 @@ Examples:
 const importDBHelp = `Usage:
   aspgen import-db --project PATH --script PATH --provider PROVIDER [flags]
 
-Adds an entity per selected table to an existing project (simple or ddd
-backend, webapi/fullstack/wpf profiles only — not blazor/Renoir), the same
-way "add entity" would, then writes a schema.sql backup snapshot at the
-project root. Does not run "dotnet ef migrations" — that remains a manual
-step against the generated entities/DbContext.
+Adds an entity per selected table to an existing project, the same way
+"add entity" would (simple/ddd backend, webapi/fullstack/wpf profiles), or
+an aggregate per selected table the same way "add aggregate" would on the
+blazor/Renoir profile (requires --context), then writes a schema.sql backup
+snapshot at the project root. Does not run "dotnet ef migrations" — that
+remains a manual step against the generated entities/DbContext.
 
 Flags:
   --project PATH     Path to the generated project (default: search this dir and parents for .aspgen/manifest.json)
@@ -89,9 +94,11 @@ Flags:
   --provider P       sqlite | postgres | sqlserver | mysql (required)
   --tables T         all (default) or a comma list of table names to import
   --backend ddd      Override the project's backend profile (default: the project's own backend)
+  --context CTX      Bounded context every imported table becomes an aggregate in (blazor/Renoir profile only, required there)
   --dry-run          Print what would change without writing files
   --force            Overwrite existing files
 
 Examples:
   aspgen import-db --project ./MyApp --script schema.sql --provider postgres --tables all
+  aspgen import-db --project ./RenoirDemo --script schema.sql --provider sqlserver --context Catalog
 `

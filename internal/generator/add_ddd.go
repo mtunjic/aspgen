@@ -30,9 +30,6 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 	if err != nil {
 		return err
 	}
-	if len(manyToMany) > 0 {
-		return errors.New("many-to-many relations (Entity[]) are not yet supported for Renoir aggregates")
-	}
 	var props []Property
 	if hasScalarPropertyArgs(remainingArgs) {
 		if props, err = parseProperties(remainingArgs); err != nil {
@@ -75,6 +72,56 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 	m.Entities = appendEntityMeta(m.Entities, EntityMeta{Name: r.Name, Context: contextName, Properties: props})
 	m.Contexts = appendAggregate(m.Contexts, contextName, r.Name)
 	m.Components = appendUnique(m.Components, "aggregate:"+contextName+":"+r.Name)
+	if err := applyManyToManyRenoir(r, m, d, contextName, manyToMany, resolveDisplayProperty(EntityMeta{Properties: props})); err != nil {
+		return err
+	}
+	return nil
+}
+
+// applyManyToManyRenoir materializes each many-to-many relation declared on
+// a Renoir aggregate as its own CRUD-default join aggregate (e.g.
+// PostTag) in the same bounded context, carrying a required many-to-one
+// relation back to both r.Name and the target aggregate. It reuses the same
+// renoir-aggregate/renoir-crud rendering as an ordinary two-relation
+// "add aggregate" call, so the join aggregate gets full CRUD, DI wiring, and
+// inverse navigations (via the same updateInverseNavigation helper) on both
+// r.Name's and the target's own domain classes.
+func applyManyToManyRenoir(r addRequest, m *Manifest, d *data, contextName string, manyToMany []ManyToManyRelation, declaringDisplayProperty string) error {
+	for _, rel := range manyToMany {
+		leftRel := Relation{Name: r.Name, Target: r.Name, FKProperty: r.Name + "Id", DisplayProperty: declaringDisplayProperty}
+		rightRel := Relation{Name: rel.Target, Target: rel.Target, FKProperty: rel.Target + "Id", DisplayProperty: rel.DisplayProperty}
+		joinRelations := []Relation{leftRel, rightRel}
+		joinProps := []Property{synthesizeRelationProperty(leftRel), synthesizeRelationProperty(rightRel)}
+
+		jd := *d
+		jd.Aggregate = rel.JoinEntity
+		jd.Properties = joinProps
+		jd.Relations = joinRelations
+		jd.Crud = true
+
+		if err := renderTree(r.Project, "renoir-aggregate", jd, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+			return err
+		}
+		appBlazorDir := m.Project + ".AppBlazor"
+		using := "using " + m.Project + ".Application;\n"
+		registration := "        builder.Services.AddScoped<" + rel.JoinEntity + "CrudService>();"
+		if err := renderTree(r.Project, "renoir-crud", jd, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+			return err
+		}
+		if err := updateBlazorServiceHost(r.Project, appBlazorDir, []string{using}, registration, r.DryRun); err != nil {
+			return err
+		}
+
+		for _, jrel := range joinRelations {
+			path := filepath.Join(r.Project, "src", m.Project+".DomainModel", contextName, jrel.Target+".cs")
+			if err := updateInverseNavigation(path, jrel.Target+".cs", rel.JoinEntity, r.DryRun); err != nil {
+				return err
+			}
+		}
+		m.Entities = appendEntityMeta(m.Entities, EntityMeta{Name: rel.JoinEntity, Context: contextName, Properties: joinProps})
+		m.Contexts = appendAggregate(m.Contexts, contextName, rel.JoinEntity)
+		m.Components = appendUnique(m.Components, "aggregate:"+contextName+":"+rel.JoinEntity)
+	}
 	return nil
 }
 

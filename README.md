@@ -73,7 +73,7 @@ SQLite is the default database for `webapi`, `fullstack`, `--simple`, and `--bac
 
 ### Generating entities from an existing database
 
-Instead of hand-typing `name:type` properties, aspgen can scaffold entities from an existing database schema — either a live connection or a static SQL DDL script — for `webapi`/`fullstack`/`--simple`/`--backend ddd` projects (not yet the `blazor`/Renoir profile). Supported providers are `sqlite`, `postgres`, `sqlserver`, and `mysql`.
+Instead of hand-typing `name:type` properties, aspgen can scaffold entities (or, for the `blazor`/Renoir profile, aggregates via `--context`) from an existing database schema — a static SQL DDL script — for `webapi`/`fullstack`/`--simple`/`--backend ddd`/`blazor` projects. Supported providers are `sqlite`, `postgres`, `sqlserver`, and `mysql`.
 
 ```text
 go run ./cmd/aspgen new MyApp --app webapi --simple --script schema.sql --provider postgres --tables all --output ./MyApp

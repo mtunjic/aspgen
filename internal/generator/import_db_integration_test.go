@@ -101,15 +101,71 @@ func TestImportDBCmdIncremental(t *testing.T) {
 	}
 }
 
-func TestImportDBRejectsRenoirProfile(t *testing.T) {
+func TestImportDBRequiresContextOnRenoirProfile(t *testing.T) {
 	script := writeImportDBTestScript(t)
 	project := filepath.Join(t.TempDir(), "RenoirImportDemo")
 	if err := Run([]string{"new", "RenoirImportDemo", "--app", "blazor", "--output", project}); err != nil {
 		t.Fatal(err)
 	}
 	err := Run([]string{"import-db", "--project", project, "--script", script, "--provider", "sqlite"})
-	if err == nil || !strings.Contains(err.Error(), "Renoir") {
-		t.Fatalf("expected a Renoir-specific rejection error, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "--context") {
+		t.Fatalf("expected an error requiring --context on the Renoir profile, got: %v", err)
+	}
+}
+
+func TestImportDBGeneratesRenoirAggregates(t *testing.T) {
+	script := writeImportDBTestScript(t)
+	project := filepath.Join(t.TempDir(), "RenoirImportDemo2")
+	if err := Run([]string{"new", "RenoirImportDemo2", "--app", "blazor", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{
+		"import-db", "--project", project, "--script", script, "--provider", "sqlite",
+		"--context", "Catalog",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	aggregate, err := os.ReadFile(filepath.Join(project, "src", "RenoirImportDemo2.DomainModel", "Catalog", "Customer.cs"))
+	if err != nil {
+		t.Fatalf("Customer.cs not generated: %v", err)
+	}
+	if !strings.Contains(string(aggregate), "public string Name") {
+		t.Fatalf("Customer.cs missing Name property:\n%s", aggregate)
+	}
+	if _, err := os.ReadFile(filepath.Join(project, "src", "RenoirImportDemo2.DomainModel", "Catalog", "Order.cs")); err != nil {
+		t.Fatalf("Order.cs not generated (table name should singularize Orders -> Order): %v", err)
+	}
+	if _, err := os.ReadFile(filepath.Join(project, "schema.sql")); err != nil {
+		t.Fatalf("schema.sql backup not written: %v", err)
+	}
+	manifest, err := loadManifest(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contextExists(manifest.Contexts, "Catalog") {
+		t.Fatalf("expected Catalog context to be auto-created, got: %#v", manifest.Contexts)
+	}
+}
+
+func TestNewWithScriptImportsRenoirAggregates(t *testing.T) {
+	script := writeImportDBTestScript(t)
+	project := filepath.Join(t.TempDir(), "RenoirScriptApp")
+	if err := Run([]string{
+		"new", "RenoirScriptApp", "--app", "blazor",
+		"--script", script, "--provider", "sqlite", "--context", "Catalog",
+		"--output", project,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.ReadFile(filepath.Join(project, "src", "RenoirScriptApp.DomainModel", "Catalog", "Customer.cs")); err != nil {
+		t.Fatalf("Customer.cs not generated: %v", err)
+	}
+	crudService, err := os.ReadFile(filepath.Join(project, "src", "RenoirScriptApp.Application", "CustomerCrudService.cs"))
+	if err != nil {
+		t.Fatalf("CustomerCrudService.cs not generated: %v", err)
+	}
+	if !strings.Contains(string(crudService), "Name") {
+		t.Fatalf("CustomerCrudService.cs missing Name field:\n%s", crudService)
 	}
 }
 

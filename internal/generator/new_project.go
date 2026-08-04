@@ -73,10 +73,14 @@ func newProject(args []string) error {
 		return errors.New("--seed requires --simple or --backend ddd")
 	}
 	if dbImportRequested {
-		if app != "webapi" && app != "fullstack" && !(app == "wpf" && backend == "ddd") {
-			return errors.New("--script requires a webapi, fullstack, or local DDD wpf application")
+		if app != "webapi" && app != "fullstack" && app != "blazor" && !(app == "wpf" && backend == "ddd") {
+			return errors.New("--script requires a webapi, fullstack, blazor, or local DDD wpf application")
 		}
-		if !simple && backend == "" {
+		if app == "blazor" {
+			if dbImport.Context == "" {
+				return errors.New("--script on the blazor/Renoir profile requires --context ContextName")
+			}
+		} else if !simple && backend == "" {
 			return errors.New("--script requires --simple or --backend ddd")
 		}
 	}
