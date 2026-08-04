@@ -158,6 +158,8 @@ func newProject(args []string) error {
 		if err := runDBImport(out, &manifest, resolvedBackend, dbImport, dryRun, force); err != nil {
 			return err
 		}
+	}
+	if !dryRun {
 		if err := registerGeneratedProjectFiles(out, dryRun); err != nil {
 			return err
 		}
