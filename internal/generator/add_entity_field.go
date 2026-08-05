@@ -36,7 +36,12 @@ func addEntityFieldCmd(r addRequest, m *Manifest, d *data) error {
 		}
 	}
 
-	if err := patchRenoirAggregateField(r, m, *existing, newProps); err != nil {
+	ctx, _ := findContext(m.Contexts, existing.Context)
+	if ctx.Arch == "ar" {
+		if err := patchArEntityField(r, *existing, newProps); err != nil {
+			return err
+		}
+	} else if err := patchRenoirAggregateField(r, m, *existing, newProps); err != nil {
 		return err
 	}
 
@@ -291,6 +296,51 @@ func patchValidatorFile(path, ctorSignature string, newProps []Property, renoir 
 		return fmt.Errorf("validator %s: constructor %q not found or rule already present", path, ctorSignature)
 	}
 	return writePatchFile(path, newContent, dryRun)
+}
+
+// ---- ar-tier entity layer -------------------------------------------------
+
+// patchArEntityField patches an ar-tier entity's flat model class
+// (src/WebApi/Models/{Context}/{Name}.cs) and its Minimal API Endpoints file
+// (src/WebApi/Features/{Context}/{Name}/{Name}Endpoints.cs) — the ar-entity
+// template group's shape, which has no aggregate/Methods.cs split and no
+// DomainGuard, unlike dm+-tier aggregates.
+func patchArEntityField(r addRequest, existing EntityMeta, newProps []Property) error {
+	dir := filepath.Join(r.Project, "src", "WebApi")
+
+	modelPath := filepath.Join(dir, "Models", existing.Context, existing.Name+".cs")
+	content, err := readPatchFile(modelPath)
+	if err != nil {
+		return err
+	}
+	var declLines []string
+	for _, p := range newProps {
+		declLines = append(declLines, autoPropLine(p, "set"))
+	}
+	newContent, changed := insertBeforeMarker(content, "    // aspgen:navigation", strings.Join(declLines, "\n"))
+	if !changed {
+		return missingMarkerErr(modelPath, "// aspgen:navigation")
+	}
+	if err := writePatchFile(modelPath, newContent, r.DryRun); err != nil {
+		return err
+	}
+
+	endpointsPath := filepath.Join(dir, "Features", existing.Context, existing.Name, existing.Name+"Endpoints.cs")
+	content, err = readPatchFile(endpointsPath)
+	if err != nil {
+		return err
+	}
+	last := existing.Properties[len(existing.Properties)-1]
+	anchor := "            entity." + last.Name + " = request." + last.Name + ";"
+	var assignLines []string
+	for _, p := range newProps {
+		assignLines = append(assignLines, "            entity."+p.Name+" = request."+p.Name+";")
+	}
+	newContent, changed = insertAfterAnchor(content, anchor, "\n"+strings.Join(assignLines, "\n"), 1)
+	if !changed {
+		return fmt.Errorf("ar-tier endpoints %s: assignment %q not found", endpointsPath, anchor)
+	}
+	return writePatchFile(endpointsPath, newContent, r.DryRun)
 }
 
 // ---- Renoir/Blazor aggregate layer ---------------------------------------

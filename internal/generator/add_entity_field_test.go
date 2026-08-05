@@ -50,6 +50,48 @@ func TestAddEntityFieldContextAggregate(t *testing.T) {
 	}
 }
 
+func TestAddEntityFieldArTierEntity(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "ArFieldDemo")
+	if err := Run([]string{"new", "ArFieldDemo", "--context", "Catalog", "--arch", "ar", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "entity", "Product", "name:string", "price:decimal", "--context", "Catalog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "entity-field", "Product", "sku:string", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+
+	model, err := os.ReadFile(filepath.Join(project, "src", "WebApi", "Models", "Catalog", "Product.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(model), "public string Sku { get; set; } = default!;") {
+		t.Fatalf("expected Sku property on Product model: %s", model)
+	}
+
+	endpoints, err := os.ReadFile(filepath.Join(project, "src", "WebApi", "Features", "Catalog", "Product", "ProductEndpoints.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(endpoints), "entity.Sku = request.Sku;") {
+		t.Fatalf("expected Sku assignment in ProductEndpoints.cs: %s", endpoints)
+	}
+
+	manifestBytes, err := os.ReadFile(filepath.Join(project, ".aspgen", "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	existing := findEntityMeta(manifest.Entities, "Product")
+	if existing == nil || len(existing.Properties) != 3 {
+		t.Fatalf("expected Product to have 3 recorded properties (name, price, sku), got %#v", existing)
+	}
+}
+
 func TestAddEntityFieldErrors(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "FieldErrDemo")
 	if err := Run([]string{"new", "FieldErrDemo", "--context", "Catalog", "--arch", "ar", "--output", project}); err != nil {

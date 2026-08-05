@@ -6,14 +6,14 @@ A complete, production-oriented walkthrough of every architecture tier, UI frame
 
 **Document:** Enterprise Developer Guide · **Audience:** .NET engineers adopting aspgen · **Status:** v1.0, 2026-08-05 · **Theme:** [aspgen Document Theme](aspgen-document-theme.md)
 
-> **Decision in one paragraph.** aspgen generates ASP.NET Core Clean Architecture APIs and Prism/DryIoc WPF apps from embedded Go `text/template` sources — nothing is downloaded at generation time and nothing runs as a service. The recommended entry point is the **context/arch engine** (`--context`/`--arch`/`-ui`), which lets one solution mix independent bounded contexts at four architecture tiers (`ar`, `dm`, `cqrs`, `es`) and attach one UI framework (`wpf`, `blazor`, `mvc`, or `spa`) on top. An older, still fully supported **`--app`/`--backend` workflow** (including the Renoir-style DDD Blazor profile) remains available for teams already using it. This guide builds a real multi-context system — **Northwind Trading** — end to end on the modern engine, then tours the legacy workflow and every flag aspgen accepts.
+> **Decision in one paragraph.** aspgen generates ASP.NET Core Clean Architecture APIs and Prism/DryIoc WPF apps from embedded Go `text/template` sources — nothing is downloaded at generation time and nothing runs as a service. Every project is bootstrapped through the **context/arch engine** (`--context`/`--arch`/`-ui`), which lets one solution mix independent bounded contexts at four architecture tiers (`ar`, `dm`, `cqrs`, `es`) and attach one UI framework (`wpf`, `blazor`, `mvc`, or `spa`) on top. This guide builds a real multi-context system — **Northwind Trading** — end to end, then runs every generated solution for real and tours every flag aspgen accepts.
 
 ---
 
 ## Contents
 
 1. What you'll build
-2. How aspgen thinks: two workflows, one generator
+2. How aspgen thinks: `new` once, `add` incrementally
 3. Install and verify aspgen
 4. The architecture ladder — `ar` → `dm` → `cqrs` → `es`
 5. Scaffolding the solution shell
@@ -23,7 +23,7 @@ A complete, production-oriented walkthrough of every architecture tier, UI frame
 9. Context 4 — Billing (`es`): event sourcing and an append-only ledger
 10. A tour of every UI framework (`wpf`, `blazor`, `mvc`, `spa`)
 11. Extending every layer — recipes for real feature work
-12. The legacy `--app`/`--backend` workflow, including the Renoir DDD Blazor profile
+12. Running everything end to end — from `new` to a working app
 13. Custom templates
 14. Testing, CI, and production readiness
 15. Full flag reference
@@ -67,23 +67,16 @@ flowchart LR
 
 Section 10 then tours all four UI frameworks (`wpf`, `blazor`, `mvc`, `spa`), each attached to whichever project actually supports it, since a single project only gets one attached UI.
 
-## 2. How aspgen thinks: two workflows, one generator
+## 2. How aspgen thinks: `new` once, `add` incrementally
 
 aspgen is a two-step generator, always:
 
-1. **`new`** initializes a project once — tree, `.sln`, and `.aspgen/manifest.json`.
+1. **`new`** initializes a project once — tree, `.sln`, and `.aspgen/manifest.json`. It always requires `--context NAME --arch ar|dm|cqrs|es`.
 2. **`add`** (and `import-db`) mutate that already-generated project incrementally. `add` never creates a missing project; if `--project` is omitted it searches the current directory and its parents for `.aspgen/manifest.json`.
 
 Everything is rendered from Go `text/template` sources embedded in the `aspgen` binary (`internal/templates/files/**`) — export and inspect them any time with `aspgen templates export`.
 
-Two independent flag surfaces select the generation profile:
-
-| Workflow | Trigger flag | Status |
-|---|---|---|
-| **Context/arch engine** | `--context NAME --arch ar\|dm\|cqrs\|es` | Recommended for all new projects. |
-| **Legacy `--app`/`--backend`** | `--app webapi\|wpf\|blazor\|fullstack` | Fully supported, no longer the advertised default. |
-
-The two are mutually exclusive per project — pick one when you run `new`. `--context` on the command line is what routes `new`/`add` into the newer engine; a bare `--app` (or no flags at all, which defaults to `--app webapi`) stays on the legacy path.
+Each bounded context picks its own architecture tier independently, so one solution can mix e.g. a simple `ar` context alongside an event-sourced `es` context — that's what Section 4 covers, and exactly how Northwind Trading is built below.
 
 > **Callout — flag forms.** Every aspgen flag accepts three equivalent forms: `--flag value`, `--flag:value`, and `-flag:value`. This guide uses the space form throughout; use whichever reads best in your own scripts.
 
@@ -223,9 +216,17 @@ public static class ProductEndpoints
 
 Because Catalog has no attached UI screens, this is a real, callable REST API today: run the WebApi host and hit `/api/catalog/product/search?search=widget&page=1&pageSize=25`, or point OpenAPI/Scalar at it (`/openapi/v1.json`, `/scalar/v1`).
 
+Catalog gets a third module — a `Supplier` entity, one required relation away from being wired into `Product` the same way `Category` already is:
+
+```powershell
+go run ./cmd/aspgen add entity Supplier name:string contactEmail:string --context Catalog --project ./CatalogApi
+```
+
+`entity-field` (Section 11) can retrofit new **scalar** properties onto `Supplier`/`Product` later without regenerating either entity — relations, though, are only synthesized at `add entity`/`add aggregate` time (`supplier:Supplier` or `supplier:Supplier?`), not by `entity-field`.
+
 ### Seeding Catalog with real Northwind sample data
 
-The legacy `--app`/`--backend` workflow has a `--seed dummy` flag (Section 12), but it only generates generic, type-based placeholder values (`"Name sample 1"`, incrementing numbers) — and it isn't available on the context/arch engine at all yet. For a demo that actually looks like a wholesale distributor, hand-add a small idempotent seeding block at the `// aspgen:seed` marker `new`/`add entity` already left in `Program.cs`, using the real classic Northwind categories and products (the same public sample dataset Microsoft has shipped in Access/SQL Server tutorials for decades):
+The context/arch engine has no built-in `--seed` flag, so for a demo that actually looks like a wholesale distributor, hand-add a small idempotent seeding block at the `// aspgen:seed` marker `new`/`add entity` already left in `Program.cs`, using the real classic Northwind categories and products (the same public sample dataset Microsoft has shipped in Access/SQL Server tutorials for decades):
 
 ```csharp
 // src/WebApi/Program.cs — add right after "// aspgen:seed"
@@ -391,6 +392,15 @@ src/NorthwindOps.Application/
 
 Inventory has no host of its own — the WPF Desktop shell (added in Section 10) will call `StockItemCrudService` **in-process**, no HTTP involved.
 
+Inventory gets a second aggregate — `Warehouse`, the physical location `StockItem` records ultimately belong to — with its own repository, to show that `dm`-tier contexts aren't limited to one module:
+
+```powershell
+go run ./cmd/aspgen add aggregate Warehouse name:string city:string --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add repository WarehouseRepository --aggregate Warehouse --context Inventory --project ./NorthwindOps
+```
+
+This renders the exact same shape Section 7 already walked through for `StockItem` — `Warehouse.cs`/`Warehouse.Methods.cs`, `WarehouseConfiguration.cs`, `WarehouseCrudService.cs`/`WarehouseValidator.cs`, and `IWarehouseRepository`/`Repositories/WarehouseRepository.cs` — and, once the WPF UI is attached in Section 8, `Warehouse` gets its own Desktop module automatically alongside `StockItem`.
+
 ---
 
 ## 8. Context 3 — Sales (`cqrs`): vertical-slice commands/queries and a WPF back office
@@ -464,7 +474,16 @@ app.Run();
 public partial class Program { }
 ```
 
-With both Inventory's `StockItem` and Sales' `Order` aggregates in place, attach the WPF Desktop shell:
+Sales gets a second aggregate — `Customer`, the buyer behind every `Order` — with its own repository, using the same vertical-slice shape as `Order` above (`CreateCustomerCommand`/`Handler`, etc.):
+
+```powershell
+go run ./cmd/aspgen add aggregate Customer name:string email:string --context Sales --project ./NorthwindOps
+go run ./cmd/aspgen add repository CustomerRepository --aggregate Customer --context Sales --project ./NorthwindOps
+```
+
+`cqrs`-tier `add repository` also registers the repository with the WebApi host's own DI container (`services.AddScoped<ICustomerRepository, CustomerRepository>()` in `NorthwindOps.Infrastructure`'s `DependencyInjection.cs`) — one more thing `dm`-tier doesn't need, since it has no host to register into yet.
+
+With Inventory's `StockItem`/`Warehouse` and Sales' `Order`/`Customer` aggregates all in place, attach the WPF Desktop shell:
 
 ```powershell
 go run ./cmd/aspgen add ui wpf --framework wpf --theme wpfui --theme-mode light --project ./NorthwindOps
@@ -621,6 +640,14 @@ src/BillingLedger.Application/Features/Billing/Invoice/
 └── SearchInvoicesQuery.cs / Handler.cs
 ```
 
+Billing gets a second event-sourced aggregate — `CreditNote`, for refunds issued against an existing invoice — to confirm an `es`-tier context isn't limited to a single aggregate either:
+
+```powershell
+go run ./cmd/aspgen add aggregate CreditNote number:string customer:string amount:decimal issuedOn:date --context Billing --project ./BillingLedger
+```
+
+`CreditNote` renders its own `EventSourcedAggregate`, `CreditNoteEvents.cs`, `CreditNoteEventStoreRepository`, and vertical-slice Command/Query/Handler set, completely independent of `Invoice`'s — every `es`-tier aggregate gets its own append-only event stream and its own read-model table.
+
 `BillingLedger` stands alone as its own deployable service — Section 10 attaches a UI to it directly (`spa` for API-first access, or `wpf`/`blazor` if a dedicated finance-desk UI is wanted; either works since `es` is the project's only, first context).
 
 ---
@@ -645,7 +672,7 @@ go run ./cmd/aspgen new SalesPortal --context Sales --arch cqrs -ui blazor --out
 go run ./cmd/aspgen add aggregate Order number:string customer:string total:decimal placedOn:date --context Sales --project ./SalesPortal
 ```
 
-The Blazor host calls the WebApi over HTTP (not in-process — a deliberate difference from the legacy Renoir Blazor profile in Section 12), and each aggregate gets a Razor CRUD page with quick search and an advanced filter panel:
+The Blazor host calls the WebApi over HTTP, and each aggregate gets a Razor CRUD page with quick search and an advanced filter panel:
 
 ```razor
 @* Components/Pages/Sales/OrderCrud.razor (rendered, trimmed) *@
@@ -720,13 +747,13 @@ go run ./cmd/aspgen add ui mvc --framework mvc --project ./WarehouseOps
 
 ### Domain layer
 
-- **Add a property to an existing aggregate/entity** without hand-editing every generated layer:
+- **Add a property to an existing entity/aggregate** without hand-editing every generated layer:
 
   ```powershell
   go run ./cmd/aspgen add entity-field StockItem binLocation:string --project ./NorthwindOps
   ```
 
-  `entity-field` patches the already-rendered Domain class, persistence configuration, Application request/response records, Handlers/Validators/Endpoints, seed data, and every attached UI layer (WPF Row/View/ViewModel, Blazor form model, MVC view model) in place — no regeneration, no duplication.
+  `entity-field` patches the already-rendered layers in place, no regeneration or duplication: for `ar`-tier entities, the flat model class and Minimal API Endpoints; for `dm`/`cqrs`/`es`-tier aggregates, the Domain class (state + behavior partials), Persistence configuration, and — for `dm`/`cqrs`-tier aggregates that have one — the Application-layer `CrudService`/Validator. It does **not** currently patch already-generated UI screens (WPF/Blazor/MVC) or hand-written seed data — update those layers yourself after adding a field. Relations are only synthesized at `add entity`/`add aggregate` time, never by `entity-field`.
 
 - **Many-to-one relations**: `category:Category` (required) or `category:Category?` (optional) inside any `add entity`/`add aggregate` call, synthesizing the FK property and navigation.
 - **Many-to-many relations**: `tags:Tag[]` synthesizes a join aggregate/entity (e.g. `ProductTag`) in the same context, with two required many-to-one relations back to both sides — no hand-written join table needed.
@@ -738,15 +765,9 @@ go run ./cmd/aspgen add ui mvc --framework mvc --project ./WarehouseOps
 
 ### Infrastructure / Persistence
 
-- **Switch or add a database provider**:
+- **Database provider**: pick it once at `new` time with `--database sqlite|postgres` (default `sqlite`); it's recorded in `.aspgen/manifest.json` and emitted into the EF Core provider registration, connection string, and DI setup. There's no incremental `add` command to switch providers on an existing project today — regenerate, or hand-edit the `Infrastructure`/`Persistence` DI registration and connection string if a provider change is unavoidable mid-project. `dm`-tier contexts are class libraries with no host yet to attach a provider to — the provider takes effect once a UI or a `cqrs`/`es` host exists.
 
-  ```powershell
-  go run ./cmd/aspgen add database postgres --project ./NorthwindOps
-  ```
-
-  `sqlite` is the default everywhere; `postgres` is recorded in `.aspgen/manifest.json` and emitted into the EF Core provider registration, connection string, and DI setup. `dm`-tier contexts are class libraries with no host yet to attach a provider to — the provider takes effect once a UI or a `cqrs`/`es` host exists.
-
-- **Import more tables later**: `import-db` is incremental too — rerun it with a fresh `--script`/`--connection` and `--tables` to add more entities/aggregates without touching what's already generated.
+- **Import more tables later**: `import-db` is incremental too — rerun it with a fresh `--script` and `--tables` to add more entities without touching what's already generated.
 
 ### WebApi layer
 
@@ -755,7 +776,6 @@ go run ./cmd/aspgen add ui mvc --framework mvc --project ./WarehouseOps
 
 ### UI layer
 
-- `add module NAME` adds a new Prism module shell to an existing WPF project (run `add ui wpf` first if the project has none yet) — legacy `--app`/`--backend` profile only.
 - `add ui` is idempotent per framework: re-running it against a project that already has aggregates renders any screens that are still missing (e.g. after `add aggregate` added something new) without touching existing ones.
 
 ### Tests and CI
@@ -770,82 +790,147 @@ Every context/arch project gets `tests\{Project}.UnitTests` (an in-memory `DbCon
 
 ---
 
-## 12. The legacy `--app`/`--backend` workflow, including the Renoir DDD Blazor profile
+## 12. Running everything end to end — from `new` to a working app
 
-The original workflow predates `--context`/`--arch` and remains fully supported. It's still the right choice if your team already standardized on it, or you specifically want the Renoir-style Blazor DDD profile (which has no equivalent in the newer engine).
+aspgen never shells out to `dotnet` itself (Section 3), so every project this guide generated still needs a normal .NET build/run pass before it's actually "up and running." This section does that for all three Northwind Trading solutions plus the Section 10 UI-tour projects, then closes with one consolidated script covering every command in this guide, start to finish.
 
-### Profile matrix
-
-```text
-webapi                         Clean Architecture Web API
-webapi --backend ddd           Clean Architecture + DDD/CQRS CRUD
-webapi --simple                Single-project Active Record-style CRUD API
-wpf                            Prism/DryIoc desktop shell and local UI modules
-wpf --backend ddd               Local DDD + SQLite layers with no WebApi
-fullstack --backend ddd        DDD/CQRS API + Prism/DryIoc WPF modules
-fullstack --simple             Simple CRUD API + WPF modules connected by HttpClient
-blazor                         Renoir-style DDD Blazor profile (see below)
-```
-
-`--simple` and `--backend ddd` are mutually exclusive. `--theme wpfui` (plus `--theme-mode light|dark`) applies to any `wpf`/`fullstack` project. `--seed dummy [N]` (default 3 records per entity) works with `--simple` or `--backend ddd`, seeding at API/WPF startup for development environments only.
-
-### Worked example: RenoirCommerce (`--app blazor`)
+### CatalogApi (`ar`, headless)
 
 ```powershell
-go run ./cmd/aspgen new RenoirCommerce --app blazor --output ./RenoirCommerce
-go run ./cmd/aspgen add context Catalog --project ./RenoirCommerce
-go run ./cmd/aspgen add aggregate Product name:string price:decimal active:bool published:date --context Catalog --project ./RenoirCommerce
-go run ./cmd/aspgen add value-object ProductCode value:string --context Catalog --project ./RenoirCommerce
-go run ./cmd/aspgen add domain-service PricingPolicy --context Catalog --project ./RenoirCommerce
-go run ./cmd/aspgen add repository ProductRepository --aggregate Product --context Catalog --project ./RenoirCommerce
-go run ./cmd/aspgen add event ProductPriceChanged productId:long price:decimal --context Catalog --project ./RenoirCommerce
+cd CatalogApi
+dotnet restore
+dotnet build .\CatalogApi.sln
+dotnet run --project src\WebApi
 ```
 
-The Renoir profile's structural conventions are modeled directly on a real reference implementation (the Renoir sample from Dino Esposito's *Clean Architecture with .NET*), kept async instead of the reference's synchronous style — the same `BaseEntity`/`CommandResponse`/partial-class-aggregate conventions used by the `dm`+ engine tiers above actually originate here. The generated Blazor CRUD page renders in-process (no HTTP client, unlike the newer `blazor-context` UI in Section 10) and never binds directly to the domain aggregate — it uses a local editable form model plus the same immutable `Request`/`View` records:
-
-```razor
-@* Components/Pages/Catalog/ProductCrud.razor (rendered, trimmed) *@
-@page "/catalog/products"
-@inject RenoirCommerce.Application.ProductCrudService Service
-<h1>Products</h1>
-<EditForm Model="form" OnValidSubmit="SaveAsync">
-    <DataAnnotationsValidator />
-    <div class="mb-3"><label>Name</label><InputText @bind-Value="form.Name" class="form-control" /></div>
-    <div class="mb-3"><label>Price</label><InputNumber @bind-Value="form.Price" class="form-control" /></div>
-    <div class="mb-3"><label>Active</label><InputCheckbox @bind-Value="form.Active" class="form-control" /></div>
-    <div class="mb-3"><label>Published</label><InputDate @bind-Value="form.Published" class="form-control" /></div>
-    <button class="btn btn-primary" type="submit">Save</button>
-</EditForm>
-<div class="mb-3 d-flex gap-2">
-    <input @bind="searchText" @bind:event="oninput" class="form-control" placeholder="Search Products..." />
-    <button class="btn btn-outline-primary" @onclick="SearchAsync">Search</button>
-</div>
-```
-
-Controls are chosen by declared type: `string` → `InputText`, numeric → `InputNumber`, `bool` → `InputCheckbox`, `date`/`datetime` → `InputDate`. Use `--no-crud` on `add aggregate` when a use case should be modeled explicitly instead of starting from generated CRUD.
-
-### Worked example: a Rails-style simple CRUD API + WPF fullstack
+With the host running, verify it from another terminal (defaults to `http://localhost:5000`; use the URL `dotnet run` actually printed):
 
 ```powershell
-go run ./cmd/aspgen new MyApp --app fullstack --simple --theme wpfui --theme-mode dark --seed dummy 25 --output ./MyApp
-go run ./cmd/aspgen add entity Customer name:string age:int active:bool --project ./MyApp
-go run ./cmd/aspgen add module Customers --project ./MyApp
-go run ./cmd/aspgen add database postgres --project ./MyApp
-go run ./cmd/aspgen add service Email --project ./MyApp
-go run ./cmd/aspgen add feature CreateCustomer name:string age:int active:bool --project ./MyApp
+Invoke-RestMethod http://localhost:5000/health
+Invoke-RestMethod http://localhost:5000/api/catalog/product
+Invoke-RestMethod "http://localhost:5000/api/catalog/product/search?search=chai&page=1&pageSize=10"
 ```
 
-This is one project, one Web API (Active Record-style, no DDD/CQRS layer), and Prism/DryIoc WPF modules connected over HTTP (`ASPGENT_API_URL`, default `http://localhost:5000`). `add feature` is the base Clean Architecture profile's vertical-slice add (request/response records, FluentValidation validator, CQRS handler returning `Result<T>`, Minimal API endpoint) — distinct from `--simple`'s flat entity CRUD and from the newer engine's `cqrs`-tier feature generation, but structurally similar.
-
-### Legacy `import-db`
+Or open `http://localhost:5000/scalar/v1` in a browser for an interactive OpenAPI explorer. `scripts\ci.ps1` (generated alongside every project) does the restore/build/test in one call — add `-Publish` to also publish the WebApi host:
 
 ```powershell
-go run ./cmd/aspgen new MyApp --app webapi --simple --script schema.sql --provider postgres --tables all --output ./MyApp
-go run ./cmd/aspgen import-db --project ./MyApp --connection "file:demo.db" --provider sqlite --tables Customers,Orders
-go run ./cmd/aspgen new RenoirCommerce --app blazor --script schema.sql --provider sqlserver --context Catalog
+.\scripts\ci.ps1 -Publish
 ```
 
-Supported providers: `sqlite`, `postgres`, `sqlserver`, `mysql`. `--connection` and `--script` are mutually exclusive and both require `--provider`. On the `blazor` profile, `--context` is required since tables become aggregates, not flat entities.
+### NorthwindOps (`dm` + `cqrs`, WebApi + WPF Desktop)
+
+```powershell
+cd ..\NorthwindOps
+dotnet restore
+dotnet build .\NorthwindOps.sln
+dotnet run --project src\WebApi
+```
+
+In a second terminal, verify the Sales (`cqrs`) vertical-slice endpoints (Inventory is `dm`-tier and headless — it has no HTTP surface of its own, only the WPF Desktop shell calls it, in-process):
+
+```powershell
+Invoke-RestMethod http://localhost:5000/health
+Invoke-RestMethod http://localhost:5000/api/sales/order
+Invoke-RestMethod http://localhost:5000/api/sales/customer
+```
+
+Then, with the WebApi host still running (Sales' `Order`/`Customer` Stores call it over HTTP), launch the Desktop shell in a third terminal:
+
+```powershell
+dotnet run --project src\Desktop\NorthwindOps.Desktop.csproj
+```
+
+The Prism/DryIoc shell opens with one navigation entry per aggregate — `StockItem` and `Warehouse` (Inventory, calling `CrudService` in-process) alongside `Order` and `Customer` (Sales, calling the WebApi host over HTTP) — all in the same window, exactly as described in Section 8.
+
+### BillingLedger (`es`, event-sourced, `spa`-ready)
+
+```powershell
+cd ..\BillingLedger
+dotnet restore
+dotnet build .\BillingLedger.sln
+dotnet run --project src\WebApi
+```
+
+```powershell
+Invoke-RestMethod http://localhost:5000/health
+Invoke-RestMethod http://localhost:5000/api/billing/invoice
+Invoke-RestMethod http://localhost:5000/api/billing/credit-note
+```
+
+`spa` (attached in Section 10) means `/scalar/v1` and permissive local-dev CORS are already wired — a hand-written or separately generated frontend can call this host immediately, no extra configuration required.
+
+### The Section 10 UI-tour projects
+
+```powershell
+cd ..\SalesPortal
+dotnet build .\SalesPortal.sln
+dotnet run --project src\SalesPortal.AppBlazor\SalesPortal.AppBlazor.csproj
+# browse to https://localhost:<port>/sales/orders
+
+cd ..\WarehouseOps
+dotnet build .\WarehouseOps.sln
+dotnet run --project src\WarehouseOps.WebMvc\WarehouseOps.WebMvc.csproj
+# browse to https://localhost:<port>/inventory/stock-item
+```
+
+### The full showcase: every command, creation to running
+
+Everything above in one place — copy, paste, and adjust paths/output directories as needed. This is the entire Northwind Trading system, from the very first `aspgen new` to four running apps:
+
+```powershell
+# --- Catalog (ar): a lean, headless product API ---
+go run ./cmd/aspgen new CatalogApi --context Catalog --arch ar --database sqlite --output ./CatalogApi
+go run ./cmd/aspgen add entity Category name:string --context Catalog --project ./CatalogApi
+go run ./cmd/aspgen add entity Product name:string sku:string price:decimal active:bool category:Category --context Catalog --project ./CatalogApi
+go run ./cmd/aspgen add entity Supplier name:string contactEmail:string --context Catalog --project ./CatalogApi
+# (then hand-add the Section 6 seed block at // aspgen:seed in CatalogApi/src/WebApi/Program.cs)
+
+# --- NorthwindOps (dm + cqrs): Inventory + Sales, one shared WPF shell ---
+go run ./cmd/aspgen new NorthwindOps --context Sales --arch cqrs --database sqlite --output ./NorthwindOps
+go run ./cmd/aspgen add context Inventory --arch dm --project ./NorthwindOps
+go run ./cmd/aspgen add aggregate StockItem sku:string quantityOnHand:int reorderPoint:int --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add value-object BinLocation aisle:string shelf:string --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add domain-service ReplenishmentPolicy --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add repository StockItemRepository --aggregate StockItem --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add event StockDepletedEvent stockItemId:long quantityOnHand:int --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add aggregate Warehouse name:string city:string --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add repository WarehouseRepository --aggregate Warehouse --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add aggregate Order number:string customer:string total:decimal placedOn:date --context Sales --project ./NorthwindOps
+go run ./cmd/aspgen add repository OrderRepository --aggregate Order --context Sales --project ./NorthwindOps
+go run ./cmd/aspgen add aggregate Customer name:string email:string --context Sales --project ./NorthwindOps
+go run ./cmd/aspgen add repository CustomerRepository --aggregate Customer --context Sales --project ./NorthwindOps
+go run ./cmd/aspgen add ui wpf --framework wpf --theme wpfui --theme-mode light --project ./NorthwindOps
+
+# --- BillingLedger (es): event sourcing and an append-only ledger ---
+go run ./cmd/aspgen new BillingLedger --context Billing --arch es --database sqlite --output ./BillingLedger
+go run ./cmd/aspgen add aggregate Invoice number:string customer:string amount:decimal issuedOn:date --context Billing --project ./BillingLedger
+go run ./cmd/aspgen add aggregate CreditNote number:string customer:string amount:decimal issuedOn:date --context Billing --project ./BillingLedger
+go run ./cmd/aspgen add ui spa --framework spa --project ./BillingLedger
+
+# --- Section 10 UI-tour projects (blazor and mvc, each in its own solution) ---
+go run ./cmd/aspgen new SalesPortal --context Sales --arch cqrs -ui blazor --output ./SalesPortal
+go run ./cmd/aspgen add aggregate Order number:string customer:string total:decimal placedOn:date --context Sales --project ./SalesPortal
+go run ./cmd/aspgen new WarehouseOps --context Inventory --arch dm -ui mvc --output ./WarehouseOps
+go run ./cmd/aspgen add aggregate StockItem sku:string quantityOnHand:int reorderPoint:int --context Inventory --project ./WarehouseOps
+
+# --- Build and run every solution ---
+foreach ($p in "CatalogApi", "NorthwindOps", "BillingLedger", "SalesPortal", "WarehouseOps") {
+    Push-Location $p
+    dotnet restore
+    dotnet build "$p.sln"
+    Pop-Location
+}
+
+# Then, one at a time (each blocks the terminal until Ctrl+C):
+dotnet run --project .\CatalogApi\src\WebApi
+dotnet run --project .\NorthwindOps\src\WebApi
+dotnet run --project .\NorthwindOps\src\Desktop\NorthwindOps.Desktop.csproj
+dotnet run --project .\BillingLedger\src\WebApi
+dotnet run --project .\SalesPortal\src\SalesPortal.AppBlazor\SalesPortal.AppBlazor.csproj
+dotnet run --project .\WarehouseOps\src\WarehouseOps.WebMvc\WarehouseOps.WebMvc.csproj
+```
+
+Every `.sln` here already came with a `scripts\ci.ps1` — swap the `dotnet restore`/`build` pair above for `.\scripts\ci.ps1` (or `.\scripts\ci.ps1 -Publish`) in any of the five projects to get restore/build/test/publish in one call, matching what CI runs.
 
 ---
 
@@ -857,10 +942,10 @@ Every rendered file comes from an embedded Go `text/template` tree. Export, edit
 go run ./cmd/aspgen templates export ./my-templates
 go run ./cmd/aspgen templates list
 go run ./cmd/aspgen templates validate ./my-templates
-go run ./cmd/aspgen new MyApp --app webapi --templates ./my-templates
+go run ./cmd/aspgen new MyApp --context Catalog --arch ar --templates ./my-templates
 ```
 
-`--templates PATH` is also accepted by `new` in the context/arch engine. Validate a customized tree before pointing real generation at it — `templates validate` parses every template without rendering, catching syntax errors early.
+`--templates PATH` is accepted by both `new` and `add`. Validate a customized tree before pointing real generation at it — `templates validate` parses every template without rendering, catching syntax errors early.
 
 ---
 
@@ -872,7 +957,7 @@ Verification checklist before shipping a change built on aspgen-generated code (
 2. `templates validate` any custom template directory.
 3. `dotnet restore`/`build`/`test` the generated solution — `scripts\ci.ps1` does this in one call and mirrors what CI runs.
 4. Run generation twice against the same output and confirm no unwanted duplication (idempotency is a design goal, not an afterthought).
-5. Review project references match the intended dependency direction: Domain ← Application ← Infrastructure ← WebApi (and Desktop → Infrastructure/Application/Domain for `wpf --backend ddd`).
+5. Review project references match the intended dependency direction: DomainModel ← Application ← Infrastructure/Persistence ← WebApi (and Desktop → Application for `dm`-tier `-ui wpf`/`-ui mvc`).
 6. Confirm `.aspgen/manifest.json` accurately reflects every context/aggregate/entity/UI — future `add` commands trust it completely.
 7. For production, review `appsettings.json` connection strings yourself; aspgen never writes production secrets and never runs `dotnet ef` — migrations stay a manual, reviewed step.
 
@@ -880,67 +965,48 @@ Verification checklist before shipping a change built on aspgen-generated code (
 
 ## 15. Full flag reference
 
-### `aspgen new` — context/arch engine
+### `aspgen new`
 
 | Flag | Values | Notes |
 |---|---|---|
-| `--context CTX` | any name | Presence routes into the engine instead of `--app`/`--backend`. |
-| `--arch TIER` | `ar`, `dm`, `cqrs`, `es` | All four tiers implemented. |
+| `--context CTX` | any name | Required — the bounded context this project's first context belongs to. |
+| `--arch TIER` | `ar`, `dm`, `cqrs`, `es` | Required. All four tiers implemented. |
 | `-ui UI` | `wpf`, `blazor`, `spa`, `mvc` | See Section 10 for tier compatibility; omit for a headless project. |
 | `--database DB` | `sqlite` (default), `postgres` | `dm`-tier has no host to attach the provider to yet. |
+| `--theme wpfui` | flag | WPF-UI Fluent theme; requires `-ui wpf`. |
+| `--theme-mode MODE` | `light` (default), `dark` | Requires `--theme wpfui`. |
 | `--output PATH` | directory | Default: project name. |
 | `--templates PATH` | directory | Use a custom template set instead of the embedded one. |
 | `--no-tests` | flag | Skip `{Project}.UnitTests`/`{Project}.IntegrationTests`. |
 | `--dry-run` | flag | Print planned changes without writing files. |
 | `--force` | flag | Overwrite existing files. |
 
-### `aspgen new` — legacy `--app`/`--backend`
-
-| Flag | Values | Notes |
-|---|---|---|
-| `--app TARGET` | `webapi` (default), `wpf`, `blazor`, `fullstack` | |
-| `--simple` | flag | Rails-style Active Record CRUD; not with `--backend ddd`. |
-| `--backend ddd` | flag | Clean Architecture DDD/CQRS layers (`webapi`/`fullstack`, or `wpf` for local-only DDD). |
-| `--database DB` | `sqlite` (default), `postgres` | `webapi`/`fullstack`/`wpf+ddd` only. |
-| `--theme wpfui` | flag | WPF-UI Fluent theme (`wpf`/`fullstack` only). |
-| `--theme-mode MODE` | `light` (default), `dark` | Requires `--theme wpfui`. |
-| `--seed dummy [N]` | count, default 3 | Requires `--simple` or `--backend ddd`. |
-| `--script PATH` | file | SQL DDL to import entities/aggregates from; requires `--provider`. |
-| `--provider P` | `sqlite`, `postgres`, `sqlserver`, `mysql` | Required with `--script`. |
-| `--tables T` | `all` (default) or comma list | |
-| `--context CTX` | name | Required with `--script` on the `blazor` profile (tables become aggregates). |
-
 ### `aspgen add` — kinds
 
-| Kind | Usage | Profile |
+| Kind | Usage | Notes |
 |---|---|---|
-| `entity` | `add entity NAME prop:type... [--context CTX]` | Simple/legacy, or `ar`-tier engine context with `--context`. |
-| `entity-field` | `add entity-field NAME prop:type...` | Adds properties to an existing entity/aggregate, any profile. |
-| `module` | `add module NAME` | WPF Prism module; legacy `--app`/`--backend`, run `add ui` first. |
-| `database` | `add database NAME` | Register/switch the persistence provider. |
-| `service` | `add service NAME` | Application service; legacy non-simple `webapi`/`fullstack`. |
-| `feature` | `add feature NAME prop:type...` | Web API vertical-slice CRUD feature; legacy Clean Architecture profile. |
-| `ui` | `add ui --framework wpf\|blazor\|spa\|mvc` | Legacy: WPF onto a webapi project. Engine: attach to a `--context`/`--arch` project. |
-| `context` | `add context NAME [--arch TIER]` | Blazor/Renoir profile without `--arch`; engine context with `--arch`. |
-| `aggregate` | `add aggregate NAME prop:type... --context CTX [--no-crud]` | Blazor/Renoir profile, or `dm`+ engine context. |
-| `value-object` | `add value-object NAME prop:type... --context CTX` | Blazor/Renoir profile, or `dm`+ engine context. |
-| `domain-service` | `add domain-service NAME --context CTX` | Blazor/Renoir profile, or `dm`+ engine context. |
-| `repository` | `add repository NAME --aggregate AGG --context CTX` | Blazor/Renoir profile, or `dm`+ engine context (not `es`). |
-| `event` | `add event NAME prop:type... --context CTX` | Blazor/Renoir profile, or `dm`+ engine context. |
+| `entity` | `add entity NAME prop:type... --context CTX` | `ar`-tier context only. |
+| `entity-field` | `add entity-field NAME prop:type...` | Adds scalar properties to an existing entity/aggregate, any tier; does not patch UI screens or seed data. |
+| `ui` | `add ui --framework wpf\|blazor\|spa\|mvc` | Attach a UI to the project; see Section 10 for tier compatibility. |
+| `context` | `add context NAME [--arch TIER]` | Declares a bounded context; `--arch` can be supplied later on a repeat call. |
+| `aggregate` | `add aggregate NAME prop:type... --context CTX [--no-crud]` | `dm`+ tier context. |
+| `value-object` | `add value-object NAME prop:type... --context CTX` | `dm`+ tier context. |
+| `domain-service` | `add domain-service NAME --context CTX` | `dm`+ tier context. |
+| `repository` | `add repository NAME --aggregate AGG --context CTX` | `dm`+ tier context (not `es`, which already has an event-store repository). |
+| `event` | `add event NAME prop:type... --context CTX` | `dm`+ tier context. |
 
-Common `add` flags: `--project PATH` (default: search up from cwd for `.aspgen/manifest.json`), `--theme wpfui`/`--theme-mode MODE` (for `ui`/`module`), `--dry-run`, `--force`.
+Common `add` flags: `--project PATH` (default: search up from cwd for `.aspgen/manifest.json`), `--theme wpfui`/`--theme-mode MODE` (for `ui`), `--dry-run`, `--force`.
 
 ### `aspgen import-db`
 
 | Flag | Values | Notes |
 |---|---|---|
 | `--project PATH` | directory | Default: search up from cwd. |
-| `--script PATH` | file | SQL DDL to parse (mutually exclusive with `--connection`). |
-| `--connection STR` | connection string | Live introspection (mutually exclusive with `--script`). |
+| `--script PATH` | file | SQL DDL to parse. |
 | `--provider P` | `sqlite`, `postgres`, `sqlserver`, `mysql` | Required. |
 | `--tables T` | `all` (default) or comma list | |
+| `--context CTX` | name | Required — the bounded context every imported table becomes an `ar`-tier entity in. |
 | `--backend ddd` | flag | Override the project's own backend profile. |
-| `--context CTX` | name | Required for the Blazor/Renoir profile (tables → aggregates). |
 | `--dry-run` / `--force` | flag | Same semantics as `new`/`add`. |
 
 ### Property type syntax
@@ -965,6 +1031,6 @@ Common `add` flags: `--project PATH` (default: search up from cwd for `.aspgen/m
 
 ## 17. Next steps
 
-- Grow Northwind Trading incrementally: add `add aggregate ShipmentRoute ...` to Inventory, `add feature ApplyDiscount ...` under Sales, or a new `Returns` context at whichever tier its complexity actually earns.
+- Grow Northwind Trading incrementally: `add aggregate ShipmentRoute ...` under Inventory, `add aggregate Refund ...` under Sales, or a new `Returns` context at whichever tier its complexity actually earns.
 - Point `templates export` at a copy of the embedded set and adapt naming/status-code/validation conventions to your team's own standards before scaling this to a second real product.
 - Wire `scripts\ci.ps1` into your existing CI pipeline (`-Publish` on merge to main, plain restore/build/test on pull requests) so every generated context stays honestly buildable, not just generatable.
