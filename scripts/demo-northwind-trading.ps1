@@ -179,28 +179,39 @@ try {
             throw "-Run requires a built solution; drop -SkipDotnet."
         }
 
+        # Every generated host binds Kestrel's own default (http://localhost:5000) when
+        # nothing else says otherwise -- none of the generated projects ship a
+        # launchSettings.json or --urls override. Running more than one host at once
+        # without giving each its own port means only the first process to start
+        # actually binds; every other one throws "address already in use" and dies
+        # immediately after "Now listening on..." never prints. ApiUrl points
+        # HTTP-client apps (Desktop/AppBlazor) at their own backing WebApi's port via
+        # ASPGENT_API_URL, which those templates already read (default http://localhost:5000).
         $hosts = @(
-            @{ Label = "CatalogApi WebApi";        Project = Join-Path $catalogApi "src\WebApi" }
-            @{ Label = "NorthwindOps WebApi";       Project = Join-Path $northwindOps "src\WebApi" }
-            @{ Label = "NorthwindOps Desktop (WPF)"; Project = Join-Path $northwindOps "src\Desktop\NorthwindOps.Desktop.csproj" }
-            @{ Label = "BillingLedger WebApi";      Project = Join-Path $billingLedger "src\WebApi" }
-            @{ Label = "SalesPortal AppBlazor";     Project = Join-Path $salesPortal "src\SalesPortal.AppBlazor\SalesPortal.AppBlazor.csproj" }
-            @{ Label = "WarehouseOps WebMvc";       Project = Join-Path $warehouseOps "src\WarehouseOps.WebMvc\WarehouseOps.WebMvc.csproj" }
+            @{ Label = "CatalogApi WebApi";        Project = Join-Path $catalogApi "src\WebApi"; Url = "http://localhost:5000" }
+            @{ Label = "NorthwindOps WebApi";       Project = Join-Path $northwindOps "src\WebApi"; Url = "http://localhost:5010" }
+            @{ Label = "NorthwindOps Desktop (WPF)"; Project = Join-Path $northwindOps "src\Desktop\NorthwindOps.Desktop.csproj"; ApiUrl = "http://localhost:5010" }
+            @{ Label = "BillingLedger WebApi";      Project = Join-Path $billingLedger "src\WebApi"; Url = "http://localhost:5020" }
+            @{ Label = "SalesPortal WebApi";        Project = Join-Path $salesPortal "src\WebApi"; Url = "http://localhost:5030" }
+            @{ Label = "SalesPortal AppBlazor";     Project = Join-Path $salesPortal "src\SalesPortal.AppBlazor\SalesPortal.AppBlazor.csproj"; Url = "http://localhost:5031"; ApiUrl = "http://localhost:5030" }
+            @{ Label = "WarehouseOps WebMvc";       Project = Join-Path $warehouseOps "src\WarehouseOps.WebMvc\WarehouseOps.WebMvc.csproj"; Url = "http://localhost:5040" }
         )
 
         Write-Host ""
-        Write-Host "Launching every app in its own window (dotnet run) ..." -ForegroundColor Cyan
+        Write-Host "Launching every app in its own window (dotnet run), each on its own port ..." -ForegroundColor Cyan
         foreach ($h in $hosts) {
-            Write-Host "  - $($h.Label): $($h.Project)"
-            Start-Process powershell -ArgumentList @(
-                "-NoExit", "-Command",
-                "Write-Host '$($h.Label)' -ForegroundColor Cyan; dotnet run --project `"$($h.Project)`""
-            )
+            $portNote = if ($h.Url) { $h.Url } else { "in-process, no listener of its own" }
+            Write-Host "  - $($h.Label): $($h.Project) [$portNote]"
+            $command = "Write-Host '$($h.Label)' -ForegroundColor Cyan; "
+            if ($h.ApiUrl) { $command += "`$env:ASPGENT_API_URL = '$($h.ApiUrl)'; " }
+            $command += "dotnet run --project `"$($h.Project)`""
+            if ($h.Url) { $command += " --urls $($h.Url)" }
+            Start-Process powershell -ArgumentList @("-NoExit", "-Command", $command)
         }
 
         Write-Host ""
-        Write-Host "Six windows opened. NorthwindOps' WebApi/Desktop pair and CatalogApi/BillingLedger each need their WebApi host running before Invoke-RestMethod calls or the Desktop shell will work — give them a few seconds to start." -ForegroundColor Yellow
-        Write-Host "See doc/aspgen-enterprise-developer-guide.md Section 12 for the exact endpoints/routes to verify (health checks, /api/... routes, /scalar/v1, /sales/orders, /inventory/stock-item)." -ForegroundColor Yellow
+        Write-Host "Seven windows opened, each on its own port (see the list above) so no host fights another for port 5000 -- give them a few seconds to start before calling any endpoint." -ForegroundColor Yellow
+        Write-Host "See doc/aspgen-enterprise-developer-guide.md Section 12 for the exact endpoints/routes to verify (health checks, /api/... routes, /scalar/v1, /sales/orders, /inventory/stock-item) -- adjust the port in each URL to match the list above." -ForegroundColor Yellow
     }
     else {
         Write-Host "Pass -Run to launch every host/app in its own window, or see doc/aspgen-enterprise-developer-guide.md Section 12 to run them yourself." -ForegroundColor Yellow

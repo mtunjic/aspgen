@@ -927,14 +927,22 @@ foreach ($p in "CatalogApi", "NorthwindOps", "BillingLedger", "SalesPortal", "Wa
     Pop-Location
 }
 
-# Then, one at a time (each blocks the terminal until Ctrl+C):
-dotnet run --project .\CatalogApi\src\WebApi
-dotnet run --project .\NorthwindOps\src\WebApi
-dotnet run --project .\NorthwindOps\src\Desktop\NorthwindOps.Desktop.csproj
-dotnet run --project .\BillingLedger\src\WebApi
-dotnet run --project .\SalesPortal\src\SalesPortal.AppBlazor\SalesPortal.AppBlazor.csproj
-dotnet run --project .\WarehouseOps\src\WarehouseOps.WebMvc\WarehouseOps.WebMvc.csproj
+# Then, one in each of several terminals/windows, running concurrently (each blocks
+# its terminal until Ctrl+C). None of these generated hosts ship a launchSettings.json,
+# so every one of them binds Kestrel's own default (http://localhost:5000) unless told
+# otherwise -- give each host its own --urls, and point HTTP-client apps (Desktop,
+# AppBlazor) at their backend's port via ASPGENT_API_URL, or every host after the first
+# one you start will die on startup with "address already in use".
+dotnet run --project .\CatalogApi\src\WebApi --urls http://localhost:5000
+dotnet run --project .\NorthwindOps\src\WebApi --urls http://localhost:5010
+$env:ASPGENT_API_URL = "http://localhost:5010"; dotnet run --project .\NorthwindOps\src\Desktop\NorthwindOps.Desktop.csproj
+dotnet run --project .\BillingLedger\src\WebApi --urls http://localhost:5020
+dotnet run --project .\SalesPortal\src\WebApi --urls http://localhost:5030
+$env:ASPGENT_API_URL = "http://localhost:5030"; dotnet run --project .\SalesPortal\src\SalesPortal.AppBlazor\SalesPortal.AppBlazor.csproj
+dotnet run --project .\WarehouseOps\src\WarehouseOps.WebMvc\WarehouseOps.WebMvc.csproj --urls http://localhost:5040
 ```
+
+> **Callout — the Blazor UI needs its own WebApi running too.** `SalesPortal.AppBlazor` is a Blazor Server host that calls a separate `SalesPortal` WebApi over HTTP (Section 10) — it is not self-contained. Skipping the `SalesPortal\src\WebApi` line above (easy to do, since only one project folder is named `SalesPortal`) leaves every page's data load failing with a connection error even though `dotnet build` and `dotnet run` for AppBlazor itself both succeed.
 
 Every `.sln` here already came with a `scripts\ci.ps1` — swap the `dotnet restore`/`build` pair above for `.\scripts\ci.ps1` (or `.\scripts\ci.ps1 -Publish`) in any of the five projects to get restore/build/test/publish in one call, matching what CI runs.
 
@@ -1032,6 +1040,7 @@ Common `add` flags: `--project PATH` (default: search up from cwd for `.aspgen/m
 - **`go test -race` on generated Go tooling changes fails locally with "requires cgo"** — a local-machine toolchain gap, not a generator bug; CI runners have cgo enabled.
 - **`add context --arch es`/`add aggregate` fails with a missing type like `EventSourcedAggregate`, or `add context --arch ar` fails with "no owning .csproj found"** — you mixed a tier into a solution whose first context can't support it (see the Section 4 callout). Bootstrap that tier's context first instead, or give it its own solution: `dm` contexts are safe to add on top of a `cqrs`-first (or `dm`-first) project; `es` and `ar` contexts should each get their own solution.
 - **`dotnet restore` fails with NU1301 against a corporate NuGet feed** — restore explicitly from `nuget.org` (`dotnet restore <project> -s https://api.nuget.org/v3/index.json`), then `dotnet build` normally.
+- **A host builds fine but "dies" immediately after `dotnet run` starts it, right when running several Northwind Trading services at once (Section 12's full showcase, or `scripts\demo-northwind-trading.ps1 -Run`)** — none of the generated hosts (`WebApi`, `WebMvc`, `AppBlazor`) ship a `launchSettings.json`, so every one of them binds Kestrel's own default, `http://localhost:5000`, unless told otherwise. Start more than one at once without giving each its own port and only the first process to start actually binds — every later one throws "address already in use" and exits right after startup, which looks like a crash rather than a naming conflict. Fix: pass a distinct `--urls http://localhost:PORT` to each `dotnet run`, and set `ASPGENT_API_URL` before starting `Desktop`/`AppBlazor` client processes so they call their own backend's port instead of the hardcoded `http://localhost:5000` default — see the updated Section 12 script and `scripts\demo-northwind-trading.ps1` for the exact port assignments used.
 
 ---
 
