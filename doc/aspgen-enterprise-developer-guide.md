@@ -223,6 +223,57 @@ public static class ProductEndpoints
 
 Because Catalog has no attached UI screens, this is a real, callable REST API today: run the WebApi host and hit `/api/catalog/product/search?search=widget&page=1&pageSize=25`, or point OpenAPI/Scalar at it (`/openapi/v1.json`, `/scalar/v1`).
 
+### Seeding Catalog with real Northwind sample data
+
+The legacy `--app`/`--backend` workflow has a `--seed dummy` flag (Section 12), but it only generates generic, type-based placeholder values (`"Name sample 1"`, incrementing numbers) — and it isn't available on the context/arch engine at all yet. For a demo that actually looks like a wholesale distributor, hand-add a small idempotent seeding block at the `// aspgen:seed` marker `new`/`add entity` already left in `Program.cs`, using the real classic Northwind categories and products (the same public sample dataset Microsoft has shipped in Access/SQL Server tutorials for decades):
+
+```csharp
+// src/WebApi/Program.cs — add right after "// aspgen:seed"
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+    if (!db.Categorys.Any())
+    {
+        var categories = new[]
+        {
+            new Category { Name = "Beverages" },
+            new Category { Name = "Condiments" },
+            new Category { Name = "Confections" },
+            new Category { Name = "Dairy Products" },
+            new Category { Name = "Grains/Cereals" },
+            new Category { Name = "Meat/Poultry" },
+            new Category { Name = "Produce" },
+            new Category { Name = "Seafood" },
+        };
+        db.Categorys.AddRange(categories);
+        db.SaveChanges();
+
+        db.Products.AddRange(
+            new Product { Name = "Chai", Sku = "BEV-001", Price = 18.00m, Active = true, CategoryId = categories[0].Id },
+            new Product { Name = "Chang", Sku = "BEV-002", Price = 19.00m, Active = true, CategoryId = categories[0].Id },
+            new Product { Name = "Aniseed Syrup", Sku = "CON-001", Price = 10.00m, Active = true, CategoryId = categories[1].Id },
+            new Product { Name = "Chef Anton's Cajun Seasoning", Sku = "CON-002", Price = 22.00m, Active = true, CategoryId = categories[1].Id },
+            new Product { Name = "Pavlova", Sku = "SWT-001", Price = 17.45m, Active = true, CategoryId = categories[2].Id },
+            new Product { Name = "Teatime Chocolate Biscuits", Sku = "SWT-002", Price = 9.20m, Active = true, CategoryId = categories[2].Id },
+            new Product { Name = "Queso Cabrales", Sku = "DAI-001", Price = 21.00m, Active = true, CategoryId = categories[3].Id },
+            new Product { Name = "Mozzarella di Giovanni", Sku = "DAI-002", Price = 34.80m, Active = true, CategoryId = categories[3].Id },
+            new Product { Name = "Gustaf's Knackebrod", Sku = "GRN-001", Price = 21.00m, Active = true, CategoryId = categories[4].Id },
+            new Product { Name = "Tunnbrod", Sku = "GRN-002", Price = 9.00m, Active = true, CategoryId = categories[4].Id },
+            new Product { Name = "Mishi Kobe Niku", Sku = "MEA-001", Price = 97.00m, Active = true, CategoryId = categories[5].Id },
+            new Product { Name = "Alice Mutton", Sku = "MEA-002", Price = 39.00m, Active = true, CategoryId = categories[5].Id },
+            new Product { Name = "Uncle Bob's Organic Dried Pears", Sku = "PRD-001", Price = 30.00m, Active = true, CategoryId = categories[6].Id },
+            new Product { Name = "Tofu", Sku = "PRD-002", Price = 23.25m, Active = true, CategoryId = categories[6].Id },
+            new Product { Name = "Ikura", Sku = "SEA-001", Price = 31.00m, Active = true, CategoryId = categories[7].Id },
+            new Product { Name = "Konbu", Sku = "SEA-002", Price = 6.00m, Active = true, CategoryId = categories[7].Id }
+        );
+        db.SaveChanges();
+    }
+}
+```
+
+Add `using CatalogApi.WebApi.Models.Catalog;` alongside the existing `using` block so `Category`/`Product` resolve. Verified end to end: `dotnet run` then `GET /api/catalog/product` returns all 16 products with the right category IDs and prices — e.g. `{ "name": "Chai", "sku": "BEV-001", "price": 18.0, "categoryId": 1 }`. `EnsureCreated()` is a demo convenience (no EF migrations required); switch to `dotnet ef database update` once the schema needs to evolve, since `EnsureCreated()` and migrations don't mix.
+
 ### Importing Catalog from an existing database
 
 If Catalog already exists as a legacy database, skip hand-typed properties entirely:

@@ -307,6 +307,52 @@ public static class ProductEndpoints
 }
 </code></pre>
 <p>Because Catalog has no attached UI screens, this is a real, callable REST API today: run the WebApi host and hit <code>/api/catalog/product/search?search=widget&amp;page=1&amp;pageSize=25</code>, or point OpenAPI/Scalar at it (<code>/openapi/v1.json</code>, <code>/scalar/v1</code>).</p>
+<h3 id="seeding-catalog-with-real-northwind-sample-data">Seeding Catalog with real Northwind sample data</h3>
+<p>The legacy <code>--app</code>/<code>--backend</code> workflow has a <code>--seed dummy</code> flag (Section 12), but it only generates generic, type-based placeholder values (<code>"Name sample 1"</code>, incrementing numbers) — and it isn't available on the context/arch engine at all yet. For a demo that actually looks like a wholesale distributor, hand-add a small idempotent seeding block at the <code>// aspgen:seed</code> marker <code>new</code>/<code>add entity</code> already left in <code>Program.cs</code>, using the real classic Northwind categories and products (the same public sample dataset Microsoft has shipped in Access/SQL Server tutorials for decades):</p>
+<pre><code class="language-csharp">// src/WebApi/Program.cs — add right after &quot;// aspgen:seed&quot;
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService&lt;AppDbContext&gt;();
+    db.Database.EnsureCreated();
+    if (!db.Categorys.Any())
+    {
+        var categories = new[]
+        {
+            new Category { Name = &quot;Beverages&quot; },
+            new Category { Name = &quot;Condiments&quot; },
+            new Category { Name = &quot;Confections&quot; },
+            new Category { Name = &quot;Dairy Products&quot; },
+            new Category { Name = &quot;Grains/Cereals&quot; },
+            new Category { Name = &quot;Meat/Poultry&quot; },
+            new Category { Name = &quot;Produce&quot; },
+            new Category { Name = &quot;Seafood&quot; },
+        };
+        db.Categorys.AddRange(categories);
+        db.SaveChanges();
+
+        db.Products.AddRange(
+            new Product { Name = &quot;Chai&quot;, Sku = &quot;BEV-001&quot;, Price = 18.00m, Active = true, CategoryId = categories[0].Id },
+            new Product { Name = &quot;Chang&quot;, Sku = &quot;BEV-002&quot;, Price = 19.00m, Active = true, CategoryId = categories[0].Id },
+            new Product { Name = &quot;Aniseed Syrup&quot;, Sku = &quot;CON-001&quot;, Price = 10.00m, Active = true, CategoryId = categories[1].Id },
+            new Product { Name = &quot;Chef Anton's Cajun Seasoning&quot;, Sku = &quot;CON-002&quot;, Price = 22.00m, Active = true, CategoryId = categories[1].Id },
+            new Product { Name = &quot;Pavlova&quot;, Sku = &quot;SWT-001&quot;, Price = 17.45m, Active = true, CategoryId = categories[2].Id },
+            new Product { Name = &quot;Teatime Chocolate Biscuits&quot;, Sku = &quot;SWT-002&quot;, Price = 9.20m, Active = true, CategoryId = categories[2].Id },
+            new Product { Name = &quot;Queso Cabrales&quot;, Sku = &quot;DAI-001&quot;, Price = 21.00m, Active = true, CategoryId = categories[3].Id },
+            new Product { Name = &quot;Mozzarella di Giovanni&quot;, Sku = &quot;DAI-002&quot;, Price = 34.80m, Active = true, CategoryId = categories[3].Id },
+            new Product { Name = &quot;Gustaf's Knackebrod&quot;, Sku = &quot;GRN-001&quot;, Price = 21.00m, Active = true, CategoryId = categories[4].Id },
+            new Product { Name = &quot;Tunnbrod&quot;, Sku = &quot;GRN-002&quot;, Price = 9.00m, Active = true, CategoryId = categories[4].Id },
+            new Product { Name = &quot;Mishi Kobe Niku&quot;, Sku = &quot;MEA-001&quot;, Price = 97.00m, Active = true, CategoryId = categories[5].Id },
+            new Product { Name = &quot;Alice Mutton&quot;, Sku = &quot;MEA-002&quot;, Price = 39.00m, Active = true, CategoryId = categories[5].Id },
+            new Product { Name = &quot;Uncle Bob's Organic Dried Pears&quot;, Sku = &quot;PRD-001&quot;, Price = 30.00m, Active = true, CategoryId = categories[6].Id },
+            new Product { Name = &quot;Tofu&quot;, Sku = &quot;PRD-002&quot;, Price = 23.25m, Active = true, CategoryId = categories[6].Id },
+            new Product { Name = &quot;Ikura&quot;, Sku = &quot;SEA-001&quot;, Price = 31.00m, Active = true, CategoryId = categories[7].Id },
+            new Product { Name = &quot;Konbu&quot;, Sku = &quot;SEA-002&quot;, Price = 6.00m, Active = true, CategoryId = categories[7].Id }
+        );
+        db.SaveChanges();
+    }
+}
+</code></pre>
+<p>Add <code>using CatalogApi.WebApi.Models.Catalog;</code> alongside the existing <code>using</code> block so <code>Category</code>/<code>Product</code> resolve. Verified end to end: <code>dotnet run</code> then <code>GET /api/catalog/product</code> returns all 16 products with the right category IDs and prices — e.g. <code>{ "name": "Chai", "sku": "BEV-001", "price": 18.0, "categoryId": 1 }</code>. <code>EnsureCreated()</code> is a demo convenience (no EF migrations required); switch to <code>dotnet ef database update</code> once the schema needs to evolve, since <code>EnsureCreated()</code> and migrations don't mix.</p>
 <h3 id="importing-catalog-from-an-existing-database">Importing Catalog from an existing database</h3>
 <p>If Catalog already exists as a legacy database, skip hand-typed properties entirely:</p>
 <pre><code class="language-powershell">go run ./cmd/aspgen import-db --project ./CatalogApi `
