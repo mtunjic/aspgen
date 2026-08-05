@@ -133,8 +133,20 @@ func TestSeedCountOptions(t *testing.T) {
 }
 
 func TestAggregateRejectsReservedIdentityProperty(t *testing.T) {
-	if err := rejectAggregateReservedProperties([]Property{{Name: "Id"}}); err == nil {
+	if err := rejectAggregateReservedProperties([]Property{{Name: "Id"}}, ""); err == nil {
 		t.Fatal("expected aggregate identity property to be reserved")
+	}
+}
+
+func TestAggregateRejectsESReservedProperties(t *testing.T) {
+	if err := rejectAggregateReservedProperties([]Property{{Name: "Version"}}, "es"); err == nil {
+		t.Fatal("expected es-tier aggregate Version property to be reserved")
+	}
+	if err := rejectAggregateReservedProperties([]Property{{Name: "Deleted"}}, "es"); err == nil {
+		t.Fatal("expected es-tier aggregate Deleted property to be reserved")
+	}
+	if err := rejectAggregateReservedProperties([]Property{{Name: "Version"}}, "dm"); err != nil {
+		t.Fatalf("Version should not be reserved outside es tier: %v", err)
 	}
 }
 

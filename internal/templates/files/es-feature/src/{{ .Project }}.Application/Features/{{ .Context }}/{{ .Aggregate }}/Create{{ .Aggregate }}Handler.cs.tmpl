@@ -1,0 +1,20 @@
+using FluentValidation;
+using {{ .Project }}.DomainModel.{{ .Context }};
+
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed class Create{{ .Aggregate }}Handler({{ .Aggregate }}EventStoreRepository repository, IValidator<{{ .Aggregate }}Request> validator)
+    : IHandler<Create{{ .Aggregate }}Command, {{ .Aggregate }}View>
+{
+    public async Task<Result<{{ .Aggregate }}View>> HandleAsync(Create{{ .Aggregate }}Command request, CancellationToken cancellationToken = default)
+    {
+        var requestModel = new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        await validator.ValidateAndThrowAsync(requestModel, cancellationToken);
+        var aggregate = {{ .Project }}.DomainModel.{{ .Context }}.{{ .Aggregate }}.Create(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        await repository.SaveAsync(aggregate, cancellationToken);
+        return Result<{{ .Aggregate }}View>.Success(new {{ .Aggregate }}View(aggregate.Id,
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} aggregate.{{ $property.Name }}{{ end }}));
+    }
+}

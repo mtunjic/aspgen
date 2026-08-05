@@ -1,0 +1,14 @@
+namespace {{ .Project }}.WebApi.Models.{{ .Context }};
+
+public sealed class {{ .Name }}
+{
+    public long Id { get; set; }
+{{- range .Properties }}
+    public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
+{{- end }}
+{{- range .Relations }}
+    [System.Text.Json.Serialization.JsonIgnore]
+    public {{ .Target }}? {{ .Name }} { get; set; }
+{{- end }}
+    // aspgen:navigation
+}

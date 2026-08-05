@@ -1,0 +1,30 @@
+using Microsoft.EntityFrameworkCore;
+{{- if eq .Arch "ar" }}
+using {{ .Project }}.WebApi.Data;
+{{- else }}
+using {{ .Project }}.Persistence;
+{{- end }}
+using Xunit;
+
+namespace {{ .Project }}.UnitTests;
+
+public class DatabaseSmokeTests
+{
+    [Fact]
+    public void CanCreateDatabaseAndApplySchema()
+    {
+{{- if eq .Arch "ar" }}
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        using var database = new AppDbContext(options);
+{{- else }}
+        var options = new DbContextOptionsBuilder<{{ .Project }}Database>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        using var database = new {{ .Project }}Database(options);
+{{- end }}
+
+        Assert.True(database.Database.EnsureCreated());
+    }
+}

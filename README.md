@@ -21,6 +21,67 @@ Run `aspgen --help`, `aspgen new --help`, or `aspgen add --help` for a full flag
 
 See [doc/DEVOPS.md](doc/DEVOPS.md) for how CI and tagged releases work.
 
+## Context/arch engine (recommended)
+
+The recommended way to start a new backend is `--context`/`--arch`, not `--app`/`--backend`/`--simple` (see "Legacy `--app`/`--backend` workflow" below for the older, still-supported path). Each bounded context picks its own architecture tier independently, so one solution can mix e.g. a simple `ar` context alongside an event-sourced `es` context:
+
+```text
+go run ./cmd/aspgen new Accounting --context Billing --arch ar --output ./Accounting
+go run ./cmd/aspgen new Accounting --context Billing --arch dm --output ./Accounting
+go run ./cmd/aspgen new Billing --context Sales --arch cqrs --output ./Billing
+go run ./cmd/aspgen new Billing --context Sales --arch es --output ./Billing
+go run ./cmd/aspgen add context Catalog --arch dm --project ./Accounting
+```
+
+The tiers form an ordinal ladder, each a superset of the previous tier's concepts:
+
+```text
+ar    Active Record: flat entity, direct DbContext CRUD.
+dm    Domain Model: aggregate root + value objects + domain services + repository + events,
+      synchronous Application-layer CRUD service. No host project (class libraries only).
+cqrs  dm's Domain layer + vertical-slice Application (Command/Query/Handler/Validator per
+      verb) + a WebApi Minimal API host.
+es    cqrs tier + an append-only event store, event-sourced aggregates (rehydrated by
+      replaying events), and read-model projections.
+```
+
+`ar` and `dm` contexts use `add entity`/`add aggregate` respectively; `dm`, `cqrs`, and `es` contexts all support `add aggregate`/`add value-object`/`add domain-service`/`add repository`/`add event` (`add repository` is rejected for `es`-tier aggregates, which already have a generated event-store repository):
+
+```text
+go run ./cmd/aspgen add entity Product name:string price:decimal --context Catalog --project ./Accounting
+go run ./cmd/aspgen add aggregate Order number:string total:decimal --context Sales --project ./Billing
+go run ./cmd/aspgen add repository OrderRepository --aggregate Order --context Sales --project ./Billing
+```
+
+A UI attaches to the whole project (one UI surfaces every context), via `-ui` on `new` or `add ui --framework` afterward. Only `spa` is currently implemented, and only for `cqrs`/`es`-tier contexts (which have a WebApi host); it wires OpenAPI/Scalar discovery and a permissive local-dev CORS policy onto the host, without scaffolding an actual frontend project:
+
+```text
+go run ./cmd/aspgen new Billing --context Sales --arch cqrs -ui spa --output ./Billing
+go run ./cmd/aspgen add ui spa --framework spa --project ./Billing
+```
+
+`--database sqlite|postgres` works unchanged under this engine (`dm`-tier projects are class libraries with no host attaching the provider yet). Run `aspgen new --help`/`aspgen add --help` for the full context/arch flag and kind reference.
+
+Every `new --context/--arch` project also generates `tests\{Project}.UnitTests` (a DbContext smoke test against an in-memory provider) and, for `ar`/`cqrs`/`es` (any tier with a WebApi host), `tests\{Project}.IntegrationTests` (a `WebApplicationFactory<Program>` smoke test hitting the root endpoint); `dm` is headless so it only gets `UnitTests`. Pass `--no-tests` to skip generating these:
+
+```text
+go run ./cmd/aspgen new Accounting --context Billing --arch cqrs --no-tests --output ./Accounting
+```
+
+Every `new --context/--arch` project also generates `scripts\ci.ps1`, a local CI/production build
+driver (restore, build, test, and optionally publish the WebApi host) — see the generated
+project's README for usage:
+
+```powershell
+.\scripts\ci.ps1              # restore, build, test
+.\scripts\ci.ps1 -Publish     # ...and publish the WebApi host (skipped for headless dm-tier)
+.\scripts\ci.ps1 -SkipTests -Configuration Debug
+```
+
+## Legacy `--app`/`--backend` workflow
+
+The sections below describe the original `--app webapi|wpf|blazor|fullstack` + `--backend ddd`/`--simple`/`--theme` workflow. It remains fully supported (no behavior changes), but is no longer the recommended starting point for new projects — prefer `--context`/`--arch` above.
+
 For a WPF or fullstack project, add the WPF-UI Fluent theme with `--theme wpfui` (also accepted as `--theme:wpfui` or `-theme:wpfui`). This adds the `WPF-UI` NuGet package, theme resource dictionaries, and a themed `FluentWindow` shell. The generated app defaults to the Light palette; pass `--theme-mode dark` to generate the Dark palette instead (both are just the starting `ThemesDictionary` value — the shell also ships a runtime Light/Dark toggle).
 
 For a Web API or fullstack project, use `--backend ddd` (or `--backend:ddd`) to enable incremental DDD CRUD generation. Adding an entity then creates its Domain entity, repository contract, EF Core repository, separate CQRS commands/queries and handlers, FluentValidation validators, and Minimal API endpoints for list, get, create, update, and delete.

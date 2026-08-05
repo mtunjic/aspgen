@@ -123,6 +123,48 @@ func databaseOption(args []string) (string, error) {
 	return validateDatabase(v)
 }
 
+func contextOption(args []string) (string, error) {
+	v, _, err := matchOption(args, "--context")
+	return v, err
+}
+
+func archOption(args []string) (string, error) {
+	v, ok, err := matchOption(args, "--arch")
+	if err != nil || !ok {
+		return "", err
+	}
+	return validateArch(v)
+}
+
+func validateArch(arch string) (string, error) {
+	if arch == "" {
+		return "", nil
+	}
+	if archIndex(arch) < 0 {
+		return "", fmt.Errorf("unsupported arch tier %q; use ar, dm, cqrs, or es", arch)
+	}
+	return arch, nil
+}
+
+func uiOption(args []string) (string, error) {
+	v, ok, err := matchOption(args, "--ui")
+	if err != nil || !ok {
+		return "", err
+	}
+	return validateUI(v)
+}
+
+func validateUI(ui string) (string, error) {
+	if ui == "" || ui == "none" {
+		return "", nil
+	}
+	switch ui {
+	case "wpf", "blazor", "spa":
+		return ui, nil
+	}
+	return "", fmt.Errorf("unsupported ui %q; use wpf, blazor, spa, or none", ui)
+}
+
 func providerOption(args []string) (string, error) {
 	v, ok, err := matchOption(args, "--provider")
 	if err != nil || !ok {

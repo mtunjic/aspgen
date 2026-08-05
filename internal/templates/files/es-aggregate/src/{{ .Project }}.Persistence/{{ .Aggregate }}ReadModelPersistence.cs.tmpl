@@ -1,0 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+
+namespace {{ .Project }}.Persistence;
+
+public partial class {{ .Project }}Database
+{
+    public DbSet<{{ .Aggregate }}ReadModel> {{ .Aggregate }}ReadModels => Set<{{ .Aggregate }}ReadModel>();
+}

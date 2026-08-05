@@ -1,0 +1,45 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.DomainModel;
+using {{ .Project }}.Persistence;
+
+namespace {{ .Project }}.Application;
+
+// Append-only event store shared by every aggregate's
+// {Aggregate}EventStoreRepository. Optimistic concurrency is enforced via
+// expectedVersion; event versioning/schema evolution and snapshotting are
+// deliberately out of scope for this generated scaffold.
+public sealed class EventStore({{ .Project }}Database database)
+{
+    public async Task AppendAsync(string aggregateType, long aggregateId, int expectedVersion, IReadOnlyList<object> events, CancellationToken cancellationToken = default)
+    {
+        if (events.Count == 0) return;
+        var currentVersion = await database.EventStoreRecords
+            .Where(x => x.AggregateType == aggregateType && x.AggregateId == aggregateId)
+            .Select(x => (int?)x.Version).MaxAsync(cancellationToken) ?? 0;
+        if (currentVersion != expectedVersion)
+            throw new DomainException($"Concurrency conflict appending to {aggregateType} #{aggregateId}: expected version {expectedVersion}, found {currentVersion}.");
+
+        var version = expectedVersion;
+        foreach (var domainEvent in events)
+        {
+            version++;
+            database.EventStoreRecords.Add(new EventStoreRecord
+            {
+                AggregateType = aggregateType,
+                AggregateId = aggregateId,
+                Version = version,
+                EventType = domainEvent.GetType().Name,
+                PayloadJson = JsonSerializer.Serialize(domainEvent, domainEvent.GetType()),
+                OccurredAt = DateTime.UtcNow,
+            });
+        }
+        await database.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<EventStoreRecord>> LoadAsync(string aggregateType, long aggregateId, CancellationToken cancellationToken = default) =>
+        await database.EventStoreRecords
+            .Where(x => x.AggregateType == aggregateType && x.AggregateId == aggregateId)
+            .OrderBy(x => x.Version)
+            .ToListAsync(cancellationToken);
+}

@@ -7,6 +7,19 @@ import (
 )
 
 func addEntityCmd(r addRequest, m *Manifest, d *data) error {
+	contextName, err := contextOption(r.Args)
+	if err != nil {
+		return err
+	}
+	if contextName != "" {
+		ctx, ok := findContext(m.Contexts, contextName)
+		if !ok {
+			return fmt.Errorf("bounded context %q does not exist; add it first", contextName)
+		}
+		if ctx.Arch != "" {
+			return addContextEntityCmd(r, m, ctx, d)
+		}
+	}
 	if !validIdentifier(r.Name) {
 		return fmt.Errorf("invalid entity name %q", r.Name)
 	}

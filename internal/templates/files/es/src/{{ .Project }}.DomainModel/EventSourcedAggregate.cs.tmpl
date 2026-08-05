@@ -1,0 +1,36 @@
+namespace {{ .Project }}.DomainModel;
+
+// Base for aggregates whose state is derived entirely by replaying domain
+// events (see the generated {Aggregate}.LoadFromHistory), not by direct
+// property mutation.
+public abstract class EventSourcedAggregate
+{
+    private readonly List<object> uncommittedEvents = new();
+
+    public long Id { get; protected set; }
+    public int Version { get; private set; }
+    public bool Deleted { get; protected set; }
+
+    protected void Raise(object domainEvent)
+    {
+        Apply(domainEvent);
+        uncommittedEvents.Add(domainEvent);
+        Version++;
+    }
+
+    // Replays a historic event without re-queuing it for persistence.
+    protected void ApplyHistoric(object domainEvent)
+    {
+        Apply(domainEvent);
+        Version++;
+    }
+
+    protected abstract void Apply(object domainEvent);
+
+    public IReadOnlyList<object> DequeueUncommittedEvents()
+    {
+        var events = uncommittedEvents.ToList();
+        uncommittedEvents.Clear();
+        return events;
+    }
+}

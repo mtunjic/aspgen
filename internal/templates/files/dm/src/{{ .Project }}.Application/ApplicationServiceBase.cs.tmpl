@@ -1,0 +1,8 @@
+using {{ .Project }}.Application.Settings;
+
+namespace {{ .Project }}.Application;
+
+public class ApplicationServiceBase(AppSettings settings)
+{
+    protected AppSettings Settings { get; } = settings;
+}

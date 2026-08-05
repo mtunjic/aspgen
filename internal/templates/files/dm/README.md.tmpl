@@ -1,0 +1,33 @@
+# {{ .Project }}
+
+Headless domain-model (dm-tier) project generated with aspgen's --context/--arch
+engine. Aggregates, value objects, domain services, repositories, and events
+live in these class libraries; no UI/host is attached yet (`aspgen add ui` is
+not implemented yet).
+
+Layers: DomainModel, Application, Infrastructure, Persistence, Resources.
+
+## Build
+
+From the generated project root:
+
+```powershell
+dotnet restore .\{{ .Project }}.sln
+dotnet build .\{{ .Project }}.sln
+```
+
+## CI / production build
+
+`.\scripts\ci.ps1` runs restore, build, and test in one step (skip tests with
+`-SkipTests`, override configuration with `-Configuration Debug`):
+
+```powershell
+.\scripts\ci.ps1
+```
+
+Add aggregates to the initial bounded context, or add another context:
+
+```powershell
+aspgen add aggregate Product name:string price:decimal active:bool --context {{ .Namespace }} --project .
+aspgen add context Billing --arch dm --project .
+```

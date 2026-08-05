@@ -1,0 +1,34 @@
+using Microsoft.EntityFrameworkCore;
+
+namespace {{ .Project }}.Persistence;
+
+public partial class {{ .Project }}Database(DbContextOptions<{{ .Project }}Database> options) : DbContext(options)
+{
+    public DbSet<EventStoreRecord> EventStoreRecords => Set<EventStoreRecord>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EventStoreRecord>(x =>
+        {
+            x.HasKey(r => r.Id);
+            x.HasIndex(r => new { r.AggregateType, r.AggregateId, r.Version }).IsUnique();
+            x.Property(r => r.AggregateType).HasMaxLength(200);
+            x.Property(r => r.EventType).HasMaxLength(200);
+        });
+        // Per-aggregate read-model mapping lives in IEntityTypeConfiguration classes discovered by assembly scan.
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof({{ .Project }}Database).Assembly);
+    }
+}
+
+// Append-only event record. PayloadJson is deserialized by each aggregate's
+// {Aggregate}EventStoreRepository, which knows its own concrete event types.
+public sealed class EventStoreRecord
+{
+    public long Id { get; set; }
+    public string AggregateType { get; set; } = default!;
+    public long AggregateId { get; set; }
+    public int Version { get; set; }
+    public string EventType { get; set; } = default!;
+    public string PayloadJson { get; set; } = default!;
+    public DateTime OccurredAt { get; set; }
+}

@@ -1,0 +1,12 @@
+namespace {{ .Project }}.Persistence;
+
+// Read model projected from {{ .Aggregate }}'s events; kept in sync by
+// {{ .Aggregate }}EventStoreRepository.SaveAsync in the same unit of work as
+// each event append, so queries never observe a stale projection.
+public sealed class {{ .Aggregate }}ReadModel
+{
+    public long Id { get; set; }
+{{- range .Properties }}
+    public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
+{{- end }}
+}

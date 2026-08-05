@@ -1,0 +1,7 @@
+namespace {{ .Project }}.Application;
+
+public sealed record {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});
+
+public sealed record {{ .Aggregate }}View(
+    long Id{{ range .Properties }}, {{ .CSharpType }} {{ .Name }}{{ end }});

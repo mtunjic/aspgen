@@ -1,0 +1,51 @@
+# {{ .Project }}
+
+ES-tier project generated with aspgen's --context/--arch engine. Aggregates
+are event-sourced: state is derived entirely by replaying domain events from
+an append-only event store, and queries read from a synchronously-maintained
+projection (read model) instead of the aggregate's own table.
+
+Layers: DomainModel, Application, Infrastructure, Persistence, Resources, WebApi.
+
+## Build
+
+From the generated project root:
+
+```powershell
+dotnet restore .\{{ .Project }}.sln
+dotnet build .\{{ .Project }}.sln
+```
+
+## Run
+
+```powershell
+dotnet run --project src\WebApi
+```
+
+## CI / production build
+
+`.\scripts\ci.ps1` runs restore, build, and test in one step, and can publish
+the WebApi host with `-Publish` (skip tests with `-SkipTests`, override
+configuration with `-Configuration Debug`):
+
+```powershell
+.\scripts\ci.ps1 -Publish
+```
+
+Add aggregates to the initial bounded context, or add another context:
+
+```powershell
+aspgen add aggregate Product name:string price:decimal active:bool --context {{ .Namespace }} --project .
+aspgen add context Billing --arch es --project .
+```
+
+Each aggregate gets: a `{Aggregate}CreatedEvent`/`UpdatedEvent`/`DeletedEvent`
+trio, an event-sourced aggregate class (`{Aggregate}.LoadFromHistory`,
+`Create`/`Update`/`Delete` raising events), a `{Aggregate}EventStoreRepository`
+(load by replay, save by appending + projecting), vertical-slice
+Command/Query/Handler records, a `{Aggregate}ReadModel` projection table, and
+Minimal API endpoints mounted at `/api/{context}/{aggregate}` in
+`src/WebApi/Program.cs`.
+
+Event versioning/schema evolution and snapshotting are out of scope for the
+generated scaffold; add them by hand as the event store grows.

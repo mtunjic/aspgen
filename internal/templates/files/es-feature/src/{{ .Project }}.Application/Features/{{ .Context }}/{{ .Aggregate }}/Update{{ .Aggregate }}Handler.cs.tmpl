@@ -1,0 +1,21 @@
+using FluentValidation;
+
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed class Update{{ .Aggregate }}Handler({{ .Aggregate }}EventStoreRepository repository, IValidator<{{ .Aggregate }}Request> validator)
+    : IHandler<Update{{ .Aggregate }}Command, bool>
+{
+    public async Task<Result<bool>> HandleAsync(Update{{ .Aggregate }}Command request, CancellationToken cancellationToken = default)
+    {
+        var aggregate = await repository.LoadAsync(request.Id, cancellationToken);
+        if (aggregate is null || aggregate.Deleted)
+            return Result<bool>.Failure(new Error("not_found", "{{ .Aggregate }} was not found."));
+        var requestModel = new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        await validator.ValidateAndThrowAsync(requestModel, cancellationToken);
+        aggregate.Update(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
+        await repository.SaveAsync(aggregate, cancellationToken);
+        return Result<bool>.Success(true);
+    }
+}

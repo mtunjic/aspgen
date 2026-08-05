@@ -1,0 +1,15 @@
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed class Delete{{ .Aggregate }}Handler({{ .Aggregate }}EventStoreRepository repository)
+    : IHandler<Delete{{ .Aggregate }}Command, bool>
+{
+    public async Task<Result<bool>> HandleAsync(Delete{{ .Aggregate }}Command request, CancellationToken cancellationToken = default)
+    {
+        var aggregate = await repository.LoadAsync(request.Id, cancellationToken);
+        if (aggregate is null || aggregate.Deleted)
+            return Result<bool>.Failure(new Error("not_found", "{{ .Aggregate }} was not found."));
+        aggregate.Delete();
+        await repository.SaveAsync(aggregate, cancellationToken);
+        return Result<bool>.Success(true);
+    }
+}

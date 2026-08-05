@@ -1,0 +1,62 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.DomainModel;
+using {{ .Project }}.DomainModel.{{ .Context }};
+using {{ .Project }}.Persistence;
+
+namespace {{ .Project }}.Application;
+
+// Loads {{ .Aggregate }} by replaying its event stream and saves it by
+// appending newly-raised events, then synchronously updating the
+// {{ .Aggregate }}ReadModel projection so queries see the change immediately.
+public sealed class {{ .Aggregate }}EventStoreRepository(EventStore eventStore, {{ .Project }}Database database)
+{
+    public async Task<{{ .Aggregate }}?> LoadAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var records = await eventStore.LoadAsync(nameof({{ .Aggregate }}), id, cancellationToken);
+        return records.Count == 0 ? null : {{ .Aggregate }}.LoadFromHistory(id, records.Select(DeserializeEvent));
+    }
+
+    public async Task SaveAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default)
+    {
+        var newEvents = aggregate.DequeueUncommittedEvents();
+        if (newEvents.Count == 0) return;
+        var expectedVersion = aggregate.Version - newEvents.Count;
+        await eventStore.AppendAsync(nameof({{ .Aggregate }}), aggregate.Id, expectedVersion, newEvents, cancellationToken);
+        await ProjectAsync(aggregate, cancellationToken);
+    }
+
+    private async Task ProjectAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken)
+    {
+        var readModel = await database.{{ .Aggregate }}ReadModels.FirstOrDefaultAsync(x => x.Id == aggregate.Id, cancellationToken);
+        if (aggregate.Deleted)
+        {
+            if (readModel is not null) database.{{ .Aggregate }}ReadModels.Remove(readModel);
+        }
+        else if (readModel is null)
+        {
+            database.{{ .Aggregate }}ReadModels.Add(new {{ .Aggregate }}ReadModel
+            {
+                Id = aggregate.Id,
+{{- range .Properties }}
+                {{ .Name }} = aggregate.{{ .Name }},
+{{- end }}
+            });
+        }
+        else
+        {
+{{- range .Properties }}
+            readModel.{{ .Name }} = aggregate.{{ .Name }};
+{{- end }}
+        }
+        await database.SaveChangesAsync(cancellationToken);
+    }
+
+    private static object DeserializeEvent(EventStoreRecord record) => record.EventType switch
+    {
+        nameof({{ .Aggregate }}CreatedEvent) => System.Text.Json.JsonSerializer.Deserialize<{{ .Aggregate }}CreatedEvent>(record.PayloadJson)!,
+        nameof({{ .Aggregate }}UpdatedEvent) => System.Text.Json.JsonSerializer.Deserialize<{{ .Aggregate }}UpdatedEvent>(record.PayloadJson)!,
+        nameof({{ .Aggregate }}DeletedEvent) => System.Text.Json.JsonSerializer.Deserialize<{{ .Aggregate }}DeletedEvent>(record.PayloadJson)!,
+        // aspgen:events
+        _ => throw new DomainException($"Unknown event type '{record.EventType}' for {{ .Aggregate }} #{record.AggregateId}."),
+    };
+}

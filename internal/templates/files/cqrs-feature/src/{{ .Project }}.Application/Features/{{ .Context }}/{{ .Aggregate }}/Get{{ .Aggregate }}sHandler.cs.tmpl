@@ -1,0 +1,11 @@
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed class Get{{ .Aggregate }}sHandler({{ .Aggregate }}CrudService service)
+    : IHandler<Get{{ .Aggregate }}sQuery, IReadOnlyList<{{ .Aggregate }}View>>
+{
+    public async Task<Result<IReadOnlyList<{{ .Aggregate }}View>>> HandleAsync(Get{{ .Aggregate }}sQuery request, CancellationToken cancellationToken = default)
+    {
+        var items = await service.GetAllAsync(cancellationToken);
+        return Result<IReadOnlyList<{{ .Aggregate }}View>>.Success(items);
+    }
+}

@@ -15,6 +15,16 @@ func newProject(args []string) error {
 		return nil
 	}
 	name := args[0]
+	// --context alone is also used by the legacy blazor/Renoir --script import
+	// flow; only --arch (unique to the new engine) triggers newContextProject.
+	if v, _, _ := matchOption(args[1:], "--context"); v != "" {
+		if archVal, _, _ := matchOption(args[1:], "--arch"); archVal != "" {
+			return newContextProject(name, args[1:])
+		}
+	}
+	// Deprecated: --app/--backend/--simple/--theme are the legacy profile
+	// selection path, kept working but no longer advertised in --help.
+	// Prefer --context/--arch (newContextProject above) for new projects.
 	app := value(args[1:], "--app", "webapi")
 	out := value(args[1:], "--output", name)
 	theme, err := themeOption(args[1:])
@@ -179,5 +189,135 @@ func newProject(args []string) error {
 	if err := normalizeProjectFiles(out, name); err != nil {
 		return err
 	}
-	return writeSolution(out, name, app, force, simple, backend)
+	return writeSolution(out, name, app, force, simple, backend, false)
+}
+
+// newContextProject implements `aspgen new NAME --context CTX --arch TIER
+// [-ui UI] [--database DB] [flags]`, the entry point for the --context/--arch
+// engine. Presence of --context on `new` bypasses all legacy --app/--backend
+// validation and flags; the `ar`, `dm`, `cqrs`, and `es` arch tiers are all
+// implemented now. ar/dm are headless (-ui is not implemented yet, Phase 5);
+// cqrs and es each get their own headless-until-endpoints WebApi Minimal API
+// host since vertical-slice features need somewhere to be mounted.
+func newContextProject(name string, args []string) error {
+	if !validProjectName(name) {
+		return fmt.Errorf("invalid project name %q", name)
+	}
+	contextName, err := contextOption(args)
+	if err != nil {
+		return err
+	}
+	if !validIdentifier(contextName) {
+		return fmt.Errorf("invalid context name %q", contextName)
+	}
+	arch, err := archOption(args)
+	if err != nil {
+		return err
+	}
+	if arch == "" {
+		return errors.New("--context requires --arch ar|dm|cqrs|es")
+	}
+	if arch != "ar" && arch != "dm" && arch != "cqrs" && arch != "es" {
+		return fmt.Errorf("unrecognized arch tier %q; use ar, dm, cqrs, or es", arch)
+	}
+	ui, err := uiOption(args)
+	if err != nil {
+		return err
+	}
+	if ui != "" && ui != "spa" {
+		return fmt.Errorf("-ui %q is not implemented yet; only spa is currently supported", ui)
+	}
+	if ui == "spa" && arch != "cqrs" && arch != "es" {
+		return fmt.Errorf("-ui spa requires --arch cqrs or es (needs a WebApi host); %q is headless", arch)
+	}
+	database, err := databaseOption(args)
+	if err != nil {
+		return err
+	}
+	if database == "" {
+		database = "sqlite"
+	}
+	out := value(args, "--output", name)
+	if exists(filepath.Join(out, ".aspgen", "manifest.json")) {
+		return fmt.Errorf("%s is already an aspgen project", out)
+	}
+	dryRun := hasFlag(args, "--dry-run")
+	force := hasFlag(args, "--force")
+	withTests := !hasFlag(args, "--no-tests")
+
+	manifest := Manifest{
+		Project:     name,
+		UI:          ui,
+		Persistence: database,
+		Contexts:    []Context{{Name: contextName, Arch: arch}},
+		Components:  []string{"context-engine", "context:" + contextName, "database:" + database},
+	}
+	solutionApp, simple := "webapi", true
+	switch arch {
+	case "ar":
+		manifest.Components = append(manifest.Components, "webapi", "backend:simple")
+		if err := renderTree(out, "simple-webapi", data{Project: name, Namespace: name, Backend: "simple", Database: database, Arch: arch}, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+	case "cqrs":
+		manifest.Components = append(manifest.Components, "backend:cqrs")
+		if err := renderTree(out, "cqrs", data{Project: name, Namespace: name, Database: database}, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+		solutionApp, simple = "cqrs", false
+	case "es":
+		manifest.Components = append(manifest.Components, "backend:es")
+		if err := renderTree(out, "es", data{Project: name, Namespace: name, Database: database}, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+		solutionApp, simple = "es", false
+	default:
+		manifest.Components = append(manifest.Components, "backend:dm")
+		if err := renderTree(out, "dm", data{Project: name, Namespace: name, Database: database}, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+		solutionApp, simple = "dm", false
+	}
+	if withTests {
+		if err := renderTree(out, "tests-unit", data{Project: name, Namespace: name, Arch: arch, Database: database}, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+		manifest.Components = append(manifest.Components, "tests:unit")
+		if arch != "dm" {
+			if err := renderTree(out, "tests-integration", data{Project: name, Namespace: name, Arch: arch, Database: database}, templateDir(args), dryRun, force); err != nil {
+				return err
+			}
+			manifest.Components = append(manifest.Components, "tests:integration")
+		}
+	}
+	// scripts/ci.ps1: generated for every --context/--arch project regardless
+	// of --no-tests, since it's a useful restore/build(/test/publish) driver
+	// even without generated tests.
+	if err := renderTree(out, "ci", data{Project: name, Namespace: name, Arch: arch, Database: database}, templateDir(args), dryRun, force); err != nil {
+		return err
+	}
+	manifest.Components = append(manifest.Components, "ci:script")
+	if !dryRun {
+		if err := registerGeneratedProjectFiles(out, dryRun); err != nil {
+			return err
+		}
+	}
+	if ui == "spa" {
+		if err := attachSpaHost(out, name, dryRun); err != nil {
+			return err
+		}
+		manifest.Components = append(manifest.Components, "ui:spa")
+	}
+	if dryRun {
+		fmt.Println("would create .aspgen/manifest.json")
+		fmt.Println("would create", filepath.Join(out, name+".sln"))
+		return nil
+	}
+	if err := saveManifest(out, manifest); err != nil {
+		return err
+	}
+	if err := normalizeProjectFiles(out, name); err != nil {
+		return err
+	}
+	return writeSolution(out, name, solutionApp, force, simple, "", withTests)
 }

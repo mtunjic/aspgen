@@ -1,0 +1,9 @@
+namespace {{ .Project }}.DomainModel.{{ .Context }};
+
+public sealed record {{ .Aggregate }}CreatedEvent(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});
+
+public sealed record {{ .Aggregate }}UpdatedEvent(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});
+
+public sealed record {{ .Aggregate }}DeletedEvent;

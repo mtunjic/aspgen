@@ -1,0 +1,45 @@
+# {{ .Project }}
+
+CQRS-tier project generated with aspgen's --context/--arch engine. Builds on
+the same DomainModel/Persistence foundation as the dm tier (aggregates,
+value objects, domain services, repositories, events), and additionally
+provides a vertical-slice Application layer (Command/Query + Handler per
+verb) exposed through a headless WebApi Minimal API host.
+
+Layers: DomainModel, Application, Infrastructure, Persistence, Resources, WebApi.
+
+## Build
+
+From the generated project root:
+
+```powershell
+dotnet restore .\{{ .Project }}.sln
+dotnet build .\{{ .Project }}.sln
+```
+
+## Run
+
+```powershell
+dotnet run --project src\WebApi
+```
+
+## CI / production build
+
+`.\scripts\ci.ps1` runs restore, build, and test in one step, and can publish
+the WebApi host with `-Publish` (skip tests with `-SkipTests`, override
+configuration with `-Configuration Debug`):
+
+```powershell
+.\scripts\ci.ps1 -Publish
+```
+
+Add aggregates to the initial bounded context, or add another context:
+
+```powershell
+aspgen add aggregate Product name:string price:decimal active:bool --context {{ .Namespace }} --project .
+aspgen add context Billing --arch cqrs --project .
+```
+
+Each aggregate gets a full vertical slice automatically: Command/Query
+records, Handlers backed by the aggregate's CrudService, and Minimal API
+endpoints mounted at `/api/{context}/{aggregate}` in `src/WebApi/Program.cs`.

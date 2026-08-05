@@ -1,0 +1,22 @@
+using System.Net;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Xunit;
+
+namespace {{ .Project }}.IntegrationTests;
+
+// Smoke test only: confirms the host boots and the DI graph resolves. The
+// root endpoint is used (rather than /health) because health checks can
+// depend on a live database connection that a freshly generated project
+// hasn't provisioned yet; extend this once real endpoints/aggregates exist.
+public class RootEndpointTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+{
+    [Fact]
+    public async Task RootEndpointReturnsOk()
+    {
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+}

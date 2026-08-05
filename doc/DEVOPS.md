@@ -10,6 +10,21 @@
 
 Nothing to configure — just open a PR and check the Actions tab.
 
+## Running CI locally before pushing
+
+`scripts/ci.ps1` mirrors `ci.yml` so you can run the same checks locally on
+Windows before opening a PR or cutting a release:
+
+```powershell
+./scripts/ci.ps1              # build, vet, test -race, goreleaser check (if installed)
+./scripts/ci.ps1 -SkipRace    # use if -race fails locally with "requires cgo" (no C toolchain)
+./scripts/ci.ps1 -Release     # also runs `goreleaser release --snapshot --clean --skip=publish`
+```
+
+It stops at the first failing step and exits non-zero, same as CI. The
+goreleaser steps are skipped automatically (with a warning) if `goreleaser`
+isn't installed/on PATH — everything else still runs.
+
 ## Cutting a release
 
 Releases are tag-driven. Pushing a `v*` tag on `main` builds and publishes

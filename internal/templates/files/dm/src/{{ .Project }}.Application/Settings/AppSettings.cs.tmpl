@@ -1,0 +1,30 @@
+namespace {{ .Project }}.Application.Settings;
+
+public sealed partial class AppSettings
+{
+    public bool DevMode { get; set; } = true;
+    public ProjectSettings Project { get; set; } = new();
+    public SecretsSettings Secrets { get; set; } = new();
+
+    public bool IsDevelopment() => DevMode;
+}
+
+public sealed class ProjectSettings
+{
+    public string Name { get; set; } = "{{ .Project }}";
+    public string Description { get; set; } = "";
+    public string Version { get; set; } = "1.0.0";
+}
+
+public sealed class SecretsSettings
+{
+    public StorageDescriptor Database { get; set; } = new();
+}
+
+public sealed class StorageDescriptor
+{
+    public string Selector { get; set; } = "local";
+    public string Live { get; set; } = "";
+    public string Local { get; set; } = "Data Source={{ .Project }}.db";
+    public string Get() => Selector.Equals("live", StringComparison.OrdinalIgnoreCase) ? Live : Local;
+}

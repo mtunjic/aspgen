@@ -1,0 +1,22 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.Persistence;
+
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed class Search{{ .Aggregate }}sHandler({{ .Project }}Database database)
+    : IHandler<Search{{ .Aggregate }}sQuery, {{ .Aggregate }}PagedResponse>
+{
+    public async Task<Result<{{ .Aggregate }}PagedResponse>> HandleAsync(Search{{ .Aggregate }}sQuery request, CancellationToken cancellationToken = default)
+    {
+        var query = database.{{ .Aggregate }}ReadModels.AsQueryable();
+{{- if hasQuickSearchField .Properties }}
+        var search = request.Search;
+        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});
+{{- end }}
+        {{ filterWhereClauses .Properties "x" "request." }}
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query.OrderBy(x => x.Id).Skip((request.Page - 1) * request.PageSize).Take(request.PageSize).Select(x => new {{ .Aggregate }}View(x.Id,
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }})).ToListAsync(cancellationToken);
+        return Result<{{ .Aggregate }}PagedResponse>.Success(new {{ .Aggregate }}PagedResponse(items, totalCount, request.Page, request.PageSize));
+    }
+}

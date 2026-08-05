@@ -32,6 +32,9 @@ func addFeatureCmd(r addRequest, m *Manifest, d *data) error {
 }
 
 func addUICmd(r addRequest, m *Manifest, d *data) error {
+	if isContextEngine(*m) {
+		return addContextUICmd(r, m)
+	}
 	framework := value(r.Args, "--framework", "wpf")
 	if framework != "wpf" {
 		return fmt.Errorf("unsupported UI framework %q", framework)
@@ -54,10 +57,36 @@ func addUICmd(r addRequest, m *Manifest, d *data) error {
 		m.Components = appendUnique(m.Components, "theme-mode:"+r.ThemeMode)
 	}
 	if isWebAPI(*m) {
-		if err := writeSolution(r.Project, m.Project, "fullstack", true, hasComponent(m.Components, "backend:simple"), componentBackend(m.Components)); err != nil {
+		if err := writeSolution(r.Project, m.Project, "fullstack", true, hasComponent(m.Components, "backend:simple"), componentBackend(m.Components), false); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+// addContextUICmd implements `add ui --framework wpf|blazor|spa` for
+// --context/--arch engine projects (as opposed to the legacy --app/--backend
+// flow above). Only spa is implemented so far (Phase 5, in progress);
+// wpf/blazor require their own host-project scaffolding, not done yet.
+func addContextUICmd(r addRequest, m *Manifest) error {
+	framework := value(r.Args, "--framework", "")
+	if framework == "" {
+		return errors.New("add ui requires --framework wpf|blazor|spa")
+	}
+	if framework != "spa" {
+		return fmt.Errorf("-ui %q is not implemented yet; only spa is currently supported for --context/--arch projects", framework)
+	}
+	if m.UI != "" && m.UI != framework && !r.Force {
+		return fmt.Errorf("project already has a %q UI attached; use --force to replace", m.UI)
+	}
+	if !hasWebApiHost(r.Project) {
+		return errors.New("-ui spa requires a cqrs or es arch-tier context (needs a WebApi host); no WebApi host was found")
+	}
+	if err := attachSpaHost(r.Project, m.Project, r.DryRun); err != nil {
+		return err
+	}
+	m.UI = framework
+	m.Components = appendUnique(m.Components, "ui:spa")
 	return nil
 }
 

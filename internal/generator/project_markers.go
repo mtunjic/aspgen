@@ -97,6 +97,54 @@ func updateBlazorServiceHost(project, appBlazorDir string, usings []string, regi
 	return writeMarkerFile(path, textContent, dryRun)
 }
 
+// updateApplicationServiceHost registers a cqrs-tier aggregate's CrudService
+// with the headless WebApi host's own DI container, in
+// {{.Project}}.Application's DependencyInjection.cs. Unlike dm tier (which
+// has no host to wire into, Phase 5) and legacy Renoir (which wires into
+// AppBlazor's Program.cs via updateBlazorServiceHost), cqrs tier's vertical
+// slices call through the CrudService, so it must be registered here.
+func updateApplicationServiceHost(project, applicationDir, registration string, dryRun bool) error {
+	path := filepath.Join(project, "src", applicationDir, "DependencyInjection.cs")
+	textContent, err := readMarkerFile(path, "Application DI host")
+	if err != nil {
+		return err
+	}
+	if strings.Contains(textContent, registration) {
+		return nil
+	}
+	if !strings.Contains(textContent, "// aspgen:services") {
+		return missingMarkerErr("DependencyInjection.cs", "// aspgen:services")
+	}
+	textContent = strings.Replace(textContent, "// aspgen:services", "// aspgen:services\n"+registration, 1)
+	return writeMarkerFile(path, textContent, dryRun)
+}
+
+// updateInfrastructureRepositoryHost registers a cqrs-tier repository
+// implementation with cqrs-tier DI in {{.Project}}.Infrastructure's
+// DependencyInjection.cs. Only cqrs-tier contexts have a host to wire a
+// repository into; dm-tier stays headless until Phase 5 (`add repository`
+// still renders the repository files there, just without this wiring step).
+func updateInfrastructureRepositoryHost(project, infrastructureDir string, usings []string, registration string, dryRun bool) error {
+	path := filepath.Join(project, "src", infrastructureDir, "DependencyInjection.cs")
+	textContent, err := readMarkerFile(path, "Infrastructure DI host")
+	if err != nil {
+		return err
+	}
+	if strings.Contains(textContent, registration) {
+		return nil
+	}
+	if !strings.Contains(textContent, "// aspgen:repositories") {
+		return missingMarkerErr("DependencyInjection.cs", "// aspgen:repositories")
+	}
+	for _, using := range usings {
+		if !strings.Contains(textContent, using) {
+			textContent = using + textContent
+		}
+	}
+	textContent = strings.Replace(textContent, "// aspgen:repositories", "// aspgen:repositories\n"+registration, 1)
+	return writeMarkerFile(path, textContent, dryRun)
+}
+
 func updateSeedHost(project, namespace, backend string, dryRun bool) error {
 	path := filepath.Join(project, "src", "WebApi", "Program.cs")
 	textContent, err := readMarkerFile(path, "seed host")
@@ -244,6 +292,54 @@ func updateSimpleDbContextRelations(project, entity string, relations []Relation
 	return writeMarkerFile(path, textContent, dryRun)
 }
 
+// updateContextDbContext registers a context-nested ar-tier entity's DbSet
+// with the AppDbContext, mirroring updateSimpleDbContext but importing the
+// entity's context-scoped Models namespace instead of the flat one.
+func updateContextDbContext(project, namespace, contextName, entity string, dryRun bool) error {
+	path := filepath.Join(project, "src", "WebApi", "Data", "AppDbContext.cs")
+	textContent, err := readMarkerFile(path, "context database context")
+	if err != nil {
+		return err
+	}
+	using := "using " + namespace + ".WebApi.Models." + contextName + ";\n"
+	if !strings.Contains(textContent, using) {
+		textContent = using + textContent
+	}
+	property := "    public DbSet<" + entity + "> " + entity + "s => Set<" + entity + ">();"
+	if strings.Contains(textContent, property) {
+		return nil
+	}
+	if !strings.Contains(textContent, "    // aspgen:entities") {
+		return missingMarkerErr("context AppDbContext.cs", "// aspgen:entities")
+	}
+	textContent = strings.Replace(textContent, "    // aspgen:entities", "    // aspgen:entities\n"+property, 1)
+	return writeMarkerFile(path, textContent, dryRun)
+}
+
+// updateContextFeatureHost registers a context-nested ar-tier entity's
+// Minimal API endpoints with Program.cs, mirroring updateFeatureHost but
+// importing the entity's context-scoped Features namespace.
+func updateContextFeatureHost(project, namespace, contextName, entity string, dryRun bool) error {
+	path := filepath.Join(project, "src", "WebApi", "Program.cs")
+	textContent, err := readMarkerFile(path, "feature host")
+	if err != nil {
+		return err
+	}
+	using := "using " + namespace + ".WebApi.Features." + contextName + "." + entity + ";\n"
+	call := "app.Map" + entity + "Endpoints();"
+	if strings.Contains(textContent, call) {
+		return nil
+	}
+	if !strings.Contains(textContent, "// aspgen:features") {
+		return missingMarkerErr("Program.cs", "// aspgen:features")
+	}
+	if !strings.Contains(textContent, using) {
+		textContent = using + textContent
+	}
+	textContent = strings.Replace(textContent, "// aspgen:features", "// aspgen:features\n"+call, 1)
+	return writeMarkerFile(path, textContent, dryRun)
+}
+
 func updateEntityDependencyInjection(project, namespace, entity string, dryRun bool) error {
 	registrations := []struct {
 		path, marker, line string
@@ -370,4 +466,86 @@ func updateRelatedStore(project, namespace, parentEntity, childEntity string, dr
 	textContent = strings.Replace(textContent, loadMarker, load, 1)
 
 	return writeMarkerFile(path, textContent, dryRun)
+}
+
+// hasWebApiHost reports whether project has a --context/--arch engine WebApi
+// host (cqrs/es tiers only; ar/dm stay headless class libraries).
+func hasWebApiHost(project string) bool {
+	return exists(filepath.Join(project, "src", "WebApi", "Program.cs"))
+}
+
+// attachSpaHost wires `-ui spa` onto an existing cqrs/es-tier WebApi host:
+// OpenAPI/Scalar discovery plus a permissive local-dev CORS policy, so a
+// separately-hosted SPA can call the API. It does not scaffold any actual
+// frontend project. Idempotent: safe to call again (e.g. from both `new
+// ... -ui spa` and a later `add ui --framework spa`).
+func attachSpaHost(project, projectName string, dryRun bool) error {
+	programPath := filepath.Join(project, "src", "WebApi", "Program.cs")
+	csprojPath := filepath.Join(project, "src", "WebApi", "WebApi.csproj")
+	if dryRun {
+		fmt.Println("would update", programPath)
+		fmt.Println("would update", csprojPath)
+		return nil
+	}
+	if err := attachSpaProgram(programPath, projectName); err != nil {
+		return err
+	}
+	return attachSpaCsproj(csprojPath)
+}
+
+func attachSpaProgram(path, projectName string) error {
+	textContent, err := readMarkerFile(path, "WebApi host")
+	if err != nil {
+		return err
+	}
+	const corsPolicy = `builder.Services.AddCors(options => options.AddPolicy("Spa", policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));`
+	if strings.Contains(textContent, corsPolicy) {
+		return nil
+	}
+	newline := "\n"
+	if strings.Contains(textContent, "\r\n") {
+		newline = "\r\n"
+	}
+	if !strings.Contains(textContent, "using Scalar.AspNetCore;") {
+		textContent = "using Scalar.AspNetCore;" + newline + textContent
+	}
+	const buildAnchor = "builder.Services.AddApplication();"
+	if !strings.Contains(textContent, buildAnchor) {
+		return missingMarkerErr("Program.cs", buildAnchor)
+	}
+	textContent = strings.Replace(textContent, buildAnchor,
+		"builder.Services.AddOpenApi();"+newline+corsPolicy+newline+buildAnchor, 1)
+	const appAnchor = `app.MapHealthChecks("/health");`
+	if !strings.Contains(textContent, appAnchor) {
+		return missingMarkerErr("Program.cs", appAnchor)
+	}
+	textContent = strings.Replace(textContent, appAnchor,
+		"app.MapOpenApi();"+newline+
+			fmt.Sprintf("app.MapScalarApiReference(options => options.WithTitle(%q));", projectName+" API")+newline+
+			`app.UseCors("Spa");`+newline+appAnchor, 1)
+	return writeMarkerFile(path, textContent, false)
+}
+
+func attachSpaCsproj(path string) error {
+	textContent, err := readMarkerFile(path, "WebApi host project file")
+	if err != nil {
+		return err
+	}
+	if strings.Contains(textContent, `PackageReference Include="Scalar.AspNetCore"`) {
+		return nil
+	}
+	if !strings.Contains(textContent, "</Project>") {
+		return missingMarkerErr("WebApi.csproj", "</Project>")
+	}
+	newline := "\n"
+	if strings.Contains(textContent, "\r\n") {
+		newline = "\r\n"
+	}
+	insertion := "  <ItemGroup>" + newline +
+		"    <PackageReference Include=\"Microsoft.AspNetCore.OpenApi\" Version=\"10.0.10\" />" + newline +
+		"    <PackageReference Include=\"Microsoft.OpenApi\" Version=\"2.7.5\" />" + newline +
+		"    <PackageReference Include=\"Scalar.AspNetCore\" Version=\"2.16.16\" />" + newline +
+		"  </ItemGroup>" + newline + "</Project>"
+	textContent = strings.Replace(textContent, "</Project>", insertion, 1)
+	return writeMarkerFile(path, textContent, false)
 }

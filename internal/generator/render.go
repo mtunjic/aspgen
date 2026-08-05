@@ -29,6 +29,11 @@ type data struct {
 	Database  string
 	Seed      string
 	SeedCount int
+	// Arch is the --context/--arch tier ("ar", "dm", "cqrs", "es") the
+	// current render belongs to; used by shared template groups (e.g.
+	// tests-unit) that need to branch on which DbContext/host shape a
+	// tier has.
+	Arch string
 }
 
 func renderTree(root, group string, d data, override string, dryRun, force bool) error {

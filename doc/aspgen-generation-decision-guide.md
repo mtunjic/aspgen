@@ -6,6 +6,26 @@ Version 1.0  |  Architecture Theta  |  03 August 2026
 
 ## 1. Fast decision map
 
+**Recommended: start with `--context`/`--arch`.** Each bounded context picks its own
+architecture tier independently (`ar < dm < cqrs < es`, an ordinal ladder — each tier is a
+superset of the previous one's concepts); a UI (currently only `spa`) attaches separately
+via `-ui`/`add ui`. The `--app`/`--backend`/`--simple`/`--theme` workflow further below
+remains fully supported but is no longer the recommended starting point.
+
+| If you need... | Choose | Start with |
+|---|---|---|
+| Flat entities, direct DbContext CRUD, no domain layer | `ar` context | `--context NAME --arch ar` |
+| Aggregates, value objects, domain services, repositories | `dm` context | `--context NAME --arch dm` |
+| `dm` plus vertical-slice CQRS + a WebApi host | `cqrs` context | `--context NAME --arch cqrs` |
+| `cqrs` plus an event store, event-sourced aggregates, projections | `es` context | `--context NAME --arch es` |
+| A SPA-ready host (OpenAPI/Scalar/CORS, no frontend generated) | SPA UI | `-ui spa` (cqrs/es contexts only) |
+
+**Rule:** `--arch` is one value per context (not composable); different contexts in the
+same solution may use different tiers. `add repository` is rejected on `es`-tier
+aggregates (they already have a generated event-store repository).
+
+Legacy fast decision map (`--app`/`--backend`, still supported):
+
 | If you need... | Choose | Start with |
 |---|---|---|
 | A classic CRUD API and desktop client quickly | Simple fullstack | `--app fullstack --simple` |

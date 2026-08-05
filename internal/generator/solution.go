@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func writeSolution(root, name, app string, force, simple bool, backend string) error {
+func writeSolution(root, name, app string, force, simple bool, backend string, withTests bool) error {
 	target := filepath.Join(root, name+".sln")
 	if exists(target) && !force {
 		return fmt.Errorf("refusing to overwrite %s", target)
@@ -52,6 +52,51 @@ func writeSolution(root, name, app string, force, simple bool, backend string) e
 		} {
 			projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"", project.display, project.path, projectGUID(name, project.target)))
 			targets = append(targets, project.target)
+		}
+	}
+	// dm tier (--context/--arch engine): same class-library layers as blazor
+	// minus AppBlazor, since no host is attached until `add ui` (Phase 5).
+	if app == "dm" {
+		for _, project := range []struct{ target, display, path string }{
+			{"domain", name + ".DomainModel", "src\\" + name + ".DomainModel\\" + name + ".DomainModel.csproj"},
+			{"application", name + ".Application", "src\\" + name + ".Application\\" + name + ".Application.csproj"},
+			{"infrastructure", name + ".Infrastructure", "src\\" + name + ".Infrastructure\\" + name + ".Infrastructure.csproj"},
+			{"persistence", name + ".Persistence", "src\\" + name + ".Persistence\\" + name + ".Persistence.csproj"},
+			{"resources", name + ".Resources", "src\\" + name + ".Resources\\" + name + ".Resources.csproj"},
+		} {
+			projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"", project.display, project.path, projectGUID(name, project.target)))
+			targets = append(targets, project.target)
+		}
+	}
+	// cqrs and es tiers (--context/--arch engine): dm tier's class-library
+	// layers plus a headless-until-endpoints WebApi Minimal API host, since
+	// vertical-slice features need somewhere to be mounted (unlike dm, which
+	// stays headless).
+	if app == "cqrs" || app == "es" {
+		for _, project := range []struct{ target, display, path string }{
+			{"domain", name + ".DomainModel", "src\\" + name + ".DomainModel\\" + name + ".DomainModel.csproj"},
+			{"application", name + ".Application", "src\\" + name + ".Application\\" + name + ".Application.csproj"},
+			{"infrastructure", name + ".Infrastructure", "src\\" + name + ".Infrastructure\\" + name + ".Infrastructure.csproj"},
+			{"persistence", name + ".Persistence", "src\\" + name + ".Persistence\\" + name + ".Persistence.csproj"},
+			{"resources", name + ".Resources", "src\\" + name + ".Resources\\" + name + ".Resources.csproj"},
+			{"webapi", name + ".WebApi", "src\\WebApi\\" + projectFileName(name, "WebApi")},
+		} {
+			projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"", project.display, project.path, projectGUID(name, project.target)))
+			targets = append(targets, project.target)
+		}
+	}
+	// Generated test projects (--context/--arch engine only, opt out with
+	// --no-tests): every tier gets a UnitTests project exercising its
+	// DbContext; dm has no WebApi host to test over HTTP, so it's the only
+	// tier that skips IntegrationTests.
+	if withTests {
+		projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"",
+			name+".UnitTests", "tests\\"+name+".UnitTests\\"+name+".UnitTests.csproj", projectGUID(name, "unittests")))
+		targets = append(targets, "unittests")
+		if app != "dm" {
+			projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"",
+				name+".IntegrationTests", "tests\\"+name+".IntegrationTests\\"+name+".IntegrationTests.csproj", projectGUID(name, "integrationtests")))
+			targets = append(targets, "integrationtests")
 		}
 	}
 	projectText := make([]string, 0, len(projects))

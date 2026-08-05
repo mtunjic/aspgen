@@ -1,0 +1,26 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace {{ .Project }}.DomainModel;
+
+public class TimeStamp
+{
+    public TimeStamp() => When = DateTime.UtcNow;
+
+    public DateTime? When { get; private set; }
+
+    [MaxLength(50)]
+    public string? By { get; private set; }
+
+    public void Mark(string? author = null)
+    {
+        When = DateTime.UtcNow;
+        if (!string.IsNullOrWhiteSpace(author))
+            By = author;
+    }
+
+    public string DateForDisplay(string format = "d MMM yyyy") => When?.ToString(format) ?? "";
+
+    public string AuthorForDisplay() => string.IsNullOrWhiteSpace(By) ? "Unknown" : By;
+
+    public override string ToString() => $"{When:d MMM yyyy HH:mm} - ({AuthorForDisplay()})";
+}

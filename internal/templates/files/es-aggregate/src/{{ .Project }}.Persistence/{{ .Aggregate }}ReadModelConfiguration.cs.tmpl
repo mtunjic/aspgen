@@ -1,0 +1,15 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace {{ .Project }}.Persistence;
+
+public sealed class {{ .Aggregate }}ReadModelConfiguration : IEntityTypeConfiguration<{{ .Aggregate }}ReadModel>
+{
+    public void Configure(EntityTypeBuilder<{{ .Aggregate }}ReadModel> builder)
+    {
+        builder.HasKey(x => x.Id);
+{{- range .Properties }}{{ if eq .CSharpType "string" }}
+        builder.Property(x => x.{{ .Name }}).HasMaxLength(200);
+{{- end }}{{- end }}
+    }
+}

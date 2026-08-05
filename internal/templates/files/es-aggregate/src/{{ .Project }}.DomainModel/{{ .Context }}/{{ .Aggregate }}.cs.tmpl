@@ -1,0 +1,40 @@
+namespace {{ .Project }}.DomainModel.{{ .Context }};
+
+public sealed partial class {{ .Aggregate }} : EventSourcedAggregate
+{
+    private {{ .Aggregate }}() { }
+
+    public static {{ .Aggregate }} LoadFromHistory(long id, IEnumerable<object> history)
+    {
+        var aggregate = new {{ .Aggregate }} { Id = id };
+        foreach (var domainEvent in history) aggregate.ApplyHistoric(domainEvent);
+        return aggregate;
+    }
+
+{{- range .Properties }}
+    public {{ .CSharpType }} {{ .Name }} { get; private set; } = default!;
+{{- end }}
+
+    protected override void Apply(object domainEvent)
+    {
+        switch (domainEvent)
+        {
+            case {{ .Aggregate }}CreatedEvent created:
+{{- range .Properties }}
+                {{ .Name }} = created.{{ .Name }};
+{{- end }}
+                break;
+            case {{ .Aggregate }}UpdatedEvent updated:
+{{- range .Properties }}
+                {{ .Name }} = updated.{{ .Name }};
+{{- end }}
+                break;
+            case {{ .Aggregate }}DeletedEvent:
+                Deleted = true;
+                break;
+            // aspgen:events
+            default:
+                throw new DomainException($"Unhandled event {domainEvent.GetType().Name} for {{ .Aggregate }} #{Id}.");
+        }
+    }
+}

@@ -1,0 +1,24 @@
+namespace {{ .Project }}.DomainModel;
+
+public sealed class CommandResponse
+{
+    public bool Success { get; private init; }
+    public string? Message { get; private set; }
+    public string? Extra { get; private set; }
+
+    public static CommandResponse Ok() => new() { Success = true };
+
+    public static CommandResponse Fail() => new() { Success = false };
+
+    public CommandResponse AddMessage(string message)
+    {
+        Message = message;
+        return this;
+    }
+
+    public CommandResponse AddExtra(string extra)
+    {
+        Extra = extra;
+        return this;
+    }
+}

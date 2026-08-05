@@ -189,6 +189,19 @@ The `--app blazor` profile (`add context / aggregate / value-object / domain-ser
 - **DI registration**: a `// aspgen:services` marker comment in the AppBlazor `Program.cs` (mirroring `// aspgen:features`/`// aspgen:seed`) is where `add aggregate` (CrudService) and `add repository` (interface -> implementation) register their DI bindings via `updateBlazorServiceHost`.
 - **`RenoirSettings`** is a `partial` class so generated code can extend it (e.g. `IsDevelopment()`), matching the reference project's settings pattern.
 
+## Context/arch engine (`--context`/`--arch`/`-ui`)
+
+The recommended path for new projects. Each bounded context (`--context NAME`) picks its own architecture tier (`--arch ar|dm|cqrs|es`) independently, so one solution may mix e.g. an `es` context alongside an `ar` context — this is standard DDD practice (match pattern to subdomain complexity), not an anti-pattern. The tiers form an ordinal ladder, each a superset of the previous tier's concepts:
+
+- **`ar`** (Active Record): a flat entity with direct `DbContext` CRUD, no domain layer. Equivalent to the legacy `--simple` profile, but context-nested (`Domain/{Context}/`, `Features/{Context}/{Entity}/`). No host project of its own beyond a headless WebApi.
+- **`dm`** (Domain Model): aggregate root + value objects + domain services + repository (interface + EF implementation) + event record scaffolds, with a synchronous Application-layer CrudService — the Renoir building blocks above, minus Blazor Razor pages and minus the CQRS command/query split. A `dm`-tier context is a pure class library graph (Domain/Application/Infrastructure/Persistence); no host attaches until a UI is added.
+- **`cqrs`**: `dm`'s Domain layer plus a vertical-slice Application layer (Command/Query + Handler + FluentValidation validator per verb) and a WebApi Minimal API host (`src/WebApi`). The `cqrs` Handlers are thin wrappers around the same `{Aggregate}CrudService` `dm` already generates — no new repository contract is invented.
+- **`es`** (Event Sourcing): `cqrs` tier plus an append-only event store (optimistic concurrency via a version column), event-sourced aggregates (`EventSourcedAggregate` base class, `Raise`/`ApplyHistoric`, per-aggregate static `LoadFromHistory` replay), and synchronous read-model projections built in the same unit of work as the event append. Event versioning/schema evolution and snapshotting are deliberately out of scope. `add repository` is rejected for `es`-tier aggregates — they already have a generated `{Aggregate}EventStoreRepository`.
+
+A UI attaches to the whole project (one UI surfaces every context in the solution), via `-ui` on `new` or `add ui --framework` afterward. Only `spa` is implemented so far, and only for `cqrs`/`es`-tier contexts (which have a WebApi host to attach to): it patches the existing `Program.cs`/`WebApi.csproj` in place (OpenAPI, Scalar, a permissive local-dev CORS policy) rather than rendering a new template group, and does not scaffold an actual frontend project. `wpf`/`blazor` UI attachment for this engine is not implemented yet.
+
+Nesting convention (deliberately matches Renoir's existing convention, applied uniformly regardless of tier): Domain is nested by `{Context}` (`DomainModel/{Context}/...`); Application and Infrastructure/Persistence stay flat (`Application/{Aggregate}CrudService.cs`, `Persistence/{Aggregate}Configuration.cs`). This implies aggregate/entity/repository/event names must stay unique across the whole solution, not just within their own context. WebApi routes (`cqrs`/`es` tiers) are still namespaced by context in the URL (`/api/{context-kebab}/{aggregate-kebab}`) for route uniqueness even though the C# folder structure stays flat.
+
 ## Generator behavior
 
 - `new` is the initialization command. It creates the project tree, solution, host files, and `.aspgen/manifest.json`.
@@ -220,6 +233,7 @@ Before considering a generator change complete:
 8. Run generation twice and verify no unwanted duplication.
 9. Review architecture boundaries and generated project references.
 10. Report package restore warnings separately from compile errors.
+11. For context/arch engine changes: generate each arch tier standalone (`ar`, `dm`, `cqrs`, `es`), exercise `add aggregate`/`add entity`/`add repository` against the tier-appropriate context and confirm tier-inappropriate commands error clearly, and `dotnet build` at least one full `cqrs`/`es` + `-ui spa` combo end to end.
 
 ## Reference vocabulary
 

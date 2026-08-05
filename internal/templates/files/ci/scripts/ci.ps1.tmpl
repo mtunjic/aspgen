@@ -1,0 +1,103 @@
+<#
+.SYNOPSIS
+    CI/production build pipeline for the generated {{ .Project }} solution.
+
+.DESCRIPTION
+    dotnet restore -> build -> test (unit + integration, if generated) ->
+    optional publish of the WebApi host (if this tier has one). Mirrors what
+    a CI pipeline (GitHub Actions, Azure DevOps, etc.) should run before
+    deploying. Safe to run even if tests were skipped at generation time
+    (--no-tests) or this is a headless (dm-tier) project with no WebApi host
+    — those steps are detected and skipped automatically.
+
+.PARAMETER Configuration
+    Build configuration (default: Release).
+
+.PARAMETER SkipTests
+    Skip the dotnet test step.
+
+.PARAMETER Publish
+    Also publish the WebApi host project (if one exists) to ./publish.
+
+.EXAMPLE
+    ./scripts/ci.ps1
+    ./scripts/ci.ps1 -Publish
+#>
+[CmdletBinding()]
+param(
+    [string]$Configuration = "Release",
+    [switch]$SkipTests,
+    [switch]$Publish
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Push-Location $repoRoot
+
+$solution = Get-ChildItem -Path $repoRoot -Filter *.sln | Select-Object -First 1
+if (-not $solution) {
+    Write-Host "No .sln file found in $repoRoot" -ForegroundColor Red
+    Pop-Location
+    exit 1
+}
+
+$stepNumber = 0
+
+function Invoke-Step {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][scriptblock]$Script
+    )
+    $script:stepNumber++
+    Write-Host ""
+    Write-Host "== [$script:stepNumber] $Name ==" -ForegroundColor Cyan
+    & $Script
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "FAILED: $Name (exit code $LASTEXITCODE)" -ForegroundColor Red
+        Pop-Location
+        exit $LASTEXITCODE
+    }
+    Write-Host "OK: $Name" -ForegroundColor Green
+}
+
+try {
+    Invoke-Step "dotnet restore $($solution.Name)" {
+        dotnet restore $solution.FullName
+    }
+
+    Invoke-Step "dotnet build $($solution.Name) -c $Configuration --no-restore" {
+        dotnet build $solution.FullName -c $Configuration --no-restore
+    }
+
+    if ($SkipTests) {
+        Write-Host ""
+        Write-Host "SKIPPED: dotnet test (-SkipTests)" -ForegroundColor Yellow
+    }
+    else {
+        Invoke-Step "dotnet test $($solution.Name) -c $Configuration --no-build" {
+            dotnet test $solution.FullName -c $Configuration --no-build
+        }
+    }
+
+    if ($Publish) {
+        $webApiDir = Join-Path $repoRoot "src\WebApi"
+        $webApiProject = Get-ChildItem -Path $webApiDir -Filter *.csproj -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($webApiProject) {
+            Invoke-Step "dotnet publish $($webApiProject.Name) -c $Configuration -o .\publish" {
+                dotnet publish $webApiProject.FullName -c $Configuration -o (Join-Path $repoRoot "publish") --no-build
+            }
+        }
+        else {
+            Write-Host ""
+            Write-Host "SKIPPED: publish (no src\WebApi host in this project)" -ForegroundColor Yellow
+        }
+    }
+
+    Write-Host ""
+    Write-Host "All checks passed." -ForegroundColor Green
+}
+finally {
+    Pop-Location
+}

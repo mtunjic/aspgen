@@ -1,0 +1,50 @@
+using {{ .Project }}.DomainModel;
+
+namespace {{ .Project }}.DomainModel.{{ .Context }};
+
+public sealed partial class {{ .Aggregate }}
+{
+    public static {{ .Aggregate }} Create(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }})
+    {
+{{- range .Properties }}
+{{- if eq .CSharpType "string" }}
+        {{ camel .Name }} = DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }}));
+{{- else if eq .CSharpType "Guid" }}
+        {{ camel .Name }} = DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }}));
+{{- else if eq .CSharpType "DateOnly" }}
+        {{ camel .Name }} = DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }}));
+{{- else if eq .CSharpType "DateTime" }}
+        {{ camel .Name }} = DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }}));
+{{- end }}
+{{- end }}
+        var aggregate = new {{ .Aggregate }}();
+        aggregate.Raise(new {{ .Aggregate }}CreatedEvent(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ camel $property.Name }}{{ end }}));
+        return aggregate;
+    }
+
+    public void Update(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ camel $property.Name }}{{ end }})
+    {
+{{- range .Properties }}
+{{- if eq .CSharpType "string" }}
+        {{ camel .Name }} = DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }}));
+{{- else if eq .CSharpType "Guid" }}
+        {{ camel .Name }} = DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }}));
+{{- else if eq .CSharpType "DateOnly" }}
+        {{ camel .Name }} = DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }}));
+{{- else if eq .CSharpType "DateTime" }}
+        {{ camel .Name }} = DomainGuard.Required({{ camel .Name }}, nameof({{ camel .Name }}));
+{{- end }}
+{{- end }}
+        Raise(new {{ .Aggregate }}UpdatedEvent(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ camel $property.Name }}{{ end }}));
+    }
+
+    public void Delete()
+    {
+        if (Deleted) return;
+        Raise(new {{ .Aggregate }}DeletedEvent());
+    }
+}

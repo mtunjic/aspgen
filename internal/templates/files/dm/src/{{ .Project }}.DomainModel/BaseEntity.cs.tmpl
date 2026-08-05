@@ -1,0 +1,14 @@
+namespace {{ .Project }}.DomainModel;
+
+public partial class BaseEntity
+{
+    protected BaseEntity()
+    {
+        Created = new TimeStamp();
+        LastUpdated = new TimeStamp();
+    }
+
+    public bool Deleted { get; private set; }
+    public TimeStamp Created { get; private set; }
+    public TimeStamp LastUpdated { get; private set; }
+}

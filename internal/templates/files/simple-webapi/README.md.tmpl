@@ -13,6 +13,18 @@ dotnet run --project .\src\WebApi\WebApi.csproj --urls http://localhost:5000
 ```
 
 Check the API at `http://localhost:5000/health`. The default database is SQLite and is stored as `{{ kebab .Project }}.db` in the Web API working directory.
+{{- if eq .Arch "ar" }}
+
+## CI / production build
+
+`.\scripts\ci.ps1` runs restore, build, and test in one step, and can publish
+the WebApi host with `-Publish` (skip tests with `-SkipTests`, override
+configuration with `-Configuration Debug`):
+
+```powershell
+.\scripts\ci.ps1 -Publish
+```
+{{- end }}
 
 Add a CRUD entity after the project exists:
 

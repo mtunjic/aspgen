@@ -1,0 +1,12 @@
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed class Create{{ .Aggregate }}Handler({{ .Aggregate }}CrudService service)
+    : IHandler<Create{{ .Aggregate }}Command, {{ .Aggregate }}View>
+{
+    public async Task<Result<{{ .Aggregate }}View>> HandleAsync(Create{{ .Aggregate }}Command request, CancellationToken cancellationToken = default)
+    {
+        var view = await service.CreateAsync(new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }}), cancellationToken);
+        return Result<{{ .Aggregate }}View>.Success(view);
+    }
+}

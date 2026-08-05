@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
+    <ProjectReference Include="..\{{ .Project }}.DomainModel\{{ .Project }}.DomainModel.csproj" />
+    <ProjectReference Include="..\{{ .Project }}.Persistence\{{ .Project }}.Persistence.csproj" />
+  </ItemGroup>
+</Project>

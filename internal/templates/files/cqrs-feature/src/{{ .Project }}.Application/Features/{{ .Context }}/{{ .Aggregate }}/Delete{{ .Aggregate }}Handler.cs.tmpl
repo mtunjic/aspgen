@@ -1,0 +1,13 @@
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed class Delete{{ .Aggregate }}Handler({{ .Aggregate }}CrudService service)
+    : IHandler<Delete{{ .Aggregate }}Command, bool>
+{
+    public async Task<Result<bool>> HandleAsync(Delete{{ .Aggregate }}Command request, CancellationToken cancellationToken = default)
+    {
+        var result = await service.DeleteAsync(request.Id, cancellationToken);
+        return result.Success
+            ? Result<bool>.Success(true)
+            : Result<bool>.Failure(new Error("not_found", result.Message ?? "{{ .Aggregate }} was not found."));
+    }
+}

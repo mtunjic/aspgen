@@ -1,0 +1,17 @@
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.Persistence;
+
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed class Get{{ .Aggregate }}ByIdHandler({{ .Project }}Database database)
+    : IHandler<Get{{ .Aggregate }}ByIdQuery, {{ .Aggregate }}View>
+{
+    public async Task<Result<{{ .Aggregate }}View>> HandleAsync(Get{{ .Aggregate }}ByIdQuery request, CancellationToken cancellationToken = default)
+    {
+        var entity = await database.{{ .Aggregate }}ReadModels.FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken);
+        return entity is null
+            ? Result<{{ .Aggregate }}View>.Failure(new Error("not_found", "{{ .Aggregate }} was not found."))
+            : Result<{{ .Aggregate }}View>.Success(new {{ .Aggregate }}View(entity.Id,
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }}));
+    }
+}

@@ -1,0 +1,4 @@
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed record Create{{ .Aggregate }}Command(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});

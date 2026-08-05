@@ -13,15 +13,88 @@ import (
 )
 
 type Manifest struct {
-	Project    string       `json:"project"`
-	Components []string     `json:"components"`
-	Contexts   []Context    `json:"contexts,omitempty"`
-	Entities   []EntityMeta `json:"entities,omitempty"`
+	Project    string   `json:"project"`
+	Components []string `json:"components"`
+	// UI and Persistence are only set for projects created through the
+	// --context/--arch engine (see isContextEngine); legacy --app/--backend
+	// projects track the equivalent state via Components instead.
+	UI          string       `json:"ui,omitempty"`
+	Persistence string       `json:"persistence,omitempty"`
+	Contexts    []Context    `json:"contexts,omitempty"`
+	Entities    []EntityMeta `json:"entities,omitempty"`
 }
 
 type Context struct {
-	Name       string   `json:"name"`
+	Name string `json:"name"`
+	// Arch is the bounded context's --arch tier (ar|dm|cqrs|es), empty for
+	// contexts created by the legacy blazor/Renoir profile.
+	Arch       string   `json:"arch,omitempty"`
 	Aggregates []string `json:"aggregates,omitempty"`
+	Entities   []string `json:"entities,omitempty"`
+}
+
+// archTiers is the ordinal ladder from least to most capable, each tier a
+// superset of the previous tier's concepts (ar < dm < cqrs < es).
+var archTiers = []string{"ar", "dm", "cqrs", "es"}
+
+func archIndex(arch string) int {
+	for i, tier := range archTiers {
+		if tier == arch {
+			return i
+		}
+	}
+	return -1
+}
+
+// archAtLeast reports whether arch is at least as capable as min on the
+// archTiers ladder; false if either value isn't a recognized tier.
+func archAtLeast(arch, min string) bool {
+	a, m := archIndex(arch), archIndex(min)
+	return a >= 0 && m >= 0 && a >= m
+}
+
+// isContextEngine reports whether m was created via the --context/--arch
+// engine (as opposed to the legacy --app/--backend flags).
+func isContextEngine(m Manifest) bool { return hasComponent(m.Components, "context-engine") }
+
+// findContext returns the context named name, if any.
+func findContext(contexts []Context, name string) (Context, bool) {
+	for _, context := range contexts {
+		if context.Name == name {
+			return context, true
+		}
+	}
+	return Context{}, false
+}
+
+// appendContextWithArch records a context created via the --context/--arch
+// engine, or backfills Arch onto an existing arch-less (legacy) entry.
+func appendContextWithArch(contexts []Context, name, arch string) []Context {
+	for i := range contexts {
+		if contexts[i].Name == name {
+			if arch != "" && contexts[i].Arch == "" {
+				contexts[i].Arch = arch
+			}
+			return contexts
+		}
+	}
+	return append(contexts, Context{Name: name, Arch: arch})
+}
+
+// appendContextEntity records entityName under contextName, without
+// duplicating existing entries.
+func appendContextEntity(contexts []Context, contextName, entityName string) []Context {
+	for i := range contexts {
+		if contexts[i].Name == contextName {
+			for _, name := range contexts[i].Entities {
+				if name == entityName {
+					return contexts
+				}
+			}
+			contexts[i].Entities = append(contexts[i].Entities, entityName)
+		}
+	}
+	return contexts
 }
 
 // EntityMeta records enough about a previously-added entity/aggregate to let
@@ -190,10 +263,17 @@ func componentSeedCount(components []string) int {
 	return 0
 }
 
-func rejectAggregateReservedProperties(properties []Property) error {
+// rejectAggregateReservedProperties rejects property names that would clash
+// with a base class member. "Id" is reserved for every tier; es-tier
+// aggregates additionally reserve "Version"/"Deleted", which are members of
+// EventSourcedAggregate.
+func rejectAggregateReservedProperties(properties []Property, arch string) error {
 	for _, property := range properties {
 		if property.Name == "Id" {
 			return errors.New("aggregate property \"id\" is reserved for the aggregate identity")
+		}
+		if arch == "es" && (property.Name == "Version" || property.Name == "Deleted") {
+			return fmt.Errorf("aggregate property %q is reserved by EventSourcedAggregate on es-tier contexts", property.Name)
 		}
 	}
 	return nil

@@ -1,0 +1,4 @@
+namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
+
+public sealed record Update{{ .Aggregate }}Command(
+    long Id{{ range .Properties }}, {{ .CSharpType }} {{ .Name }}{{ end }});
