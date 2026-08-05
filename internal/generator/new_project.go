@@ -6,6 +6,13 @@ import (
 	"path/filepath"
 )
 
+// isLegacyDDDTarget reports whether app/backend name a legacy profile target
+// that supports --backend ddd/--database/--seed: webapi, fullstack, or a
+// local DDD wpf app (wpf + --backend ddd).
+func isLegacyDDDTarget(app, backend string) bool {
+	return app == "webapi" || app == "fullstack" || (app == "wpf" && backend == "ddd")
+}
+
 func newProject(args []string) error {
 	if len(args) == 0 {
 		return errors.New("project name is required; run 'aspgen new --help' for usage")
@@ -64,10 +71,10 @@ func newProject(args []string) error {
 	if themeMode != "" && theme != "wpfui" {
 		return errors.New("--theme-mode requires --theme wpfui")
 	}
-	if backend != "" && app != "webapi" && app != "fullstack" && !(app == "wpf" && backend == "ddd") {
+	if backend != "" && !isLegacyDDDTarget(app, backend) {
 		return errors.New("--backend ddd requires a webapi, fullstack, or local DDD wpf application")
 	}
-	if database != "" && app != "webapi" && app != "fullstack" && !(app == "wpf" && backend == "ddd") {
+	if database != "" && !isLegacyDDDTarget(app, backend) {
 		return errors.New("--database requires a webapi, fullstack, or local DDD wpf application")
 	}
 	if simple && backend != "" {
@@ -76,14 +83,14 @@ func newProject(args []string) error {
 	if simple && app != "webapi" && app != "fullstack" {
 		return errors.New("--simple requires a webapi or fullstack application")
 	}
-	if seed != "" && app != "webapi" && app != "fullstack" && !(app == "wpf" && backend == "ddd") {
+	if seed != "" && !isLegacyDDDTarget(app, backend) {
 		return errors.New("--seed requires a webapi, fullstack, or local DDD wpf application")
 	}
 	if seed != "" && !simple && backend == "" {
 		return errors.New("--seed requires --simple or --backend ddd")
 	}
 	if dbImportRequested {
-		if app != "webapi" && app != "fullstack" && app != "blazor" && !(app == "wpf" && backend == "ddd") {
+		if app != "blazor" && !isLegacyDDDTarget(app, backend) {
 			return errors.New("--script requires a webapi, fullstack, blazor, or local DDD wpf application")
 		}
 		if app == "blazor" {

@@ -60,7 +60,8 @@ func addEntityCmd(r addRequest, m *Manifest, d *data) error {
 		if !isWebAPI(*m) && !isLocalDDDWpf(*m, backend) {
 			return errors.New("a backend profile requires a webapi, fullstack, or local DDD wpf project")
 		}
-		if backend == "simple" {
+		switch backend {
+		case "simple":
 			if err := renderTree(r.Project, "simple-entity", data{Project: m.Project, Namespace: m.Project, Name: r.Name, Properties: props, Relations: relations, Backend: backend}, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 				return err
 			}
@@ -70,12 +71,12 @@ func addEntityCmd(r addRequest, m *Manifest, d *data) error {
 			if err := updateSimpleDbContextRelations(r.Project, r.Name, relations, r.DryRun); err != nil {
 				return err
 			}
-		} else if backend == "ddd" {
+		case "ddd":
 			if isWebAPI(*m) {
 				if err := renderTree(r.Project, "webapi-ddd-entity", data{Project: m.Project, Namespace: m.Project, Name: r.Name, Properties: props, Relations: relations, Backend: backend}, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 					return err
 				}
-				if err := updateEntityDependencyInjection(r.Project, m.Project, r.Name, r.DryRun); err != nil {
+				if err := updateEntityDependencyInjection(r.Project, r.Name, r.DryRun); err != nil {
 					return err
 				}
 				if err := updateEntityDbContext(r.Project, m.Project, r.Name, r.DryRun); err != nil {
@@ -84,7 +85,7 @@ func addEntityCmd(r addRequest, m *Manifest, d *data) error {
 			} else if err := updateEntityDbContextLocal(r.Project, m.Project, r.Name, props, r.DryRun); err != nil {
 				return err
 			}
-		} else {
+		default:
 			return fmt.Errorf("unsupported backend %q", backend)
 		}
 		if isWebAPI(*m) {
@@ -177,7 +178,8 @@ func applyManyToMany(r addRequest, m *Manifest, backend string, manyToMany []Man
 				return err
 			}
 		}
-		if backend == "simple" {
+		switch backend {
+		case "simple":
 			jd := data{Project: m.Project, Namespace: m.Project, Name: jr.Name, Properties: joinProps, Relations: joinRelations, Backend: backend}
 			if err := renderTree(jr.Project, "simple-entity", jd, templateDir(jr.Args), jr.DryRun, jr.Force); err != nil {
 				return err
@@ -188,13 +190,13 @@ func applyManyToMany(r addRequest, m *Manifest, backend string, manyToMany []Man
 			if err := updateSimpleDbContextRelations(jr.Project, jr.Name, joinRelations, jr.DryRun); err != nil {
 				return err
 			}
-		} else if backend == "ddd" {
+		case "ddd":
 			if isWebAPI(*m) {
 				jd := data{Project: m.Project, Namespace: m.Project, Name: jr.Name, Properties: joinProps, Relations: joinRelations, Backend: backend}
 				if err := renderTree(jr.Project, "webapi-ddd-entity", jd, templateDir(jr.Args), jr.DryRun, jr.Force); err != nil {
 					return err
 				}
-				if err := updateEntityDependencyInjection(jr.Project, m.Project, jr.Name, jr.DryRun); err != nil {
+				if err := updateEntityDependencyInjection(jr.Project, jr.Name, jr.DryRun); err != nil {
 					return err
 				}
 				if err := updateEntityDbContext(jr.Project, m.Project, jr.Name, jr.DryRun); err != nil {

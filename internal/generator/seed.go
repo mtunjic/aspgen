@@ -2,8 +2,23 @@ package generator
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
+
+// databaseSeederPath returns the generated DatabaseSeeder.cs location for the
+// given seed backend ("" -> simple webapi, "ddd" -> DDD webapi, "ddd-local"
+// -> local DDD wpf).
+func databaseSeederPath(project, seedBackend string) string {
+	switch seedBackend {
+	case "ddd":
+		return filepath.Join(project, "src", "WebApi", "Seeding", "DatabaseSeeder.cs")
+	case "ddd-local":
+		return filepath.Join(project, "src", "Infrastructure", "Seeding", "DatabaseSeeder.cs")
+	default:
+		return filepath.Join(project, "src", "WebApi", "Data", "DatabaseSeeder.cs")
+	}
+}
 
 func renderSeedBlock(backend, entity string, properties []Property, count int) string {
 	var b strings.Builder

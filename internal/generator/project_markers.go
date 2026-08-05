@@ -169,20 +169,14 @@ func updateSeedHost(project, namespace, backend string, dryRun bool) error {
 }
 
 func updateSeedFile(project, namespace, backend, entity string, properties []Property, count int, dryRun bool) error {
-	path := filepath.Join(project, "src", "WebApi", "Data", "DatabaseSeeder.cs")
-	if backend == "ddd" {
-		path = filepath.Join(project, "src", "WebApi", "Seeding", "DatabaseSeeder.cs")
-	} else if backend == "ddd-local" {
-		path = filepath.Join(project, "src", "Infrastructure", "Seeding", "DatabaseSeeder.cs")
-	}
+	path := databaseSeederPath(project, backend)
 	textContent, err := readMarkerFile(path, "seed file")
 	if err != nil {
 		return err
 	}
 	using := "using " + namespace + ".WebApi.Models;\n"
-	if backend == "ddd" {
-		using = "using " + namespace + ".Domain.Entities;\n"
-	} else if backend == "ddd-local" {
+	switch backend {
+	case "ddd", "ddd-local":
 		using = "using " + namespace + ".Domain.Entities;\n"
 	}
 	if !strings.Contains(textContent, using) {
@@ -340,7 +334,7 @@ func updateContextFeatureHost(project, namespace, contextName, entity string, dr
 	return writeMarkerFile(path, textContent, dryRun)
 }
 
-func updateEntityDependencyInjection(project, namespace, entity string, dryRun bool) error {
+func updateEntityDependencyInjection(project, entity string, dryRun bool) error {
 	registrations := []struct {
 		path, marker, line string
 	}{

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 )
 
+//nolint:unparam // d is unused here but required by the addHandlers dispatch-table signature
 func addContextCmd(r addRequest, m *Manifest, d *data) error {
 	if !validIdentifier(r.Name) {
 		return fmt.Errorf("invalid context name %q", r.Name)
@@ -271,7 +272,8 @@ func addRepositoryCmd(r addRequest, m *Manifest, d *data) error {
 	if err := renderTree(r.Project, "renoir-repository", *d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 		return err
 	}
-	if ctx.Arch == "" {
+	switch ctx.Arch {
+	case "":
 		appBlazorDir := m.Project + ".AppBlazor"
 		usings := []string{
 			"using " + m.Project + ".DomainModel." + contextName + ";\n",
@@ -281,7 +283,7 @@ func addRepositoryCmd(r addRequest, m *Manifest, d *data) error {
 		if err := updateBlazorServiceHost(r.Project, appBlazorDir, usings, registration, r.DryRun); err != nil {
 			return err
 		}
-	} else if ctx.Arch == "cqrs" {
+	case "cqrs":
 		infrastructureDir := m.Project + ".Infrastructure"
 		usings := []string{
 			"using " + m.Project + ".DomainModel." + contextName + ";\n",

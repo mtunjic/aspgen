@@ -12,6 +12,8 @@ import (
 // already-generated entity/aggregate, patching every already-rendered layer
 // (Domain/aggregate class, persistence, API DTOs/handlers, seed data, WPF
 // and Renoir/Blazor UI) in place instead of re-rendering whole files.
+//
+//nolint:unparam // d is unused here but required by the addHandlers dispatch-table signature
 func addEntityFieldCmd(r addRequest, m *Manifest, d *data) error {
 	if !validIdentifier(r.Name) {
 		return fmt.Errorf("invalid entity name %q", r.Name)
@@ -290,7 +292,6 @@ func patchArgListsInFile(path string, oldProps, newProps []Property, patches []a
 
 func patchEntityField(r addRequest, m *Manifest, existing EntityMeta, newProps []Property) error {
 	project := r.Project
-	namespace := m.Project
 	backend := r.Backend
 
 	if isNonSimpleWebAPI(*m) || isLocalDDDWpf(*m, backend) {
@@ -310,7 +311,7 @@ func patchEntityField(r addRequest, m *Manifest, existing EntityMeta, newProps [
 			return err
 		}
 	} else if backend == "ddd" && isWebAPI(*m) {
-		if err := patchDDDWebApiFeature(project, namespace, existing, newProps, r.DryRun); err != nil {
+		if err := patchDDDWebApiFeature(project, existing, newProps, r.DryRun); err != nil {
 			return err
 		}
 	}
@@ -429,7 +430,7 @@ func patchValidatorFile(path, ctorSignature string, newProps []Property, renoir 
 	return writePatchFile(path, newContent, dryRun)
 }
 
-func patchDDDWebApiFeature(project, namespace string, existing EntityMeta, newProps []Property, dryRun bool) error {
+func patchDDDWebApiFeature(project string, existing EntityMeta, newProps []Property, dryRun bool) error {
 	dir := filepath.Join(project, "src", "Application", "Features", existing.Name)
 	name := existing.Name
 	old := existing.Properties
@@ -495,12 +496,7 @@ func patchDDDWebApiFeature(project, namespace string, existing EntityMeta, newPr
 // ---- seed data --------------------------------------------------------
 
 func patchSeedField(project, seedBackend, entity string, oldProps, newProps []Property, count int, dryRun bool) error {
-	path := filepath.Join(project, "src", "WebApi", "Data", "DatabaseSeeder.cs")
-	if seedBackend == "ddd" {
-		path = filepath.Join(project, "src", "WebApi", "Seeding", "DatabaseSeeder.cs")
-	} else if seedBackend == "ddd-local" {
-		path = filepath.Join(project, "src", "Infrastructure", "Seeding", "DatabaseSeeder.cs")
-	}
+	path := databaseSeederPath(project, seedBackend)
 	content, err := readPatchFile(path)
 	if err != nil {
 		return err
