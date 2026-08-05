@@ -1,0 +1,29 @@
+using {{ .Project }}.Application;
+
+namespace {{ .Project }}.WebMvc.Models;
+
+public sealed class {{ .Aggregate }}IndexViewModel({{ .Aggregate }}View[] items, long totalCount, int page, int pageSize, string? search{{ filterParamDecls .Properties "camel" }})
+{
+    public {{ .Aggregate }}View[] Items { get; } = items;
+    public long TotalCount { get; } = totalCount;
+    public int Page { get; } = page;
+    public int PageSize { get; } = pageSize;
+    public string? Search { get; } = search;
+    public bool HasMore => (long)Page * PageSize < TotalCount;
+{{- range .Properties }}
+{{- if .RelationTarget }}
+    public long? {{ .Name }} { get; } = {{ camel .Name }};
+    public List<{{ .RelationTarget }}View> {{ .RelationTarget }}Items { get; set; } = [];
+{{- else if eq (filterKind .CSharpType) "string" }}
+    public string? {{ .Name }}Contains { get; } = {{ camel .Name }}Contains;
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Min { get; } = {{ camel .Name }}Min;
+    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Max { get; } = {{ camel .Name }}Max;
+{{- else if eq (filterKind .CSharpType) "date" }}
+    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Min { get; } = {{ camel .Name }}Min;
+    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Max { get; } = {{ camel .Name }}Max;
+{{- else if eq (filterKind .CSharpType) "bool" }}
+    public bool? {{ .Name }} { get; } = {{ camel .Name }};
+{{- end }}
+{{- end }}
+}

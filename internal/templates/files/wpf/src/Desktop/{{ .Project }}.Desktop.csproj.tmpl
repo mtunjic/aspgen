@@ -12,6 +12,11 @@
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
 {{- end }}
+{{- if eq .Backend "dm" }}
+  <ItemGroup>
+    <ProjectReference Include="..\{{ .Project }}.Application\{{ .Project }}.Application.csproj" />
+  </ItemGroup>
+{{- end }}
   <ItemGroup>
     <PackageReference Include="Prism.DryIoc" Version="9.0.537" />
 {{- if eq .Theme "wpfui" }}

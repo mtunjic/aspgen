@@ -8,7 +8,13 @@ using {{ .Project }}.Infrastructure.Persistence;
 using {{ .Project }}.Infrastructure.Seeding;
 {{- end }}
 {{- end }}
-{{- if or (eq .Backend "simple") (eq .Backend "ddd") }}
+{{- if eq .Backend "dm" }}
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using {{ .Project }}.Application;
+using {{ .Project }}.Persistence;
+{{- end }}
+{{- if or (eq .Backend "simple") (eq .Backend "ddd") (eq .Backend "cqrs") (eq .Backend "es") }}
 using System.Net.Http;
 {{- end }}
 {{- if eq .Theme "wpfui" }}
@@ -22,7 +28,7 @@ public sealed class {{ .Name }}Module : IModule
 {
     public void RegisterTypes(IContainerRegistry containerRegistry)
     {
-{{- if or (eq .Backend "simple") (eq .Backend "ddd") }}
+{{- if or (eq .Backend "simple") (eq .Backend "ddd") (eq .Backend "cqrs") (eq .Backend "es") }}
         var apiUrl = Environment.GetEnvironmentVariable("ASPGENT_API_URL") ?? "http://localhost:5000";
         containerRegistry.RegisterSingleton<HttpClient>(() => new HttpClient { BaseAddress = new Uri(apiUrl) });
 {{- end }}
@@ -39,6 +45,19 @@ public sealed class {{ .Name }}Module : IModule
 {{- end }}
             return db;
         });
+{{- end }}
+{{- if eq .Backend "dm" }}
+        containerRegistry.RegisterSingleton<{{ .Project }}Database>(() =>
+        {
+            var options = new DbContextOptionsBuilder<{{ .Project }}Database>()
+                .UseSqlite("Data Source={{ kebab .Project }}.db")
+                .Options;
+            var db = new {{ .Project }}Database(options);
+            db.Database.EnsureCreated();
+            return db;
+        });
+        containerRegistry.Register<IValidator<{{ .Name }}Request>, {{ .Name }}Validator>();
+        containerRegistry.RegisterSingleton<{{ .Name }}CrudService>();
 {{- end }}
         containerRegistry.RegisterSingleton<Services.I{{ .Name }}Store, Services.{{ .Name }}Store>();
         containerRegistry.RegisterForNavigation<Views.{{ .Name }}View>();

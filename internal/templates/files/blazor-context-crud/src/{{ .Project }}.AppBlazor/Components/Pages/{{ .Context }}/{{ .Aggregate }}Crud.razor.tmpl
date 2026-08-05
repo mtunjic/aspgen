@@ -1,0 +1,262 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Json
+@page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s"
+@using {{ .Project }}.Application
+@using {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }}
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<h1>{{ .Aggregate }}s</h1>
+<EditForm Model="form" OnValidSubmit="SaveAsync">
+    <DataAnnotationsValidator />
+{{- range .Properties }}
+    <div class="mb-3">
+        <label>{{ .DisplayName }}</label>
+{{- if .RelationTarget }}
+        <InputSelect @bind-Value="form.{{ .Name }}" class="form-control">
+            @foreach (var option in {{ .RelationTarget }}Items)
+            {
+                <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
+            }
+        </InputSelect>
+{{- else if eq .CSharpType "Guid" }}
+        <InputText @bind-Value="form.{{ .Name }}Text" class="form-control" />
+{{- else }}
+        <{{ .UIControl }} @bind-Value="form.{{ .Name }}" class="form-control" />
+{{- end }}
+    </div>
+{{- end }}
+    <button class="btn btn-primary" type="submit">Save</button>
+</EditForm>
+
+<div class="mb-3 d-flex gap-2">
+    <input @bind="searchText" @bind:event="oninput" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
+    <button class="btn btn-outline-primary" @onclick="SearchAsync">Search</button>
+</div>
+<details class="mb-3">
+    <summary>Advanced filters</summary>
+    <div class="row g-2 mt-1">
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }}</label>
+            <select @bind="filter{{ .Name }}" class="form-control">
+                <option value="">Any</option>
+                @foreach (var option in {{ .RelationTarget }}Items)
+                {
+                    <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
+                }
+            </select>
+        </div>
+{{- else if eq (filterKind .CSharpType) "string" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} contains</label>
+            <input @bind="filter{{ .Name }}Contains" @bind:event="oninput" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} min</label>
+            <input type="number" @bind="filter{{ .Name }}Min" class="form-control" />
+        </div>
+        <div class="col-auto">
+            <label>{{ .DisplayName }} max</label>
+            <input type="number" @bind="filter{{ .Name }}Max" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "date" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} from</label>
+            <input type="date" @bind="filter{{ .Name }}Min" class="form-control" />
+        </div>
+        <div class="col-auto">
+            <label>{{ .DisplayName }} to</label>
+            <input type="date" @bind="filter{{ .Name }}Max" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }}</label>
+            <select @bind="filter{{ .Name }}" class="form-control">
+                <option value="">Any</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+            </select>
+        </div>
+{{- end }}
+{{- end }}
+        <div class="col-auto align-self-end">
+            <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">Clear</button>
+            <button class="btn btn-primary" @onclick="SearchAsync">Apply</button>
+        </div>
+    </div>
+</details>
+
+<table class="table">
+    <tbody>
+    @foreach (var item in items)
+    {
+        <tr style="cursor:pointer" @onclick="() => ViewDetails(item.Id)">
+{{- range .Properties }}
+            <td>@item.{{ .Name }}</td>
+{{- end }}
+            <td>
+                <button class="btn btn-secondary" @onclick="() => EditAsync(item.Id)" @onclick:stopPropagation="true">Edit</button>
+                <button class="btn btn-danger" @onclick="() => DeleteAsync(item.Id)" @onclick:stopPropagation="true">Delete</button>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>
+@if (hasMore)
+{
+    <button class="btn btn-outline-secondary" @onclick="LoadMoreAsync">Load more</button>
+}
+
+@code {
+    private const string ApiPath = "/api/{{ kebab .Context }}/{{ kebab .Aggregate }}";
+    private List<{{ .Aggregate }}View> items = [];
+{{- range .Relations }}
+    private List<{{ .Target }}View> {{ .Target }}Items = [];
+{{- end }}
+    private {{ .Aggregate }}Editor form = new();
+    private long editingId;
+    private string? searchText;
+    private int page = 1;
+    private long totalCount;
+    private const int PageSize = 25;
+    private bool hasMore => (long)page * PageSize < totalCount;
+{{- range .Properties }}
+{{- if .RelationTarget }}
+    private long? filter{{ .Name }};
+{{- else if eq (filterKind .CSharpType) "string" }}
+    private string? filter{{ .Name }}Contains;
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+    private {{ trimSuffix .CSharpType "?" }}? filter{{ .Name }}Min;
+    private {{ trimSuffix .CSharpType "?" }}? filter{{ .Name }}Max;
+{{- else if eq (filterKind .CSharpType) "date" }}
+    private {{ trimSuffix .CSharpType "?" }}? filter{{ .Name }}Min;
+    private {{ trimSuffix .CSharpType "?" }}? filter{{ .Name }}Max;
+{{- else if eq (filterKind .CSharpType) "bool" }}
+    private bool? filter{{ .Name }};
+{{- end }}
+{{- end }}
+
+    protected override async Task OnInitializedAsync()
+    {
+{{- range .Relations }}
+        {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
+{{- end }}
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        page = 1;
+        await LoadPageAsync(append: false);
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        page++;
+        await LoadPageAsync(append: true);
+    }
+
+    private async Task LoadPageAsync(bool append)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(searchText)) query.Add($"search={Uri.EscapeDataString(searchText)}");
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        if (filter{{ .Name }}.HasValue) query.Add($"{{ camel .Name }}={filter{{ .Name }}.Value}");
+{{- else if eq (filterKind .CSharpType) "string" }}
+        if (!string.IsNullOrWhiteSpace(filter{{ .Name }}Contains)) query.Add($"{{ camel .Name }}Contains={Uri.EscapeDataString(filter{{ .Name }}Contains)}");
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        if (filter{{ .Name }}Min.HasValue) query.Add($"{{ camel .Name }}Min={filter{{ .Name }}Min.Value}");
+        if (filter{{ .Name }}Max.HasValue) query.Add($"{{ camel .Name }}Max={filter{{ .Name }}Max.Value}");
+{{- else if eq (filterKind .CSharpType) "date" }}
+        if (filter{{ .Name }}Min.HasValue) query.Add($"{{ camel .Name }}Min={filter{{ .Name }}Min.Value:O}");
+        if (filter{{ .Name }}Max.HasValue) query.Add($"{{ camel .Name }}Max={filter{{ .Name }}Max.Value:O}");
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        if (filter{{ .Name }}.HasValue) query.Add($"{{ camel .Name }}={filter{{ .Name }}.Value}");
+{{- end }}
+{{- end }}
+        query.Add($"page={page}");
+        query.Add($"pageSize={PageSize}");
+        var result = await Http.GetFromJsonAsync<{{ .Aggregate }}PagedResponse>($"{ApiPath}/search?{string.Join("&", query)}");
+        if (result is null) return;
+        if (append) items.AddRange(result.Items); else items = result.Items.ToList();
+        totalCount = result.TotalCount;
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        searchText = null;
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        filter{{ .Name }} = null;
+{{- else if eq (filterKind .CSharpType) "string" }}
+        filter{{ .Name }}Contains = null;
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        filter{{ .Name }}Min = null;
+        filter{{ .Name }}Max = null;
+{{- else if eq (filterKind .CSharpType) "date" }}
+        filter{{ .Name }}Min = null;
+        filter{{ .Name }}Max = null;
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        filter{{ .Name }} = null;
+{{- end }}
+{{- end }}
+        await SearchAsync();
+    }
+
+    private void ViewDetails(long id) => Navigation.NavigateTo($"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{id}");
+
+    private async Task SaveAsync()
+    {
+        var request = new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }});
+        if (editingId == 0)
+        {
+            var response = await Http.PostAsJsonAsync(ApiPath, request);
+            if (!response.IsSuccessStatusCode) return;
+        }
+        else
+        {
+            var response = await Http.PutAsJsonAsync($"{ApiPath}/{editingId}", request);
+            if (!response.IsSuccessStatusCode) return;
+        }
+        form = new();
+        editingId = 0;
+        await SearchAsync();
+    }
+
+    private void EditAsync(long id)
+    {
+        var item = items.FirstOrDefault(x => x.Id == id);
+        if (item is null) return;
+        editingId = id;
+{{- range .Properties }}
+{{- if eq .CSharpType "Guid" }}
+        form.{{ .Name }}Text = item.{{ .Name }}.ToString();
+{{- else }}
+        form.{{ .Name }} = item.{{ .Name }};
+{{- end }}
+{{- end }}
+    }
+
+    private async Task DeleteAsync(long id)
+    {
+        var response = await Http.DeleteAsync($"{ApiPath}/{id}");
+        if (!response.IsSuccessStatusCode) return;
+        await SearchAsync();
+    }
+
+    private sealed class {{ .Aggregate }}Editor
+    {
+{{- range .Properties }}
+{{- if eq .CSharpType "Guid" }}
+        public string {{ .Name }}Text { get; set; } = "";
+{{- else }}
+        public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
+{{- end }}
+{{- end }}
+    }
+}

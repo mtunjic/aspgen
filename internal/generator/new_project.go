@@ -196,7 +196,7 @@ func newProject(args []string) error {
 	if err := normalizeProjectFiles(out, name); err != nil {
 		return err
 	}
-	return writeSolution(out, name, app, force, simple, backend, false)
+	return writeSolution(out, name, app, force, simple, backend, false, "")
 }
 
 // newContextProject implements `aspgen new NAME --context CTX --arch TIER
@@ -231,12 +231,30 @@ func newContextProject(name string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if ui != "" && ui != "spa" {
-		return fmt.Errorf("-ui %q is not implemented yet; only spa is currently supported", ui)
+	if ui != "" && ui != "spa" && ui != "wpf" && ui != "blazor" && ui != "mvc" {
+		return fmt.Errorf("-ui %q is not implemented yet; use spa, wpf, blazor, or mvc", ui)
 	}
-	if ui == "spa" && arch != "cqrs" && arch != "es" {
-		return fmt.Errorf("-ui spa requires --arch cqrs or es (needs a WebApi host); %q is headless", arch)
+	if ui == "mvc" && arch != "dm" {
+		return fmt.Errorf("-ui mvc currently only supports --arch dm (in-process CrudService calls, no WebApi host); use wpf/blazor/spa for cqrs/es")
 	}
+	if ui == "wpf" && arch != "cqrs" && arch != "es" && arch != "dm" {
+		return fmt.Errorf("-ui wpf requires --arch cqrs, es, or dm; %q is not supported", arch)
+	}
+	if (ui == "spa" || ui == "blazor") && arch != "cqrs" && arch != "es" {
+		return fmt.Errorf("-ui %s requires --arch cqrs or es (needs a WebApi host); %q is headless", ui, arch)
+	}
+	theme, err := themeOption(args)
+	if err != nil {
+		return err
+	}
+	if theme != "" && ui != "wpf" {
+		return errors.New("--theme requires -ui wpf")
+	}
+	themeMode, err := themeModeOption(args)
+	if err != nil {
+		return err
+	}
+	_, themeModeValue := resolveThemeMode(theme, themeMode)
 	database, err := databaseOption(args)
 	if err != nil {
 		return err
@@ -315,6 +333,27 @@ func newContextProject(name string, args []string) error {
 		}
 		manifest.Components = append(manifest.Components, "ui:spa")
 	}
+	if ui == "wpf" {
+		if err := attachContextWpfUI(out, &manifest, theme, themeModeValue, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+		manifest.Components = append(manifest.Components, "ui:wpf")
+		if theme != "" {
+			manifest.Components = append(manifest.Components, "theme:"+theme, "theme-mode:"+themeModeValue)
+		}
+	}
+	if ui == "blazor" {
+		if err := attachContextBlazorUI(out, &manifest, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+		manifest.Components = append(manifest.Components, "ui:blazor")
+	}
+	if ui == "mvc" {
+		if err := attachContextMvcUI(out, &manifest, templateDir(args), dryRun, force); err != nil {
+			return err
+		}
+		manifest.Components = append(manifest.Components, "ui:mvc")
+	}
 	if dryRun {
 		fmt.Println("would create .aspgen/manifest.json")
 		fmt.Println("would create", filepath.Join(out, name+".sln"))
@@ -326,5 +365,5 @@ func newContextProject(name string, args []string) error {
 	if err := normalizeProjectFiles(out, name); err != nil {
 		return err
 	}
-	return writeSolution(out, name, solutionApp, force, simple, "", withTests)
+	return writeSolution(out, name, solutionApp, force, simple, "", withTests, ui)
 }

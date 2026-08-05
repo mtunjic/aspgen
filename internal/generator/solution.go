@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func writeSolution(root, name, app string, force, simple bool, backend string, withTests bool) error {
+func writeSolution(root, name, app string, force, simple bool, backend string, withTests bool, ui string) error {
 	target := filepath.Join(root, name+".sln")
 	if exists(target) && !force {
 		return fmt.Errorf("refusing to overwrite %s", target)
@@ -37,9 +37,17 @@ func writeSolution(root, name, app string, force, simple bool, backend string, w
 			targets = append(targets, project.target)
 		}
 	}
-	if app == "wpf" || app == "fullstack" {
+	// cqrs/es context-engine projects only get a Desktop project once -ui wpf
+	// has been attached (dm has no WebApi host, but wpf works in-process there).
+	if app == "wpf" || app == "fullstack" || ((app == "cqrs" || app == "es" || app == "dm") && ui == "wpf") {
 		projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s.Desktop\", \"src\\Desktop\\%s.Desktop.csproj\", \"{%s}\"", name, name, projectGUID(name, "wpf")))
 		targets = append(targets, "wpf")
+	}
+	// cqrs/es context-engine projects only get an AppBlazor project once
+	// -ui blazor has been attached (dm has no WebApi host for it to call yet).
+	if (app == "cqrs" || app == "es") && ui == "blazor" {
+		projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"", name+".AppBlazor", "src\\"+name+".AppBlazor\\"+name+".AppBlazor.csproj", projectGUID(name, "appblazor")))
+		targets = append(targets, "appblazor")
 	}
 	if app == "blazor" {
 		for _, project := range []struct{ target, display, path string }{
@@ -67,6 +75,12 @@ func writeSolution(root, name, app string, force, simple bool, backend string, w
 			projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"", project.display, project.path, projectGUID(name, project.target)))
 			targets = append(targets, project.target)
 		}
+	}
+	// dm-tier context/arch projects only get a WebMvc project once -ui mvc
+	// has been attached (dm's only UI option, in-process CrudService calls).
+	if app == "dm" && ui == "mvc" {
+		projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"", name+".WebMvc", "src\\"+name+".WebMvc\\"+name+".WebMvc.csproj", projectGUID(name, "webmvc")))
+		targets = append(targets, "webmvc")
 	}
 	// cqrs and es tiers (--context/--arch engine): dm tier's class-library
 	// layers plus a headless-until-endpoints WebApi Minimal API host, since

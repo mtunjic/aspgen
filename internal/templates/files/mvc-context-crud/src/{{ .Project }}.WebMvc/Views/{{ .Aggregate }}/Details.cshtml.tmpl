@@ -1,0 +1,17 @@
+@using {{ .Project }}.Application
+@model {{ .Aggregate }}View
+@{
+    ViewData["Title"] = "{{ .Aggregate }} details";
+}
+<h1>{{ .Aggregate }} details</h1>
+<dl class="row">
+{{- range .Properties }}
+    <dt class="col-sm-3">{{ .DisplayName }}</dt>
+{{- if .RelationTarget }}
+    <dd class="col-sm-9">@(((List<{{ .RelationTarget }}View>)ViewBag.{{ .RelationTarget }}Items).FirstOrDefault(x => x.Id == Model.{{ .Name }})?.{{ .RelationDisplayProperty }})</dd>
+{{- else }}
+    <dd class="col-sm-9">@Model.{{ .Name }}</dd>
+{{- end }}
+{{- end }}
+</dl>
+<a asp-action="Index" class="btn btn-secondary">Back</a>

@@ -468,6 +468,12 @@ func hasWebApiHost(project string) bool {
 	return exists(filepath.Join(project, "src", "WebApi", "Program.cs"))
 }
 
+// hasBlazorHost reports whether project has a --context/--arch engine
+// AppBlazor host attached via -ui blazor.
+func hasBlazorHost(project, projectName string) bool {
+	return exists(filepath.Join(project, "src", projectName+".AppBlazor", "Program.cs"))
+}
+
 // attachSpaHost wires `-ui spa` onto an existing cqrs/es-tier WebApi host:
 // OpenAPI/Scalar discovery plus a permissive local-dev CORS policy, so a
 // separately-hosted SPA can call the API. It does not scaffold any actual

@@ -1,0 +1,27 @@
+@using {{ .Project }}.Application
+@model {{ .Aggregate }}Request
+@{
+    ViewData["Title"] = "Create {{ .Aggregate }}";
+}
+<h1>Create {{ .Aggregate }}</h1>
+<div asp-validation-summary="All" class="text-danger"></div>
+<form asp-action="Create" method="post">
+{{- range .Properties }}
+    <div class="mb-3">
+        <label>{{ .DisplayName }}</label>
+{{- if .RelationTarget }}
+        <select asp-for="{{ .Name }}" class="form-control">
+            <option value="">Select {{ .DisplayName }}</option>
+            @foreach (var option in (List<{{ .RelationTarget }}View>)ViewBag.{{ .RelationTarget }}Items)
+            {
+                <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
+            }
+        </select>
+{{- else }}
+        <input asp-for="{{ .Name }}" class="form-control" />
+{{- end }}
+        <span asp-validation-for="{{ .Name }}" class="text-danger"></span>
+    </div>
+{{- end }}
+    <button type="submit" class="btn btn-primary">Save</button>
+</form>

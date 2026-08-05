@@ -151,7 +151,13 @@ func renderAggregateCrud(r addRequest, m *Manifest, d data, arch string) error {
 		if err := renderTree(r.Project, "cqrs-feature", d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 			return err
 		}
-		return updateContextFeatureHost(r.Project, m.Project, d.Context, d.Aggregate, r.DryRun)
+		if err := updateContextFeatureHost(r.Project, m.Project, d.Context, d.Aggregate, r.DryRun); err != nil {
+			return err
+		}
+		if err := renderContextWpfModuleIfAttached(r, m, d); err != nil {
+			return err
+		}
+		return renderContextBlazorCrudIfAttached(r, m, d)
 	case "es":
 		applicationDir := m.Project + ".Application"
 		registration := "        services.AddScoped<" + d.Aggregate + "EventStoreRepository>();"
@@ -161,11 +167,25 @@ func renderAggregateCrud(r addRequest, m *Manifest, d data, arch string) error {
 		if err := renderTree(r.Project, "es-feature", d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 			return err
 		}
-		return updateContextFeatureHost(r.Project, m.Project, d.Context, d.Aggregate, r.DryRun)
+		if err := updateContextFeatureHost(r.Project, m.Project, d.Context, d.Aggregate, r.DryRun); err != nil {
+			return err
+		}
+		if err := renderContextWpfModuleIfAttached(r, m, d); err != nil {
+			return err
+		}
+		return renderContextBlazorCrudIfAttached(r, m, d)
 	default:
 		// dm tier (and any future tier without its own case) gets the
-		// CrudService-only rendering; there is no host to wire into yet.
-		return renderTree(r.Project, "dm-crud", d, templateDir(r.Args), r.DryRun, r.Force)
+		// CrudService rendering, plus an MVC Controller/Views set or WPF
+		// module if -ui mvc/wpf is already attached (dm's two in-process UI
+		// options - no WebApi host to call over HTTP).
+		if err := renderTree(r.Project, "dm-crud", d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+			return err
+		}
+		if err := renderContextMvcCrudIfAttached(r, m, d); err != nil {
+			return err
+		}
+		return renderContextWpfModuleIfAttached(r, m, d)
 	}
 }
 

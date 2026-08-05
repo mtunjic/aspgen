@@ -23,9 +23,12 @@ const newHelp = `Usage:
 Context/arch engine flags:
   --context CTX      Bounded context name; presence triggers this engine instead of --app/--backend
   --arch TIER        ar | dm | cqrs | es (all four tiers are implemented)
-  -ui UI             wpf | blazor (not implemented yet) | spa (implemented, cqrs/es contexts
-                     only; adds CORS+OpenAPI+Scalar to the WebApi host, no frontend project)
-                     omit for a headless project
+  -ui UI             wpf (Prism/DryIoc Desktop, full per-aggregate CRUD screens; HTTP for
+                     cqrs/es, in-process CrudService calls for dm) | blazor (Blazor Server,
+                     same CRUD screens over HTTP, cqrs/es only) | spa (CORS+OpenAPI+Scalar
+                     on the WebApi host, no frontend project, cqrs/es only) | mvc (ASP.NET
+                     Core MVC, in-process CrudService calls, dm only); omit for a headless
+                     project
   --database DB      sqlite | postgres (default sqlite; dm-tier projects are class libraries
                      only, no host attaches the provider yet; cqrs/es-tier projects get their
                      own WebApi Minimal API host at src\WebApi)
@@ -46,6 +49,10 @@ Examples:
   aspgen new Billing --context Sales --arch cqrs --output ./Billing
   aspgen new Billing --context Sales --arch es --output ./Billing
   aspgen new Billing --context Sales --arch cqrs -ui spa --output ./Billing
+  aspgen new Billing --context Sales --arch cqrs -ui wpf --output ./Billing
+  aspgen new Billing --context Sales --arch cqrs -ui blazor --output ./Billing
+  aspgen new Accounting --context Billing --arch dm -ui mvc --output ./Accounting
+  aspgen new Accounting --context Billing --arch dm -ui wpf --output ./Accounting
 
 Legacy flags (deprecated, kept working, no longer advertised as the default path):
   --app TARGET       webapi | wpf | blazor | fullstack (default webapi)
@@ -82,8 +89,12 @@ Kinds:
   feature NAME prop:type...     Web API vertical-slice CRUD feature
   ui                            Add the WPF/Prism UI to a webapi project [--framework wpf],
                                  or attach a UI to a --context/--arch engine project
-                                 [--framework spa] (cqrs/es contexts only; wpf/blazor there
-                                 are not implemented yet)
+                                 [--framework wpf|blazor|spa|mvc] (blazor/spa are cqrs/es
+                                 only over HTTP; wpf works on cqrs/es over HTTP or dm
+                                 in-process; mvc is dm-only in-process); each renders full
+                                 per-aggregate CRUD screens for every aggregate already in
+                                 the project, and future "add aggregate" calls keep adding
+                                 screens automatically once a UI is attached
   context NAME [--arch TIER]    Bounded context (blazor/Renoir profile, or ar|dm|cqrs|es
                                  engine context with --arch; all four tiers are implemented)
   aggregate NAME prop:type... --context CTX [--no-crud]  (blazor/Renoir profile, or a

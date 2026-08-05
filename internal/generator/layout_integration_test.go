@@ -559,3 +559,245 @@ func TestEntityRelationshipGenerationRenoir(t *testing.T) {
 		t.Fatalf("rejected cross-context aggregate generation left files behind: %v", err)
 	}
 }
+
+// TestContextArchWpfUI covers -ui wpf on the --context/--arch engine: both
+// attaching it at `new` time (aggregates added afterwards) and attaching it
+// later via `add ui` (retrofitting a pre-existing aggregate).
+func TestContextArchWpfUI(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "CqrsWpfDemo")
+	if err := Run([]string{"new", "CqrsWpfDemo", "--context", "Billing", "--arch", "cqrs", "-ui", "wpf", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, project, "src/Desktop/CqrsWpfDemo.Desktop.csproj")
+	if err := Run([]string{"add", "aggregate", "Product", "name:string", "price:decimal", "--context", "Billing", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, project, "src/Desktop/Modules/Product/Services/ProductStore.cs")
+	assertExists(t, project, "src/Desktop/Modules/Product/Views/ProductView.xaml")
+
+	store, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", "Product", "Services", "ProductStore.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(store), `"/api/billing/product"`) {
+		t.Fatalf("expected a context-qualified route in ProductStore.cs: %s", store)
+	}
+
+	appHost, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "App.xaml.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(appHost), "moduleCatalog.AddModule<CqrsWpfDemo.Desktop.Modules.Product.ProductModule>();") {
+		t.Fatalf("expected ProductModule registered in App.xaml.cs: %s", appHost)
+	}
+
+	solution, err := os.ReadFile(filepath.Join(project, "CqrsWpfDemo.sln"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(solution), "src\\Desktop\\CqrsWpfDemo.Desktop.csproj") {
+		t.Fatalf("expected Desktop project in solution: %s", solution)
+	}
+	if !strings.Contains(string(solution), "CqrsWpfDemo.UnitTests") {
+		t.Fatalf("expected test projects to survive the -ui wpf solution rewrite: %s", solution)
+	}
+
+	// retrofit case: es-tier project without -ui at `new` time, aggregate
+	// added first, `add ui --framework wpf` attached afterwards.
+	retrofit := filepath.Join(t.TempDir(), "EsWpfDemo")
+	if err := Run([]string{"new", "EsWpfDemo", "--context", "Sales", "--arch", "es", "--output", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Order", "total:decimal", "--context", "Sales", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "ui", "Order", "--framework", "wpf", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, retrofit, "src/Desktop/Modules/Order/Services/OrderStore.cs")
+	retrofitStore, err := os.ReadFile(filepath.Join(retrofit, "src", "Desktop", "Modules", "Order", "Services", "OrderStore.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(retrofitStore), `"/api/sales/order"`) {
+		t.Fatalf("expected a context-qualified route in retrofitted OrderStore.cs: %s", retrofitStore)
+	}
+
+	// dm tier now supports -ui wpf too, in-process (no WebApi host to call).
+	dm := filepath.Join(t.TempDir(), "DmWpfDemo")
+	if err := Run([]string{"new", "DmWpfDemo", "--context", "Ops", "--arch", "dm", "-ui", "wpf", "--output", dm}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Widget", "name:string", "--context", "Ops", "--project", dm}); err != nil {
+		t.Fatal(err)
+	}
+	dmStore, err := os.ReadFile(filepath.Join(dm, "src", "Desktop", "Modules", "Widget", "Services", "WidgetStore.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dmStore), "WidgetCrudService service") {
+		t.Fatalf("expected dm-tier WidgetStore.cs to call the CrudService in-process: %s", dmStore)
+	}
+	if strings.Contains(string(dmStore), "HttpClient") {
+		t.Fatalf("dm-tier WidgetStore.cs should not use HttpClient (in-process only): %s", dmStore)
+	}
+	dmModule, err := os.ReadFile(filepath.Join(dm, "src", "Desktop", "Modules", "Widget", "WidgetModule.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dmModule), "containerRegistry.RegisterSingleton<DmWpfDemoDatabase>") ||
+		!strings.Contains(string(dmModule), "containerRegistry.Register<IValidator<WidgetRequest>, WidgetValidator>();") ||
+		!strings.Contains(string(dmModule), "containerRegistry.RegisterSingleton<WidgetCrudService>();") {
+		t.Fatalf("expected dm-tier WidgetModule.cs to register the DbContext/validator/CrudService in DryIoc: %s", dmModule)
+	}
+
+	// retrofit case with a relation: aggregates added first, -ui wpf attached afterwards.
+	dmRetrofit := filepath.Join(t.TempDir(), "DmWpfRetroDemo")
+	if err := Run([]string{"new", "DmWpfRetroDemo", "--context", "Sales", "--arch", "dm", "--output", dmRetrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Category", "name:string", "--context", "Sales", "--project", dmRetrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Product", "name:string", "price:decimal", "category:Category", "--context", "Sales", "--project", dmRetrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "ui", "Product", "--framework", "wpf", "--project", dmRetrofit}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, dmRetrofit, "src/Desktop/Modules/Category/Services/CategoryStore.cs")
+	assertExists(t, dmRetrofit, "src/Desktop/Modules/Product/Services/ProductStore.cs")
+
+	// ar tier is still rejected (no dm+ CrudService/aggregate support at all).
+	ar := filepath.Join(t.TempDir(), "ArWpfDemo")
+	if err := Run([]string{"new", "ArWpfDemo", "--context", "Ops", "--arch", "ar", "-ui", "wpf", "--output", ar}); err == nil {
+		t.Fatal("expected -ui wpf to be rejected for an ar-tier context")
+	}
+}
+
+// TestContextArchBlazorUI covers -ui blazor on the --context/--arch engine,
+// mirroring TestContextArchWpfUI: attaching at `new` time (aggregates added
+// afterwards) and attaching later via `add ui` (retrofitting a pre-existing
+// aggregate).
+func TestContextArchBlazorUI(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "BlazorCqrsDemo")
+	if err := Run([]string{"new", "BlazorCqrsDemo", "--context", "Billing", "--arch", "cqrs", "-ui", "blazor", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, project, "src/BlazorCqrsDemo.AppBlazor/BlazorCqrsDemo.AppBlazor.csproj")
+	if err := Run([]string{"add", "aggregate", "Product", "name:string", "price:decimal", "--context", "Billing", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, project, "src/BlazorCqrsDemo.AppBlazor/Components/Pages/Billing/ProductCrud.razor")
+	assertExists(t, project, "src/BlazorCqrsDemo.AppBlazor/Components/Pages/Billing/ProductDetails.razor")
+
+	page, err := os.ReadFile(filepath.Join(project, "src", "BlazorCqrsDemo.AppBlazor", "Components", "Pages", "Billing", "ProductCrud.razor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), `private const string ApiPath = "/api/billing/product";`) {
+		t.Fatalf("expected a context-qualified API path in ProductCrud.razor: %s", page)
+	}
+
+	solution, err := os.ReadFile(filepath.Join(project, "BlazorCqrsDemo.sln"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(solution), "src\\BlazorCqrsDemo.AppBlazor\\BlazorCqrsDemo.AppBlazor.csproj") {
+		t.Fatalf("expected AppBlazor project in solution: %s", solution)
+	}
+	if !strings.Contains(string(solution), "BlazorCqrsDemo.UnitTests") {
+		t.Fatalf("expected test projects to survive the -ui blazor solution rewrite: %s", solution)
+	}
+
+	// retrofit case: es-tier project without -ui at `new` time, aggregate
+	// added first, `add ui --framework blazor` attached afterwards.
+	retrofit := filepath.Join(t.TempDir(), "EsBlazorDemo")
+	if err := Run([]string{"new", "EsBlazorDemo", "--context", "Sales", "--arch", "es", "--output", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Order", "total:decimal", "--context", "Sales", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "ui", "Order", "--framework", "blazor", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, retrofit, "src/EsBlazorDemo.AppBlazor/Components/Pages/Sales/OrderCrud.razor")
+	retrofitPage, err := os.ReadFile(filepath.Join(retrofit, "src", "EsBlazorDemo.AppBlazor", "Components", "Pages", "Sales", "OrderCrud.razor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(retrofitPage), `private const string ApiPath = "/api/sales/order";`) {
+		t.Fatalf("expected a context-qualified API path in retrofitted OrderCrud.razor: %s", retrofitPage)
+	}
+}
+
+// TestContextArchMvcUI covers -ui mvc on the --context/--arch engine: dm is
+// the only supported tier (headless, in-process CrudService calls instead
+// of HTTP), attaching both at `new` time and via `add ui` afterward
+// (retrofitting pre-existing aggregates, including one with a relation).
+func TestContextArchMvcUI(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "MvcDmDemo")
+	if err := Run([]string{"new", "MvcDmDemo", "--context", "Billing", "--arch", "dm", "-ui", "mvc", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, project, "src/MvcDmDemo.WebMvc/MvcDmDemo.WebMvc.csproj")
+	if err := Run([]string{"add", "aggregate", "Product", "name:string", "price:decimal", "--context", "Billing", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, project, "src/MvcDmDemo.WebMvc/Controllers/ProductController.cs")
+	assertExists(t, project, "src/MvcDmDemo.WebMvc/Views/Product/Index.cshtml")
+
+	controller, err := os.ReadFile(filepath.Join(project, "src", "MvcDmDemo.WebMvc", "Controllers", "ProductController.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(controller), `[Route("billing/product")]`) {
+		t.Fatalf("expected a context-qualified route in ProductController.cs: %s", controller)
+	}
+
+	program, err := os.ReadFile(filepath.Join(project, "src", "MvcDmDemo.WebMvc", "Program.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(program), "builder.Services.AddScoped<ProductCrudService>();") {
+		t.Fatalf("expected ProductCrudService registered in Program.cs: %s", program)
+	}
+
+	solution, err := os.ReadFile(filepath.Join(project, "MvcDmDemo.sln"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(solution), "src\\MvcDmDemo.WebMvc\\MvcDmDemo.WebMvc.csproj") {
+		t.Fatalf("expected WebMvc project in solution: %s", solution)
+	}
+	if !strings.Contains(string(solution), "MvcDmDemo.UnitTests") {
+		t.Fatalf("expected test projects to survive the -ui mvc solution rewrite: %s", solution)
+	}
+
+	// retrofit case: dm-tier project without -ui at `new` time, two
+	// aggregates (one relation) added first, `add ui --framework mvc`
+	// attached afterwards - both must get retrofitted.
+	retrofit := filepath.Join(t.TempDir(), "MvcRetroDemo")
+	if err := Run([]string{"new", "MvcRetroDemo", "--context", "Sales", "--arch", "dm", "--output", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Category", "name:string", "--context", "Sales", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Product", "name:string", "price:decimal", "category:Category", "--context", "Sales", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "ui", "Product", "--framework", "mvc", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	assertExists(t, retrofit, "src/MvcRetroDemo.WebMvc/Controllers/CategoryController.cs")
+	assertExists(t, retrofit, "src/MvcRetroDemo.WebMvc/Controllers/ProductController.cs")
+
+	// cqrs/es tiers still reject -ui mvc (no CrudService for es; wpf/blazor
+	// cover cqrs already).
+	cqrs := filepath.Join(t.TempDir(), "CqrsMvcDemo")
+	if err := Run([]string{"new", "CqrsMvcDemo", "--context", "Ops", "--arch", "cqrs", "-ui", "mvc", "--output", cqrs}); err == nil {
+		t.Fatal("expected -ui mvc to be rejected for a cqrs-tier context")
+	}
+}

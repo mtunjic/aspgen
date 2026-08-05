@@ -1,0 +1,110 @@
+using FluentValidation;
+using Microsoft.AspNetCore.Mvc;
+using {{ .Project }}.Application;
+using {{ .Project }}.WebMvc.Models;
+
+namespace {{ .Project }}.WebMvc.Controllers;
+
+[Route("{{ kebab .Context }}/{{ kebab .Aggregate }}")]
+public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService service{{ range .Relations }}, {{ .Target }}CrudService {{ camel .Target }}Service{{ end }}) : Controller
+{
+    private const int PageSize = 25;
+
+    [HttpGet("")]
+    public async Task<IActionResult> Index(string? search{{ filterParamDecls .Properties "camel" }}, int page = 1, CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        var (items, totalCount) = await service.SearchAsync(search{{ filterParamNames .Properties "" "camel" }}, page, PageSize, cancellationToken);
+        var model = new {{ .Aggregate }}IndexViewModel(items, totalCount, page, PageSize, search{{ filterParamNames .Properties "" "camel" }});
+{{- range .Relations }}
+        model.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+        return View(model);
+    }
+
+    [HttpGet("{id:long}")]
+    public async Task<IActionResult> Details(long id, CancellationToken cancellationToken = default)
+    {
+        var item = await service.GetByIdAsync(id, cancellationToken);
+        if (item is null) return NotFound();
+{{- range .Relations }}
+        ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+        return View(item);
+    }
+
+    [HttpGet("create")]
+    public async Task<IActionResult> Create(CancellationToken cancellationToken = default)
+    {
+{{- range .Relations }}
+        ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+        return View();
+    }
+
+    [HttpPost("create")]
+    public async Task<IActionResult> Create({{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await service.CreateAsync(request, cancellationToken);
+            return RedirectToAction(nameof(Index));
+        }
+        catch (ValidationException ex)
+        {
+            foreach (var failure in ex.Errors) ModelState.AddModelError(failure.PropertyName, failure.ErrorMessage);
+{{- range .Relations }}
+            ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+            return View(request);
+        }
+    }
+
+    [HttpGet("{id:long}/edit")]
+    public async Task<IActionResult> Edit(long id, CancellationToken cancellationToken = default)
+    {
+        var item = await service.GetByIdAsync(id, cancellationToken);
+        if (item is null) return NotFound();
+{{- range .Relations }}
+        ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+        ViewBag.Id = id;
+        return View(new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} item.{{ $property.Name }}{{ end }}));
+    }
+
+    [HttpPost("{id:long}/edit")]
+    public async Task<IActionResult> Edit(long id, {{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await service.UpdateAsync(id, request, cancellationToken);
+            if (!result.Success)
+            {
+                if (result.Message is not null) ModelState.AddModelError("", result.Message);
+{{- range .Relations }}
+                ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+                ViewBag.Id = id;
+                return View(request);
+            }
+            return RedirectToAction(nameof(Index));
+        }
+        catch (ValidationException ex)
+        {
+            foreach (var failure in ex.Errors) ModelState.AddModelError(failure.PropertyName, failure.ErrorMessage);
+{{- range .Relations }}
+            ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+            ViewBag.Id = id;
+            return View(request);
+        }
+    }
+
+    [HttpPost("{id:long}/delete")]
+    public async Task<IActionResult> Delete(long id, CancellationToken cancellationToken = default)
+    {
+        await service.DeleteAsync(id, cancellationToken);
+        return RedirectToAction(nameof(Index));
+    }
+}

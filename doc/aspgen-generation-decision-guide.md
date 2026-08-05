@@ -8,9 +8,10 @@ Version 1.0  |  Architecture Theta  |  03 August 2026
 
 **Recommended: start with `--context`/`--arch`.** Each bounded context picks its own
 architecture tier independently (`ar < dm < cqrs < es`, an ordinal ladder — each tier is a
-superset of the previous one's concepts); a UI (currently only `spa`) attaches separately
-via `-ui`/`add ui`. The `--app`/`--backend`/`--simple`/`--theme` workflow further below
-remains fully supported but is no longer the recommended starting point.
+superset of the previous one's concepts); a UI (`spa`/`wpf`/`blazor` for cqrs/es over HTTP,
+`wpf`/`mvc` for dm in-process) attaches separately via `-ui`/`add ui`. The
+`--app`/`--backend`/`--simple`/`--theme` workflow further below remains fully supported but
+is no longer the recommended starting point.
 
 | If you need... | Choose | Start with |
 |---|---|---|
@@ -19,6 +20,9 @@ remains fully supported but is no longer the recommended starting point.
 | `dm` plus vertical-slice CQRS + a WebApi host | `cqrs` context | `--context NAME --arch cqrs` |
 | `cqrs` plus an event store, event-sourced aggregates, projections | `es` context | `--context NAME --arch es` |
 | A SPA-ready host (OpenAPI/Scalar/CORS, no frontend generated) | SPA UI | `-ui spa` (cqrs/es contexts only) |
+| A Prism/DryIoc Desktop client with full CRUD screens, over HTTP or in-process | WPF UI | `-ui wpf` (cqrs/es over HTTP, or dm in-process) |
+| A Blazor Server client with full CRUD screens, calling the context's WebApi over HTTP | Blazor UI | `-ui blazor` (cqrs/es contexts only) |
+| An ASP.NET Core MVC client with full CRUD screens, calling the CrudService in-process (no WebApi host) | MVC UI | `-ui mvc` (dm contexts only) |
 
 **Rule:** `--arch` is one value per context (not composable); different contexts in the
 same solution may use different tiers. `add repository` is rejected on `es`-tier

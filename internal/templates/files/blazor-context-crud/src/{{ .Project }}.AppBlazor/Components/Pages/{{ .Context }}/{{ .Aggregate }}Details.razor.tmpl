@@ -1,0 +1,45 @@
+@page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{Id:long}"
+@using System.Net.Http.Json
+@using {{ .Project }}.Application
+@using {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }}
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<h1>{{ .Aggregate }} details</h1>
+
+@if (item is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <dl class="row">
+{{- range .Properties }}
+        <dt class="col-sm-3">{{ .DisplayName }}</dt>
+{{- if .RelationTarget }}
+        <dd class="col-sm-9">@({{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</dd>
+{{- else }}
+        <dd class="col-sm-9">@item.{{ .Name }}</dd>
+{{- end }}
+{{- end }}
+    </dl>
+    <button class="btn btn-secondary" @onclick="Back">Back</button>
+}
+
+@code {
+    [Parameter] public long Id { get; set; }
+    private {{ .Aggregate }}View? item;
+{{- range .Relations }}
+    private List<{{ .Target }}View> {{ .Target }}Items = [];
+{{- end }}
+
+    protected override async Task OnInitializedAsync()
+    {
+        item = await Http.GetFromJsonAsync<{{ .Aggregate }}View>($"/api/{{ kebab .Context }}/{{ kebab .Aggregate }}/{Id}");
+{{- range .Relations }}
+        {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
+{{- end }}
+    }
+
+    private void Back() => Navigation.NavigateTo("/{{ kebab .Context }}/{{ kebab .Aggregate }}s");
+}

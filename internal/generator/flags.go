@@ -159,10 +159,10 @@ func validateUI(ui string) (string, error) {
 		return "", nil
 	}
 	switch ui {
-	case "wpf", "blazor", "spa":
+	case "wpf", "blazor", "spa", "mvc":
 		return ui, nil
 	}
-	return "", fmt.Errorf("unsupported ui %q; use wpf, blazor, spa, or none", ui)
+	return "", fmt.Errorf("unsupported ui %q; use wpf, blazor, spa, mvc, or none", ui)
 }
 
 func providerOption(args []string) (string, error) {

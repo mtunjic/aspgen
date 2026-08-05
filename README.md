@@ -53,11 +53,23 @@ go run ./cmd/aspgen add aggregate Order number:string total:decimal --context Sa
 go run ./cmd/aspgen add repository OrderRepository --aggregate Order --context Sales --project ./Billing
 ```
 
-A UI attaches to the whole project (one UI surfaces every context), via `-ui` on `new` or `add ui --framework` afterward. Only `spa` is currently implemented, and only for `cqrs`/`es`-tier contexts (which have a WebApi host); it wires OpenAPI/Scalar discovery and a permissive local-dev CORS policy onto the host, without scaffolding an actual frontend project:
+A UI attaches to the whole project (one UI surfaces every context), via `-ui` on `new` or `add ui --framework` afterward. `spa` and `blazor` are implemented for `cqrs`/`es`-tier contexts (which have a WebApi host, called over HTTP). `wpf` works on `cqrs`/`es` (HTTP, same as blazor) **or** `dm` (headless - no WebApi host - so the Desktop app calls each aggregate's CrudService directly, in-process, via DryIoc). `mvc` is `dm`-tier only, also in-process. `spa` wires OpenAPI/Scalar discovery and a permissive local-dev CORS policy onto the host, without scaffolding an actual frontend project. `wpf`, `blazor`, and `mvc` each scaffold a full list/edit/details CRUD screen for every aggregate already in the project, and keep generating a screen automatically for every aggregate added afterward:
 
 ```text
 go run ./cmd/aspgen new Billing --context Sales --arch cqrs -ui spa --output ./Billing
 go run ./cmd/aspgen add ui spa --framework spa --project ./Billing
+
+go run ./cmd/aspgen new Billing --context Sales --arch cqrs -ui wpf --output ./Billing
+go run ./cmd/aspgen add ui wpf --framework wpf --project ./Billing
+
+go run ./cmd/aspgen new Billing --context Sales --arch cqrs -ui blazor --output ./Billing
+go run ./cmd/aspgen add ui blazor --framework blazor --project ./Billing
+
+go run ./cmd/aspgen new Accounting --context Billing --arch dm -ui mvc --output ./Accounting
+go run ./cmd/aspgen add ui mvc --framework mvc --project ./Accounting
+
+go run ./cmd/aspgen new Accounting --context Billing --arch dm -ui wpf --theme wpfui --output ./Accounting
+go run ./cmd/aspgen add ui wpf --framework wpf --project ./Accounting
 ```
 
 `--database sqlite|postgres` works unchanged under this engine (`dm`-tier projects are class libraries with no host attaching the provider yet). Run `aspgen new --help`/`aspgen add --help` for the full context/arch flag and kind reference.

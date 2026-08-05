@@ -1,0 +1,103 @@
+@model {{ .Project }}.WebMvc.Models.{{ .Aggregate }}IndexViewModel
+@{
+    ViewData["Title"] = "{{ .Aggregate }}s";
+}
+<h1>{{ .Aggregate }}s</h1>
+<p><a asp-action="Create">Create new</a></p>
+
+<form method="get" class="mb-3 d-flex gap-2">
+    <input type="text" name="search" value="@Model.Search" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
+    <button type="submit" class="btn btn-outline-primary">Search</button>
+</form>
+<details class="mb-3">
+    <summary>Advanced filters</summary>
+    <form method="get" class="row g-2 mt-1">
+        <input type="hidden" name="search" value="@Model.Search" />
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }}</label>
+            <select name="{{ camel .Name }}" class="form-control">
+                <option value="">Any</option>
+                @foreach (var option in Model.{{ .RelationTarget }}Items)
+                {
+                    <option value="@option.Id" selected="@(Model.{{ .Name }} == option.Id)">@option.{{ .RelationDisplayProperty }}</option>
+                }
+            </select>
+        </div>
+{{- else if eq (filterKind .CSharpType) "string" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} contains</label>
+            <input type="text" name="{{ camel .Name }}Contains" value="@Model.{{ .Name }}Contains" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} min</label>
+            <input type="number" name="{{ camel .Name }}Min" value="@Model.{{ .Name }}Min" class="form-control" />
+        </div>
+        <div class="col-auto">
+            <label>{{ .DisplayName }} max</label>
+            <input type="number" name="{{ camel .Name }}Max" value="@Model.{{ .Name }}Max" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "date" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }} from</label>
+            <input type="date" name="{{ camel .Name }}Min" value="@Model.{{ .Name }}Min?.ToString("yyyy-MM-dd")" class="form-control" />
+        </div>
+        <div class="col-auto">
+            <label>{{ .DisplayName }} to</label>
+            <input type="date" name="{{ camel .Name }}Max" value="@Model.{{ .Name }}Max?.ToString("yyyy-MM-dd")" class="form-control" />
+        </div>
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        <div class="col-auto">
+            <label>{{ .DisplayName }}</label>
+            <select name="{{ camel .Name }}" class="form-control">
+                <option value="">Any</option>
+                <option value="true" selected="@(Model.{{ .Name }} == true)">Yes</option>
+                <option value="false" selected="@(Model.{{ .Name }} == false)">No</option>
+            </select>
+        </div>
+{{- end }}
+{{- end }}
+        <div class="col-auto align-self-end">
+            <a asp-action="Index" class="btn btn-outline-secondary">Clear</a>
+            <button type="submit" class="btn btn-primary">Apply</button>
+        </div>
+    </form>
+</details>
+
+<table class="table">
+    <thead>
+        <tr>
+{{- range .Properties }}
+            <th>{{ .DisplayName }}</th>
+{{- end }}
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var item in Model.Items)
+    {
+        <tr>
+{{- range .Properties }}
+{{- if .RelationTarget }}
+            <td>@(Model.{{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</td>
+{{- else }}
+            <td>@item.{{ .Name }}</td>
+{{- end }}
+{{- end }}
+            <td>
+                <a asp-action="Details" asp-route-id="@item.Id">Details</a>
+                <a asp-action="Edit" asp-route-id="@item.Id">Edit</a>
+                <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this {{ .Aggregate }}?');">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>
+@if (Model.HasMore)
+{
+    <a asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-search="@Model.Search" class="btn btn-outline-secondary">Load more</a>
+}

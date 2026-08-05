@@ -4,10 +4,14 @@ using {{ .Namespace }}.Models;
 
 namespace {{ .Namespace }}.Services;
 
-{{- if or (eq .Backend "simple") (eq .Backend "ddd") }}
+{{- if or (eq .Backend "simple") (eq .Backend "ddd") (eq .Backend "cqrs") (eq .Backend "es") }}
 public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
 {
+{{- if .Context }}
+    private const string Path = "/api/{{ kebab .Context }}/{{ kebab .Name }}";
+{{- else }}
     private const string Path = "/api/{{ kebab .Name }}";
+{{- end }}
 
     public IReadOnlyList<{{ .Name }}Row> GetAll() =>
         http.GetFromJsonAsync<List<{{ .Name }}Row>>(Path).GetAwaiter().GetResult() ?? [];
@@ -57,6 +61,37 @@ public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
         var response = http.DeleteAsync($"{Path}/{id}").GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
     }
+}
+{{- else if eq .Backend "dm" }}
+using {{ .Project }}.Application;
+
+public sealed class {{ .Name }}Store({{ .Name }}CrudService service) : I{{ .Name }}Store
+{
+    public IReadOnlyList<{{ .Name }}Row> GetAll() =>
+        service.GetAllAsync().GetAwaiter().GetResult()
+            .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}))
+            .ToList();
+
+    public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
+    {
+        var (items, totalCount) = service.SearchAsync(criteria.Search{{ filterParamNames .Properties "criteria." "pascal" }}, criteria.Page, criteria.PageSize).GetAwaiter().GetResult();
+        var rows = items.Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }})).ToList();
+        return new {{ .Name }}PageResult(rows, totalCount, criteria.Page, criteria.PageSize);
+    }
+
+    public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
+    {
+        var request = new {{ .Name }}Request({{ range $index, $property := .Properties }}{{ if $index }}, {{ end }}value.{{ $property.Name }}{{ end }});
+        if (editingId == 0)
+        {
+            var created = service.CreateAsync(request).GetAwaiter().GetResult();
+            return new {{ .Name }}Row(created.Id{{ range .Properties }}, created.{{ .Name }}{{ end }});
+        }
+        service.UpdateAsync(editingId, request).GetAwaiter().GetResult();
+        return value with { Id = editingId };
+    }
+
+    public void Delete(long id) => service.DeleteAsync(id).GetAwaiter().GetResult();
 }
 {{- else if eq .Backend "ddd-local" }}
 using Microsoft.EntityFrameworkCore;
