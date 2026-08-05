@@ -8,16 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 )
 
 type Manifest struct {
-	Project    string   `json:"project"`
-	Components []string `json:"components"`
-	// UI and Persistence are only set for projects created through the
-	// --context/--arch engine (see isContextEngine); legacy --app/--backend
-	// projects track the equivalent state via Components instead.
+	Project     string       `json:"project"`
+	Components  []string     `json:"components"`
 	UI          string       `json:"ui,omitempty"`
 	Persistence string       `json:"persistence,omitempty"`
 	Contexts    []Context    `json:"contexts,omitempty"`
@@ -26,8 +22,10 @@ type Manifest struct {
 
 type Context struct {
 	Name string `json:"name"`
-	// Arch is the bounded context's --arch tier (ar|dm|cqrs|es), empty for
-	// contexts created by the legacy blazor/Renoir profile.
+	// Arch is the bounded context's --arch tier: ar, dm, cqrs, or es. Empty
+	// only for a context declared via `add context NAME` without --arch yet
+	// (a two-step workflow; --arch can be backfilled with a later `add
+	// context NAME --arch TIER` call).
 	Arch       string   `json:"arch,omitempty"`
 	Aggregates []string `json:"aggregates,omitempty"`
 	Entities   []string `json:"entities,omitempty"`
@@ -79,7 +77,7 @@ func projectHasDmContext(m Manifest) bool {
 }
 
 // isContextEngine reports whether m was created via the --context/--arch
-// engine (as opposed to the legacy --app/--backend flags).
+// engine (true for every project; the generator has no other bootstrap path).
 func isContextEngine(m Manifest) bool { return hasComponent(m.Components, "context-engine") }
 
 // findContext returns the context named name, if any.
@@ -263,31 +261,6 @@ func componentDatabase(components []string) string {
 	return "sqlite"
 }
 
-func componentSeed(components []string) string {
-	for _, component := range components {
-		if strings.HasPrefix(component, "seed:") {
-			value := strings.TrimPrefix(component, "seed:")
-			return strings.Split(value, ":")[0]
-		}
-	}
-	return ""
-}
-
-func componentSeedCount(components []string) int {
-	for _, component := range components {
-		if strings.HasPrefix(component, "seed:") {
-			parts := strings.Split(component, ":")
-			if len(parts) > 2 {
-				if count, err := strconv.Atoi(parts[2]); err == nil && count > 0 {
-					return count
-				}
-			}
-			return 3
-		}
-	}
-	return 0
-}
-
 // rejectAggregateReservedProperties rejects property names that would clash
 // with a base class member. "Id" is reserved for every tier; es-tier
 // aggregates additionally reserve "Version"/"Deleted", which are members of
@@ -304,23 +277,6 @@ func rejectAggregateReservedProperties(properties []Property, arch string) error
 	return nil
 }
 
-func isRenoir(m Manifest) bool { return hasComponent(m.Components, "renoir") }
-func isWebAPI(m Manifest) bool { return hasComponent(m.Components, "webapi") }
-
-// isNonSimpleWebAPI reports whether m is a webapi/fullstack project using a
-// non-simple (DDD or default) backend profile.
-func isNonSimpleWebAPI(m Manifest) bool {
-	return isWebAPI(m) && !hasComponent(m.Components, "backend:simple")
-}
-
-// isWPFProject reports whether m has a WPF desktop UI component.
-func isWPFProject(m Manifest) bool { return hasComponent(m.Components, "wpf") }
-
-// isLocalDDDWpf reports whether backend selects the local (non-webapi) DDD
-// wpf profile for project m.
-func isLocalDDDWpf(m Manifest, backend string) bool {
-	return backend == "ddd" && isWPFProject(m)
-}
 func hasComponent(values []string, expected string) bool {
 	for _, value := range values {
 		if value == expected {

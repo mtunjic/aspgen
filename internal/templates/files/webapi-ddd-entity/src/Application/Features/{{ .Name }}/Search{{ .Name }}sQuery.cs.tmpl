@@ -1,3 +1,0 @@
-namespace {{ .Project }}.Application.Features.{{ .Name }};
-
-public sealed record Search{{ .Name }}sQuery(string? Search{{ filterParamDecls .Properties "pascal" }}, int Page, int PageSize);

@@ -96,7 +96,7 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 // aggregateTemplateGroup picks the template group that renders an
 // aggregate's DomainModel (and, for es, Persistence read-model) shape:
 // es-tier aggregates are event-sourced (see es-aggregate/EventSourcedAggregate),
-// every other tier (including legacy Renoir) uses the plain BaseEntity shape.
+// every other tier uses the plain BaseEntity shape.
 func aggregateTemplateGroup(arch string) string {
 	if arch == "es" {
 		return "es-aggregate"
@@ -106,48 +106,30 @@ func aggregateTemplateGroup(arch string) string {
 
 // requireDDDContext validates that contextName exists and is capable of
 // dm-tier (or higher) constructs (aggregates/value-objects/domain-services/
-// repositories/events). New-engine contexts (Arch != "") must be dm or
-// higher; legacy Renoir contexts (Arch == "") require the blazor/Renoir
-// profile, exactly as before this engine existed.
+// repositories/events).
 func requireDDDContext(m *Manifest, contextName, kind string) (Context, error) {
 	ctx, ok := findContext(m.Contexts, contextName)
 	if !ok {
 		return Context{}, fmt.Errorf("bounded context %q does not exist; add it first", contextName)
 	}
-	if ctx.Arch != "" {
-		if !archAtLeast(ctx.Arch, "dm") {
-			return Context{}, fmt.Errorf("%s requires a dm/cqrs/es context; %q is arch tier %q (use add entity instead)", kind, contextName, ctx.Arch)
-		}
-		return ctx, nil
-	}
-	if !isRenoir(*m) {
-		// Deprecated: this legacy blazor/Renoir path (Arch == "") is kept
-		// working but superseded by --context/--arch dm+ contexts above.
-		return Context{}, fmt.Errorf("DDD %s generation currently requires the blazor/Renoir profile", kind)
+	if !archAtLeast(ctx.Arch, "dm") {
+		return Context{}, fmt.Errorf("%s requires a dm/cqrs/es context; %q is arch tier %q (use add entity instead)", kind, contextName, ctx.Arch)
 	}
 	return ctx, nil
 }
 
 // renderAggregateCrud renders the aggregate's Application-layer CRUD service
 // and validator, additionally wiring it into a host for tiers that have one:
-// legacy Renoir contexts (arch == "") get Blazor DI + Razor CRUD pages;
 // cqrs-tier contexts get the CrudService registered with the WebApi host's
 // own DI plus a full vertical-slice Command/Query/Handler + Minimal API
 // endpoints layer mounted on that host; es-tier contexts get the same
 // vertical-slice/endpoint treatment but backed by a generated
 // {Aggregate}EventStoreRepository instead of a CrudService (no CrudService
 // is rendered for es). dm-tier contexts get the Application-layer files
-// only; there is no host to wire into yet (Phase 5, -ui is not implemented).
+// only, plus an MVC Controller/Views set or WPF module if -ui mvc/wpf is
+// already attached (dm's two in-process UI options - no WebApi host).
 func renderAggregateCrud(r addRequest, m *Manifest, d data, arch string) error {
 	switch arch {
-	case "":
-		if err := renderTree(r.Project, "renoir-crud", d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
-			return err
-		}
-		appBlazorDir := m.Project + ".AppBlazor"
-		using := "using " + m.Project + ".Application;\n"
-		registration := "        builder.Services.AddScoped<" + d.Aggregate + "CrudService>();"
-		return updateBlazorServiceHost(r.Project, appBlazorDir, []string{using}, registration, r.DryRun)
 	case "cqrs":
 		if err := renderTree(r.Project, "dm-crud", d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 			return err
@@ -199,13 +181,13 @@ func renderAggregateCrud(r addRequest, m *Manifest, d data, arch string) error {
 }
 
 // applyManyToManyRenoir materializes each many-to-many relation declared on
-// a Renoir aggregate as its own CRUD-default join aggregate (e.g.
+// a dm+ tier aggregate as its own CRUD-default join aggregate (e.g.
 // PostTag) in the same bounded context, carrying a required many-to-one
 // relation back to both r.Name and the target aggregate. It reuses the same
-// renoir-aggregate/renoir-crud rendering as an ordinary two-relation
-// "add aggregate" call, so the join aggregate gets full CRUD, DI wiring, and
-// inverse navigations (via the same updateInverseNavigation helper) on both
-// r.Name's and the target's own domain classes.
+// rendering as an ordinary two-relation "add aggregate" call, so the join
+// aggregate gets full CRUD, DI wiring, and inverse navigations (via the
+// same updateInverseNavigation helper) on both r.Name's and the target's
+// own domain classes.
 func applyManyToManyRenoir(r addRequest, m *Manifest, d *data, contextName string, manyToMany []ManyToManyRelation, declaringDisplayProperty string, arch string) error {
 	for _, rel := range manyToMany {
 		leftRel := Relation{Name: r.Name, Target: r.Name, FKProperty: r.Name + "Id", DisplayProperty: declaringDisplayProperty}
@@ -302,16 +284,6 @@ func addRepositoryCmd(r addRequest, m *Manifest, d *data) error {
 		return err
 	}
 	switch ctx.Arch {
-	case "":
-		appBlazorDir := m.Project + ".AppBlazor"
-		usings := []string{
-			"using " + m.Project + ".DomainModel." + contextName + ";\n",
-			"using " + m.Project + ".Persistence.Repositories;\n",
-		}
-		registration := "        builder.Services.AddScoped<I" + r.Name + ", " + r.Name + ">();"
-		if err := updateBlazorServiceHost(r.Project, appBlazorDir, usings, registration, r.DryRun); err != nil {
-			return err
-		}
 	case "cqrs":
 		infrastructureDir := m.Project + ".Infrastructure"
 		usings := []string{

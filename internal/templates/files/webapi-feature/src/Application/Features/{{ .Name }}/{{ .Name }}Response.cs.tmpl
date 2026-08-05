@@ -1,4 +1,0 @@
-namespace {{ .Project }}.Application.Features.{{ .Name }};
-
-public sealed record {{ .Name }}Response(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});

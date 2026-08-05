@@ -16,9 +16,8 @@ type dbImportRequest struct {
 	Provider string
 	Script   string
 	Tables   []string
-	// Context is the bounded context every imported table is added to as
-	// an aggregate; only used (and required) when the target project is
-	// the blazor/Renoir profile.
+	// Context is the bounded context every imported table becomes an
+	// ar-tier entity in.
 	Context string
 }
 
@@ -48,16 +47,16 @@ func parseDBImportFlags(args []string) (req dbImportRequest, ok bool, err error)
 }
 
 // runDBImport discovers table/column schema from the SQL script and, for
-// each selected table, synthesizes `col:type` property args and
-// calls addEntityCmd — the same call `add entity` itself makes — so every
-// backend profile addEntityCmd already supports works unmodified. It also
-// writes a `schema.sql` backup snapshot at the project root.
+// each selected table, synthesizes `col:type` property args and calls
+// addEntityCmd — the same call `add entity` itself makes — to create an
+// ar-tier entity in req.Context. It also writes a `schema.sql` backup
+// snapshot at the project root.
 func runDBImport(project string, m *Manifest, backend string, req dbImportRequest, dryRun, force bool) error {
-	if isRenoir(*m) {
-		return runDBImportRenoir(project, m, req, dryRun, force)
-	}
 	if backend == "" {
-		return errors.New("DB-driven entity import requires --simple or --backend ddd on the target project")
+		return errors.New("DB-driven entity import requires an ar-tier context project")
+	}
+	if req.Context == "" {
+		return errors.New("DB-driven entity import requires --context ContextName")
 	}
 	tables, err := discoverTables(req)
 	if err != nil {
@@ -76,67 +75,15 @@ func runDBImport(project string, m *Manifest, backend string, req dbImportReques
 			continue
 		}
 		entityName := singularize(collapsePascal(table.Name))
-		r := addRequest{Name: entityName, Args: propArgs, Project: project, DryRun: dryRun, Force: force, Backend: backend}
+		r := addRequest{Name: entityName, Args: append(append([]string{}, propArgs...), "--context", req.Context), Project: project, DryRun: dryRun, Force: force, Backend: backend}
 		d := &data{
 			Project:   m.Project,
 			Namespace: m.Project,
 			Name:      entityName,
 			Database:  componentDatabase(m.Components),
-			Seed:      componentSeed(m.Components),
-			SeedCount: componentSeedCount(m.Components),
 			Backend:   backend,
 		}
-		if backend == "ddd" && !isWebAPI(*m) {
-			d.Backend = "ddd-local"
-		}
 		if err := addEntityCmd(r, m, d); err != nil {
-			return fmt.Errorf("table %q: %w", table.Name, err)
-		}
-	}
-	if !dryRun {
-		if err := os.WriteFile(filepath.Join(project, "schema.sql"), []byte(dbschema.RenderSchemaSQL(tables)), 0o644); err != nil {
-			return err
-		}
-	}
-	m.Components = appendUnique(m.Components, "db-import:"+req.Provider)
-	return nil
-}
-
-// runDBImportRenoir mirrors runDBImport for the blazor/Renoir profile: every
-// selected table becomes a CRUD-default aggregate (via addAggregateCmd, the
-// same call `add aggregate` itself makes) in req.Context, which must already
-// exist in the manifest.
-func runDBImportRenoir(project string, m *Manifest, req dbImportRequest, dryRun, force bool) error {
-	if req.Context == "" {
-		return errors.New("DB-driven aggregate import on the blazor/Renoir profile requires --context ContextName")
-	}
-	if !validIdentifier(req.Context) {
-		return fmt.Errorf("invalid context name %q", req.Context)
-	}
-	if !contextExists(m.Contexts, req.Context) {
-		m.Contexts = appendContext(m.Contexts, Context{Name: req.Context})
-		m.Components = appendUnique(m.Components, "context:"+req.Context)
-	}
-	tables, err := discoverTables(req)
-	if err != nil {
-		return err
-	}
-	if len(tables) == 0 {
-		return errors.New("no tables selected for import")
-	}
-	for _, table := range tables {
-		propArgs, skipped := synthesizeProps(table, req.Provider, "ddd")
-		for _, name := range skipped {
-			fmt.Fprintf(os.Stderr, "import-db: skipping column %q in table %q (unsupported type or reserved name)\n", name, table.Name)
-		}
-		if len(propArgs) == 0 {
-			fmt.Fprintf(os.Stderr, "import-db: skipping table %q (no usable columns)\n", table.Name)
-			continue
-		}
-		aggregateName := singularize(collapsePascal(table.Name))
-		r := addRequest{Name: aggregateName, Args: append(append([]string{}, propArgs...), "--context", req.Context), Project: project, DryRun: dryRun, Force: force}
-		d := &data{Project: m.Project, Namespace: m.Project}
-		if err := addAggregateCmd(r, m, d); err != nil {
 			return fmt.Errorf("table %q: %w", table.Name, err)
 		}
 	}

@@ -19,16 +19,16 @@ go test ./cmd/... ./internal/...
 Run the CLI directly for manual testing:
 
 ```powershell
-go run ./cmd/aspgen new MyApp --app fullstack --simple --output ./MyApp
-go run ./cmd/aspgen add entity Customer name:string age:int active:bool --project ./MyApp
-go run ./cmd/aspgen import-db --project ./MyApp --script schema.sql --provider sqlite --tables all
+go run ./cmd/aspgen new MyApp --context Catalog --arch ar --output ./MyApp
+go run ./cmd/aspgen add entity Customer name:string age:int active:bool --context Catalog --project ./MyApp
+go run ./cmd/aspgen import-db --project ./MyApp --context Catalog --script schema.sql --provider sqlite --tables all
 ```
 
 `new` bootstraps a project + `.aspgen/manifest.json`; `add` commands mutate an
 existing generated project and require that manifest (found via `--project` or
-by searching parent directories). `import-db` (and `new --connection`/`--script`)
-scaffold entities from an existing DB schema — see [internal/dbschema/](internal/dbschema)
-and `import_db*.go` in generator.
+by searching parent directories). `import-db` scaffolds `ar`-tier entities
+from an existing DB schema (a static SQL DDL script) — see
+[internal/dbschema/](internal/dbschema) and `import_db*.go` in generator.
 
 ## Code layout
 
@@ -40,8 +40,11 @@ and `import_db*.go` in generator.
   [new_project.go](internal/generator/new_project.go) (`new` subcommand),
   [add.go](internal/generator/add.go) (`add` dispatcher) plus
   [add_entity.go](internal/generator/add_entity.go),
-  [add_module.go](internal/generator/add_module.go),
-  [add_webapi.go](internal/generator/add_webapi.go), and
+  [add_context_entity.go](internal/generator/add_context_entity.go),
+  [add_webapi.go](internal/generator/add_webapi.go),
+  [add_context_wpf_ui.go](internal/generator/add_context_wpf_ui.go),
+  [add_context_blazor_ui.go](internal/generator/add_context_blazor_ui.go),
+  [add_context_mvc_ui.go](internal/generator/add_context_mvc_ui.go), and
   [add_ddd.go](internal/generator/add_ddd.go) (context/aggregate/
   value-object/domain-service/repository/event) for the individual `add`
   kinds, [flags.go](internal/generator/flags.go) (flag parsing),
@@ -50,8 +53,7 @@ and `import_db*.go` in generator.
   (`.csproj` lookup/update), [project_markers.go](internal/generator/project_markers.go)
   (marker-comment injection like `// aspgen:services`),
   [render.go](internal/generator/render.go) (template rendering),
-  [solution.go](internal/generator/solution.go) (`.sln` generation),
-  [seed.go](internal/generator/seed.go) (dummy seed data), and
+  [solution.go](internal/generator/solution.go) (`.sln` generation), and
   [types.go](internal/generator/types.go) (shared types, `parseProperties`).
   When adding a subcommand or entity kind, find the closest existing sibling
   (e.g. `add entity` vs `add aggregate`) and mirror its pattern rather than
@@ -59,9 +61,13 @@ and `import_db*.go` in generator.
 - [internal/templates/templates.go](internal/templates/templates.go) — `//go:embed files`
   exposing the template tree as an `embed.FS`.
 - [internal/templates/files/](internal/templates/files) — actual Go `text/template` source for
-  generated C#/XAML/project files, one subdirectory per generation kind
-  (`entity`, `module`, `service`, `database`, `webapi`, `wpf`, `renoir-*`,
-  `seed-*`, etc.). Editing generated output means editing templates here, not
+  generated C#/XAML/project files, one subdirectory per arch tier/generation kind
+  (`ar-entity`, `dm`, `dm-crud`, `cqrs`, `cqrs-feature`, `es`, `es-aggregate`,
+  `es-feature`, `wpf`, `wpf-entity`, `blazor-context(-crud)`, `mvc-context(-crud)`,
+  `renoir-aggregate`/`renoir-value-object`/`renoir-domain-service`/
+  `renoir-repository`/`renoir-event` (the shared DDD building-block templates
+  used by every `dm`+ tier, not just `es`), `tests-unit`, `tests-integration`,
+  `ci`, etc.). Editing generated output means editing templates here, not
   generator.go, unless the change is about *which* files get rendered.
 - [internal/generator/generator_test.go](internal/generator/generator_test.go) and
   [internal/generator/layout_integration_test.go](internal/generator/layout_integration_test.go) — unit tests for
@@ -70,16 +76,17 @@ and `import_db*.go` in generator.
 
 ## Conventions specific to this repo
 
-- Application targets: `webapi`, `wpf`, `blazor`, `fullstack`. Profiles:
-  `--simple` (single-project Active Record CRUD, no DDD) vs `--backend ddd`
-  (Domain/Application/Infrastructure/WebApi CQRS layers) — these two flags are
-  mutually exclusive; check for that validation when touching flag parsing.
-  `blazor` is the separate Renoir-style DDD profile driven by `add context /
-  aggregate / value-object / domain-service / repository / event`.
-  See the [README.md](README.md) for the full flag/profile matrix.
+- Every project is bootstrapped via `--context CTX --arch ar|dm|cqrs|es`; each
+  bounded context picks its own tier independently, so one solution can mix
+  tiers (e.g. an `ar` context alongside an `es` context). Tiers form an
+  ordinal ladder (`ar < dm < cqrs < es`), each a superset of the previous
+  tier's concepts. `add context / aggregate / value-object / domain-service /
+  repository / event` all target `dm`+ tier contexts; `add entity` targets
+  `ar`-tier contexts. See the [README.md](README.md) for the full flag/tier
+  matrix.
 - Flags accept three forms: `--flag value`, `--flag:value`, `-flag:value` —
-  preserve all three when adding new flags (see `seedOption` in
-  generator.go for the parsing pattern).
+  preserve all three when adding new flags (see `matchOption` in
+  flags.go for the parsing pattern).
 - Property args are `name:type` pairs parsed by `parseProperties`; supported
   C# types are the fixed set in `mapType`. Unknown types must error, not
   silently pass through.

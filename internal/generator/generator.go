@@ -34,5 +34,5 @@ func Run(args []string) error {
 }
 
 func usage() error {
-	return errors.New("usage: aspgen new NAME --app webapi|wpf|blazor|fullstack [flags] | aspgen add KIND NAME [flags] | aspgen import-db --project PATH [flags]; run 'aspgen --help' for details")
+	return errors.New("usage: aspgen new NAME --context CTX --arch ar|dm|cqrs|es [flags] | aspgen add KIND NAME [flags] | aspgen import-db --project PATH [flags]; run 'aspgen --help' for details")
 }

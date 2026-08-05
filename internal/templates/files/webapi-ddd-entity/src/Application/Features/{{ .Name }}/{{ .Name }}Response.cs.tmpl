@@ -1,4 +1,0 @@
-namespace {{ .Project }}.Application.Features.{{ .Name }};
-
-public sealed record {{ .Name }}Response(
-    long Id{{ range .Properties }}, {{ .CSharpType }} {{ .Name }}{{ end }});

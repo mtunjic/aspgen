@@ -7,12 +7,9 @@ First version of a Go template generator for ASP.NET Core Clean Architecture API
 Generation is a two-step workflow: run `new` once to create the project, solution, source tree, and `.aspgen/manifest.json`; then run `add` commands against that generated project. An `add` command cannot initialize a missing project directory.
 
 ```text
-go run ./cmd/aspgen new MyApp --app fullstack --simple --output ./MyApp
-go run ./cmd/aspgen add entity Customer name:string age:int active:bool --project ./MyApp
-go run ./cmd/aspgen add module Customers --project ./MyApp
+go run ./cmd/aspgen new MyApp --context Catalog --arch ar --output ./MyApp
+go run ./cmd/aspgen add entity Customer name:string age:int active:bool --context Catalog --project ./MyApp
 go run ./cmd/aspgen add database postgres --project ./MyApp
-go run ./cmd/aspgen add service Email --project ./MyApp
-go run ./cmd/aspgen add feature CreateCustomer name:string age:int active:bool --project ./MyApp
 ```
 
 If you run an `add` command without `--project`, aspgen searches the current directory and its parents for `.aspgen/manifest.json`. The explicit form is recommended in scripts and from outside the project tree.
@@ -21,9 +18,9 @@ Run `aspgen --help`, `aspgen new --help`, or `aspgen add --help` for a full flag
 
 See [doc/DEVOPS.md](doc/DEVOPS.md) for how CI and tagged releases work.
 
-## Context/arch engine (recommended)
+## Context/arch engine
 
-The recommended way to start a new backend is `--context`/`--arch`, not `--app`/`--backend`/`--simple` (see "Legacy `--app`/`--backend` workflow" below for the older, still-supported path). Each bounded context picks its own architecture tier independently, so one solution can mix e.g. a simple `ar` context alongside an event-sourced `es` context:
+Each bounded context picks its own architecture tier independently, so one solution can mix e.g. a simple `ar` context alongside an event-sourced `es` context:
 
 ```text
 go run ./cmd/aspgen new Accounting --context Billing --arch ar --output ./Accounting
@@ -90,85 +87,50 @@ project's README for usage:
 .\scripts\ci.ps1 -SkipTests -Configuration Debug
 ```
 
-## Legacy `--app`/`--backend` workflow
+## DDD building blocks: value objects, domain services, repositories, events
 
-The sections below describe the original `--app webapi|wpf|blazor|fullstack` + `--backend ddd`/`--simple`/`--theme` workflow. It remains fully supported (no behavior changes), but is no longer the recommended starting point for new projects — prefer `--context`/`--arch` above.
-
-For a WPF or fullstack project, add the WPF-UI Fluent theme with `--theme wpfui` (also accepted as `--theme:wpfui` or `-theme:wpfui`). This adds the `WPF-UI` NuGet package, theme resource dictionaries, and a themed `FluentWindow` shell. The generated app defaults to the Light palette; pass `--theme-mode dark` to generate the Dark palette instead (both are just the starting `ThemesDictionary` value — the shell also ships a runtime Light/Dark toggle).
-
-For a Web API or fullstack project, use `--backend ddd` (or `--backend:ddd`) to enable incremental DDD CRUD generation. Adding an entity then creates its Domain entity, repository contract, EF Core repository, separate CQRS commands/queries and handlers, FluentValidation validators, and Minimal API endpoints for list, get, create, update, and delete.
-
-Add realistic development data with `--seed dummy` (or `--seed:dummy`) together with `--simple` or `--backend ddd`. Each generated entity receives three deterministic sample records by default. Set a count with `--seed dummy 200` or `--seed:dummy:200`; values are chosen from declared types. Seeding runs at API or local DDD WPF startup and is intended for development environments.
-
-DDD/Renoir workflow:
+`add context`/`add aggregate` (shown above) are joined by four more incremental commands for `dm`/`cqrs`/`es`-tier contexts:
 
 ```text
-go run ./cmd/aspgen new RenoirDemo --app blazor --output ./RenoirDemo
-go run ./cmd/aspgen add context Catalog --project ./RenoirDemo
-go run ./cmd/aspgen add aggregate Product name:string price:decimal active:bool published:date --context Catalog --project ./RenoirDemo
-go run ./cmd/aspgen add value-object ProductCode value:string --context Catalog --project ./RenoirDemo
-go run ./cmd/aspgen add domain-service PricingPolicy --context Catalog --project ./RenoirDemo
-go run ./cmd/aspgen add repository ProductRepository --aggregate Product --context Catalog --project ./RenoirDemo
-go run ./cmd/aspgen add event ProductPriceChanged productId:long price:decimal --context Catalog --project ./RenoirDemo
+go run ./cmd/aspgen new Catalog --context Catalog --arch dm --output ./Catalog
+go run ./cmd/aspgen add aggregate Product name:string price:decimal active:bool published:date --context Catalog --project ./Catalog
+go run ./cmd/aspgen add value-object ProductCode value:string --context Catalog --project ./Catalog
+go run ./cmd/aspgen add domain-service PricingPolicy --context Catalog --project ./Catalog
+go run ./cmd/aspgen add repository ProductRepository --aggregate Product --context Catalog --project ./Catalog
+go run ./cmd/aspgen add event ProductPriceChanged productId:long price:decimal --context Catalog --project ./Catalog
 ```
 
-Aggregate generation creates the domain aggregate root, persistence mapping, application CRUD service, and a Blazor CRUD page. Controls are selected from types: strings use `InputText`, numbers use `InputNumber`, booleans use `InputCheckbox`, and dates use `InputDate`.
+Aggregate generation creates the domain aggregate root, persistence mapping, and an Application-layer CRUD service (plus, for `cqrs`/`es` tiers, a vertical-slice Command/Query/Handler layer and Minimal API endpoints; for `dm`, a Controller/Views set or WPF module once `-ui mvc`/`-ui wpf` is attached).
 
-DDD building blocks are incremental and context-scoped. Value objects are immutable records, domain services are stateless policies, repository contracts are aggregate-specific and live in the domain layer, and events are immutable completed business facts. Use `--no-crud` on an aggregate when the use case should be modeled explicitly instead of starting with generated CRUD.
+DDD building blocks are incremental and context-scoped. Value objects are immutable records, domain services are stateless policies, repository contracts are aggregate-specific and live in the domain layer (`cqrs`-tier also registers the repository with the WebApi host's DI container), and events are immutable completed business facts. Use `--no-crud` on an aggregate when the use case should be modeled explicitly instead of starting with generated CRUD.
 
-Generated Renoir CRUD keeps boundaries explicit: the application service exposes immutable `Request` and `View` records, while the Blazor page uses a local editable form model and never binds directly to the domain aggregate.
-
-See [doc/aspgen-renoir-developer-guide.md](doc/aspgen-renoir-developer-guide.md) for a full step-by-step walkthrough of building and extending a Renoir app, with real generated code and file-tree diagrams.
-
-Supported application targets are `webapi`, `wpf`, `blazor`, and `fullstack`.
+Generated CRUD keeps boundaries explicit: the CRUD service exposes immutable `Request` and `View` records, and validators use FluentValidation rules per property type.
 
 Project names may be dotted .NET names such as `Markosoft.Commerce`. In that case aspgen keeps namespaces, project filenames, project references, and solution entries aligned: `Markosoft.Commerce.Domain.csproj`, `Markosoft.Commerce.Application.csproj`, `Markosoft.Commerce.Infrastructure.csproj`, and `Markosoft.Commerce.Desktop.csproj`.
 
-Use `--simple` with `webapi` or `fullstack` for the Rails-style profile: one Web API project, EF Core Active Record-like models, direct CRUD endpoints, and no DDD/CQRS layer. `--simple` cannot be combined with `--backend ddd`.
-
-Backend/profile matrix:
-
-```text
-webapi                         Clean Architecture Web API
-webapi --backend ddd           Clean Architecture + DDD/CQRS CRUD
-webapi --simple                Single-project Active Record-style CRUD API
-wpf                            Prism/DryIoc desktop shell and local UI modules
-wpf --backend ddd               Local DDD + SQLite layers with no WebApi
-fullstack --backend ddd        DDD/CQRS API + Prism/DryIoc WPF modules
-fullstack --simple             Simple CRUD API + WPF modules connected by HttpClient
-```
-
-For fullstack projects, generated WPF entity stores call `/api/{entity}`. The API base URL defaults to `http://localhost:5000` and can be changed with the `ASPGENT_API_URL` environment variable.
-
-The `webapi` target generates Domain, Application, Infrastructure, and WebApi projects with project references in the direction Domain <- Application <- Infrastructure <- WebApi. It includes EF Core persistence (SQLite by default, PostgreSQL/Npgsql when selected), FluentValidation registration, OpenAPI, Scalar, health checks, and appsettings connection-string configuration.
-
-SQLite is the default database for `webapi`, `fullstack`, `--simple`, and `--backend ddd` generation. Use `--database postgres` (also accepted as `--database:postgres`) when PostgreSQL is required. The selected provider is recorded in `.aspgen/manifest.json` and is emitted into the generated EF Core project, connection string, and dependency-injection setup.
+SQLite is the default database for every arch tier. Use `--database postgres` (also accepted as `--database:postgres`) when PostgreSQL is required. The selected provider is recorded in `.aspgen/manifest.json` and is emitted into the generated EF Core project, connection string, and dependency-injection setup.
 
 ### Generating entities from an existing database
 
-Instead of hand-typing `name:type` properties, aspgen can scaffold entities (or, for the `blazor`/Renoir profile, aggregates via `--context`) from an existing database schema — a static SQL DDL script — for `webapi`/`fullstack`/`--simple`/`--backend ddd`/`blazor` projects. Supported providers are `sqlite`, `postgres`, `sqlserver`, and `mysql`.
+Instead of hand-typing `name:type` properties, aspgen can scaffold `ar`-tier entities from an existing database schema — a static SQL DDL script — via the `import-db` verb against an already-`new`-ed project. Supported providers are `sqlite`, `postgres`, `sqlserver`, and `mysql`.
 
 ```text
-go run ./cmd/aspgen new MyApp --app webapi --simple --script schema.sql --provider postgres --tables all --output ./MyApp
-go run ./cmd/aspgen import-db --project ./MyApp --connection "file:demo.db" --provider sqlite --tables Customers,Orders
+go run ./cmd/aspgen new MyApp --context Catalog --arch ar --output ./MyApp
+go run ./cmd/aspgen import-db --project ./MyApp --context Catalog --script schema.sql --provider postgres --tables all
 ```
 
-`--tables` accepts `all` (the default) or a comma-separated list of table names. `--connection` and `--script` are mutually exclusive and both require `--provider`. Each selected table becomes one entity (its name PascalCased and best-effort singularized) via the same code path `add entity` uses, so the resulting Domain/Application/Infrastructure/WebApi/WPF layers match the target project's existing backend profile. Primary-key columns and (on `--backend ddd`) conventional audit columns (`created_on`/`updated_on` and similar) are skipped since generated entities already provide them; columns with no known type mapping (e.g. `json`, `blob`) are skipped with a warning rather than failing the whole table.
+`--tables` accepts `all` (the default) or a comma-separated list of table names. Each selected table becomes one `ar`-tier entity (its name PascalCased and best-effort singularized) via the same code path `add entity` uses. Primary-key columns are skipped since generated entities already provide them; columns with no known type mapping (e.g. `json`, `blob`) are skipped with a warning rather than failing the whole table.
 
 A `schema.sql` backup snapshot of the discovered tables is written at the project root on every run. It's a reference artifact only — aspgen never invokes `dotnet ef`; run `dotnet ef migrations add`/`dotnet ef database update` yourself against the generated entities and `DbContext`. Connection strings are never written to `.aspgen/manifest.json`, `schema.sql`, or any generated file.
 
 Run `aspgen import-db --help` for the full flag reference.
-
-Web API features are generated as vertical slices with request/response records, a FluentValidation validator, a CQRS handler returning `Result<T>`, and a Minimal API endpoint. Feature endpoints are registered incrementally in `Program.cs`.
-
-The `blazor` target is a Renoir-style profile with DomainModel, Application, Infrastructure, Persistence, Resources, and AppBlazor projects. It includes soft-delete and `TimeStamp` domain conventions, settings binding, SQL Server EF Core persistence, and a layered Blazor host.
 
 Templates are embedded in the executable. Export and customize them with:
 
 ```text
 go run ./cmd/aspgen templates export ./my-templates
 go run ./cmd/aspgen templates list
-go run ./cmd/aspgen new MyApp --app webapi --templates ./my-templates
+go run ./cmd/aspgen new MyApp --context Catalog --arch ar --templates ./my-templates
 ```
 
 Generated projects contain `.aspgen/manifest.json`, allowing components to be added incrementally without regenerating the whole project.

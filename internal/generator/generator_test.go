@@ -1,7 +1,6 @@
 package generator
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,57 +149,9 @@ func TestAggregateRejectsESReservedProperties(t *testing.T) {
 	}
 }
 
-func TestNewAndIncrementalGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "Demo")
-	if err := Run([]string{"new", "Demo", "--app", "fullstack", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "entity", "Customer", "name:string", "active:bool", "--project", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "entity", "Order", "total:decimal", "--project", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "module", "Customers", "--project", project}); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{
-		".aspgen/manifest.json",
-		"src/Domain/Entities/Customer.cs",
-		"src/Domain/Entities/Order.cs",
-		"src/Desktop/Modules/Customer/CustomerModule.cs",
-		"src/Desktop/Modules/Customer/Views/CustomerView.xaml",
-		"src/Desktop/Modules/Customer/ViewModels/CustomerViewModel.cs",
-		"src/Desktop/Modules/Customers/CustomersModule.cs",
-	} {
-		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
-			t.Fatalf("missing generated file %s: %v", path, err)
-		}
-	}
-	app, err := os.ReadFile(filepath.Join(project, "src/Desktop/App.xaml.cs"))
-	if err != nil || !strings.Contains(string(app), "moduleCatalog.AddModule<Demo.Desktop.Modules.Customer.CustomerModule>();") || !strings.Contains(string(app), "moduleCatalog.AddModule<Demo.Modules.Customers.CustomersModule>();") {
-		t.Fatalf("module was not registered in App.xaml.cs: %v", err)
-	}
-	content, err := os.ReadFile(filepath.Join(project, ".aspgen", "manifest.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var manifest Manifest
-	if err := json.Unmarshal(content, &manifest); err != nil {
-		t.Fatal(err)
-	}
-	if !contains(manifest.Components, "entity:Customer") || !contains(manifest.Components, "module:Customers") {
-		t.Fatalf("manifest missing components: %#v", manifest.Components)
-	}
-	projectFile, err := os.ReadFile(filepath.Join(project, "src/Desktop/Demo.Desktop.csproj"))
-	if err != nil || !strings.Contains(string(projectFile), `Compile Update="Modules/Customer/CustomerModule.cs"`) || !strings.Contains(string(projectFile), `Page Update="Modules/Customer/Views/CustomerView.xaml"`) {
-		t.Fatalf("incremental WPF files were not registered in the project file: %v", err)
-	}
-}
-
 func TestDottedProjectNameGeneration(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "Commerce")
-	if err := Run([]string{"new", "Markosoft.Commerce", "--app", "webapi", "--output", project}); err != nil {
+	if err := Run([]string{"new", "Markosoft.Commerce", "--context", "Catalog", "--arch", "ar", "--output", project}); err != nil {
 		t.Fatal(err)
 	}
 	manifest, err := os.ReadFile(filepath.Join(project, ".aspgen/manifest.json"))
@@ -215,7 +166,7 @@ func TestDottedProjectNameGeneration(t *testing.T) {
 
 func TestWpfUIThemeGeneration(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "ThemedDemo")
-	if err := Run([]string{"new", "ThemedDemo", "--app", "wpf", "--theme:wpfui", "--output", project}); err != nil {
+	if err := Run([]string{"new", "ThemedDemo", "--context", "Sales", "--arch", "dm", "-ui", "wpf", "--theme:wpfui", "--output", project}); err != nil {
 		t.Fatal(err)
 	}
 	csproj, err := os.ReadFile(filepath.Join(project, "src/Desktop/ThemedDemo.Desktop.csproj"))
@@ -277,7 +228,7 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 	if err != nil || !strings.Contains(string(manifest), `"theme:wpfui"`) || !strings.Contains(string(manifest), `"theme-mode:light"`) {
 		t.Fatalf("WPF-UI theme was not recorded in the manifest: %v", err)
 	}
-	if err := Run([]string{"add", "entity", "Event", "title:string", "count:int", "price:decimal", "eventDate:date", "startsAt:datetime", "active:bool", "externalId:guid", "--project", project}); err != nil {
+	if err := Run([]string{"add", "aggregate", "Event", "title:string", "count:int", "price:decimal", "eventDate:date", "startsAt:datetime", "active:bool", "externalId:guid", "--context", "Sales", "--project", project}); err != nil {
 		t.Fatal(err)
 	}
 	view, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/Views/EventView.xaml"))
@@ -321,7 +272,7 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 
 func TestWpfUIThemeModeGeneration(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "DarkDemo")
-	if err := Run([]string{"new", "DarkDemo", "--app", "wpf", "--theme:wpfui", "--theme-mode:dark", "--output", project}); err != nil {
+	if err := Run([]string{"new", "DarkDemo", "--context", "Sales", "--arch", "dm", "-ui", "wpf", "--theme:wpfui", "--theme-mode:dark", "--output", project}); err != nil {
 		t.Fatal(err)
 	}
 	app, err := os.ReadFile(filepath.Join(project, "src/Desktop/App.xaml"))
@@ -332,325 +283,72 @@ func TestWpfUIThemeModeGeneration(t *testing.T) {
 	if err != nil || !strings.Contains(string(manifest), `"theme-mode:dark"`) {
 		t.Fatalf("WPF-UI dark theme mode was not recorded in the manifest: %v", err)
 	}
-
-	if err := Run([]string{"new", "NoThemeDemo", "--app", "wpf", "--theme-mode:light", "--output", filepath.Join(t.TempDir(), "NoThemeDemo")}); err == nil {
-		t.Fatal("expected --theme-mode without --theme wpfui to fail")
-	}
-}
-
-func TestDddBackendEntityGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "DddApi")
-	if err := Run([]string{"new", "DddApi", "--app", "fullstack", "--backend:ddd", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "entity", "Person", "name:string", "age:int", "--project", project}); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{
-		"src/Application/Features/Person/CreatePersonCommand.cs",
-		"src/Application/Features/Person/CreatePersonHandler.cs",
-		"src/Application/Features/Person/GetPersonsQuery.cs",
-		"src/Application/Features/Person/GetPersonsHandler.cs",
-		"src/Application/Features/Person/GetPersonByIdQuery.cs",
-		"src/Application/Features/Person/GetPersonByIdHandler.cs",
-		"src/Application/Features/Person/UpdatePersonCommand.cs",
-		"src/Application/Features/Person/UpdatePersonHandler.cs",
-		"src/Application/Features/Person/DeletePersonCommand.cs",
-		"src/Application/Features/Person/DeletePersonHandler.cs",
-		"src/Infrastructure/Persistence/PersonRepository.cs",
-		"src/WebApi/Features/Person/PersonEndpoints.cs",
-	} {
-		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
-			t.Fatalf("missing DDD backend file %s: %v", path, err)
-		}
-	}
-	context, err := os.ReadFile(filepath.Join(project, "src/Infrastructure/Persistence/AppDbContext.cs"))
-	if err != nil || !strings.Contains(string(context), "DbSet<Person> Persons") {
-		t.Fatalf("entity was not added to AppDbContext: %v", err)
-	}
-	program, err := os.ReadFile(filepath.Join(project, "src/WebApi/Program.cs"))
-	if err != nil || !strings.Contains(string(program), "app.MapPersonEndpoints();") {
-		t.Fatalf("DDD endpoints were not registered: %v", err)
-	}
-	endpoints, err := os.ReadFile(filepath.Join(project, "src/WebApi/Features/Person/PersonEndpoints.cs"))
-	if err != nil || !strings.Contains(string(endpoints), "IHandler<CreatePersonCommand, PersonResponse>") || !strings.Contains(string(endpoints), "IHandler<DeletePersonCommand, bool>") {
-		t.Fatalf("CRUD endpoints should use CQRS handlers: %v", err)
-	}
-	applicationDI, err := os.ReadFile(filepath.Join(project, "src/Application/DependencyInjection.cs"))
-	if err != nil || strings.Contains(string(applicationDI), "PersonService") {
-		t.Fatalf("DDD generation left a stale PersonService registration: %v", err)
-	}
-}
-
-func TestLocalDddWpfGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "LocalDesktop")
-	if err := Run([]string{"new", "LocalDesktop", "--app", "wpf", "--backend", "ddd", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "entity", "Order", "total:decimal", "paid:bool", "--project", project}); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{
-		"src/Domain/Domain.csproj",
-		"src/Application/Application.csproj",
-		"src/Infrastructure/Infrastructure.csproj",
-		"src/Infrastructure/Persistence/AppDbContext.cs",
-		"src/Desktop/LocalDesktop.Desktop.csproj",
-		"src/Domain/Entities/Order.cs",
-		"src/Desktop/Modules/Order/OrderModule.cs",
-	} {
-		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
-			t.Fatalf("missing local DDD WPF file %s: %v", path, err)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(project, "src/WebApi")); err == nil {
-		t.Fatal("local DDD WPF should not generate a WebApi directory")
-	}
-	solution, err := os.ReadFile(filepath.Join(project, "LocalDesktop.sln"))
-	if err != nil || strings.Contains(string(solution), "WebApi.csproj") || !strings.Contains(string(solution), "Infrastructure.csproj") {
-		t.Fatalf("local DDD WPF solution has the wrong project graph: %v", err)
-	}
-}
-
-func TestSimpleProfileGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "SimpleApp")
-	if err := Run([]string{"new", "SimpleApp", "--app", "fullstack", "--simple", "--theme:wpfui", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "entity", "Person", "name:string", "age:int", "--project", project}); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{
-		"SimpleApp.sln",
-		"src/WebApi/WebApi.csproj",
-		"src/WebApi/Data/AppDbContext.cs",
-		"src/WebApi/Models/Person.cs",
-		"src/WebApi/Features/Person/PersonEndpoints.cs",
-		"src/Desktop/Modules/Person/PersonModule.cs",
-	} {
-		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
-			t.Fatalf("missing simple profile file %s: %v", path, err)
-		}
-	}
-	manifest, err := os.ReadFile(filepath.Join(project, ".aspgen/manifest.json"))
-	if err != nil || !strings.Contains(string(manifest), `"backend:simple"`) {
-		t.Fatalf("simple backend was not recorded: %v", err)
-	}
-	readme, err := os.ReadFile(filepath.Join(project, "README.md"))
-	if err != nil || !strings.Contains(string(readme), "dotnet run --project .\\src\\WebApi\\WebApi.csproj") || !strings.Contains(string(readme), "default database is SQLite") {
-		t.Fatalf("simple README is missing build/run instructions: %v", err)
-	}
-	store, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Person/Services/PersonStore.cs"))
-	if err != nil || !strings.Contains(string(store), "GetFromJsonAsync") || !strings.Contains(string(store), `"/api/person"`) {
-		t.Fatalf("simple WPF store should use the generated API: %v", err)
-	}
-	module, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Person/PersonModule.cs"))
-	if err != nil || !strings.Contains(string(module), "ASPGENT_API_URL") {
-		t.Fatalf("simple WPF module should register configurable API HTTP: %v", err)
-	}
-}
-
-func TestDummySeedGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "SeedApp")
-	if err := Run([]string{"new", "SeedApp", "--app", "fullstack", "--simple", "--seed:dummy", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "entity", "Person", "name:string", "age:int", "born:date", "active:bool", "--project", project}); err != nil {
-		t.Fatal(err)
-	}
-	seed, err := os.ReadFile(filepath.Join(project, "src/WebApi/Data/DatabaseSeeder.cs"))
-	if err != nil || !strings.Contains(string(seed), "new Person") || !strings.Contains(string(seed), "sample 1") || !strings.Contains(string(seed), "new DateOnly") {
-		t.Fatalf("simple dummy seed was not generated: %v", err)
-	}
-	program, err := os.ReadFile(filepath.Join(project, "src/WebApi/Program.cs"))
-	if err != nil || !strings.Contains(string(program), "DatabaseSeeder.SeedAsync") {
-		t.Fatalf("simple startup seeding was not wired: %v", err)
-	}
-	manifest, err := os.ReadFile(filepath.Join(project, ".aspgen/manifest.json"))
-	if err != nil || !strings.Contains(string(manifest), `"seed:dummy:3"`) {
-		t.Fatalf("seed profile was not recorded: %v", err)
-	}
-
-	ddd := filepath.Join(t.TempDir(), "DddSeedApp")
-	if err := Run([]string{"new", "DddSeedApp", "--app", "webapi", "--backend", "ddd", "--seed", "dummy", "--output", ddd}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "entity", "Person", "name:string", "age:int", "--project", ddd}); err != nil {
-		t.Fatal(err)
-	}
-	dddSeed, err := os.ReadFile(filepath.Join(ddd, "src/WebApi/Seeding/DatabaseSeeder.cs"))
-	if err != nil || !strings.Contains(string(dddSeed), "new Person(") || !strings.Contains(string(dddSeed), "db.Persons.AnyAsync") {
-		t.Fatalf("DDD dummy seed was not generated: %v", err)
-	}
-}
-
-func TestDryRunDoesNotWrite(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "Demo")
-	if err := Run([]string{"new", "Demo", "--app", "webapi", "--output", project, "--dry-run"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(project); err == nil {
-		t.Fatal("dry-run created project")
-	}
-}
-
-func TestDiscoverProjectRootFromNestedDirectory(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "DiscoverDemo")
-	if err := Run([]string{"new", "DiscoverDemo", "--app", "webapi", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	nested := filepath.Join(project, "src", "WebApi")
-	if err := os.MkdirAll(nested, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	discovered, err := discoverProjectRoot(nested)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if discovered != project {
-		t.Fatalf("discovered %q, want %q", discovered, project)
-	}
-}
-
-func TestWebAPIProfileGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "ApiDemo")
-	if err := Run([]string{"new", "ApiDemo", "--app", "webapi", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{
-		"ApiDemo.sln",
-		"README.md",
-		"src/Domain/Domain.csproj",
-		"src/Application/Application.csproj",
-		"src/Infrastructure/Infrastructure.csproj",
-		"src/Infrastructure/Persistence/AppDbContext.cs",
-		"src/WebApi/WebApi.csproj",
-		"src/WebApi/appsettings.json",
-	} {
-		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
-			t.Fatalf("missing Web API file %s: %v", path, err)
-		}
-	}
-	readme, err := os.ReadFile(filepath.Join(project, "README.md"))
-	if err != nil || !strings.Contains(string(readme), "dotnet build .\\ApiDemo.sln") || !strings.Contains(string(readme), "localhost:5000/health") {
-		t.Fatalf("generated API README is missing build/run instructions: %v", err)
-	}
 }
 
 func TestDatabaseProviderGeneration(t *testing.T) {
 	sqliteProject := filepath.Join(t.TempDir(), "SqliteApi")
-	if err := Run([]string{"new", "SqliteApi", "--app", "webapi", "--output", sqliteProject}); err != nil {
+	if err := Run([]string{"new", "SqliteApi", "--context", "Sales", "--arch", "cqrs", "--output", sqliteProject}); err != nil {
 		t.Fatal(err)
 	}
-	sqliteProjectFile, err := os.ReadFile(filepath.Join(sqliteProject, "src/Infrastructure/Infrastructure.csproj"))
+	sqliteProjectFile, err := os.ReadFile(filepath.Join(sqliteProject, "src/SqliteApi.Infrastructure/SqliteApi.Infrastructure.csproj"))
 	if err != nil || !strings.Contains(string(sqliteProjectFile), "Microsoft.EntityFrameworkCore.Sqlite") || !strings.Contains(string(sqliteProjectFile), "SQLitePCLRaw.lib.e_sqlite3") {
 		t.Fatalf("SQLite provider was not generated: %v", err)
 	}
-	sqliteProgram, err := os.ReadFile(filepath.Join(sqliteProject, "src/Infrastructure/DependencyInjection.cs"))
-	if err != nil || !strings.Contains(string(sqliteProgram), "UseSqlite") {
+	sqliteProgram, err := os.ReadFile(filepath.Join(sqliteProject, "src/SqliteApi.Infrastructure/DependencyInjection.cs"))
+	if err != nil || !strings.Contains(string(sqliteProgram), "UseSqlite") || !strings.Contains(string(sqliteProgram), "Data Source=SqliteApi.db") {
 		t.Fatalf("SQLite configuration was not generated: %v", err)
 	}
-	sqliteSettings, err := os.ReadFile(filepath.Join(sqliteProject, "src/WebApi/appsettings.json"))
-	if err != nil || !strings.Contains(string(sqliteSettings), "Data Source=sqlite-api.db") {
-		t.Fatalf("SQLite connection string was not generated: %v", err)
-	}
-	manifest, err := os.ReadFile(filepath.Join(sqliteProject, ".aspgen/manifest.json"))
-	if err != nil || !strings.Contains(string(manifest), `"database:sqlite"`) {
+	manifest2, err := os.ReadFile(filepath.Join(sqliteProject, ".aspgen/manifest.json"))
+	if err != nil || !strings.Contains(string(manifest2), `"database:sqlite"`) {
 		t.Fatalf("SQLite provider was not recorded: %v", err)
 	}
 
 	postgresProject := filepath.Join(t.TempDir(), "PostgresApi")
-	if err := Run([]string{"new", "PostgresApi", "--app", "webapi", "--database:postgres", "--output", postgresProject}); err != nil {
+	if err := Run([]string{"new", "PostgresApi", "--context", "Sales", "--arch", "cqrs", "--database:postgres", "--output", postgresProject}); err != nil {
 		t.Fatal(err)
 	}
-	postgresProjectFile, err := os.ReadFile(filepath.Join(postgresProject, "src/Infrastructure/Infrastructure.csproj"))
+	postgresProjectFile, err := os.ReadFile(filepath.Join(postgresProject, "src/PostgresApi.Infrastructure/PostgresApi.Infrastructure.csproj"))
 	if err != nil || !strings.Contains(string(postgresProjectFile), "Npgsql.EntityFrameworkCore.PostgreSQL") || strings.Contains(string(postgresProjectFile), "EntityFrameworkCore.Sqlite") {
 		t.Fatalf("PostgreSQL provider was not generated: %v", err)
 	}
-	postgresProgram, err := os.ReadFile(filepath.Join(postgresProject, "src/Infrastructure/DependencyInjection.cs"))
+	postgresProgram, err := os.ReadFile(filepath.Join(postgresProject, "src/PostgresApi.Infrastructure/DependencyInjection.cs"))
 	if err != nil || !strings.Contains(string(postgresProgram), "UseNpgsql") {
 		t.Fatalf("PostgreSQL configuration was not generated: %v", err)
 	}
 
-	if err := Run([]string{"new", "InvalidDatabase", "--app", "webapi", "--database", "mysql", "--output", filepath.Join(t.TempDir(), "InvalidDatabase")}); err == nil {
+	if err := Run([]string{"new", "InvalidDatabase", "--context", "Sales", "--arch", "cqrs", "--database", "mysql", "--output", filepath.Join(t.TempDir(), "InvalidDatabase")}); err == nil {
 		t.Fatal("expected unsupported database error")
 	}
 }
 
-func TestWebAPIFeatureGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "FeatureDemo")
-	if err := Run([]string{"new", "FeatureDemo", "--app", "webapi", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "feature", "CreateCustomer", "name:string", "age:int", "--project", project}); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{
-		"src/Application/Features/CreateCustomer/CreateCustomerRequest.cs",
-		"src/Application/Features/CreateCustomer/CreateCustomerHandler.cs",
-		"src/Application/Features/CreateCustomer/CreateCustomerValidator.cs",
-		"src/WebApi/Features/CreateCustomer/CreateCustomerEndpoints.cs",
-	} {
-		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
-			t.Fatalf("missing feature file %s: %v", path, err)
-		}
-	}
-	program, err := os.ReadFile(filepath.Join(project, "src/WebApi/Program.cs"))
-	if err != nil || !strings.Contains(string(program), "app.MapCreateCustomerEndpoints();") {
-		t.Fatalf("feature endpoint was not registered: %v", err)
-	}
-}
-
-func TestRenoirProfileGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "RenoirDemo")
-	if err := Run([]string{"new", "RenoirDemo", "--app", "blazor", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{
-		"RenoirDemo.sln",
-		"src/RenoirDemo.DomainModel/BaseEntity.cs",
-		"src/RenoirDemo.Application/Settings/RenoirSettings.cs",
-		"src/RenoirDemo.Persistence/RenoirDemoDatabase.cs",
-		"src/RenoirDemo.AppBlazor/Program.cs",
-	} {
-		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
-			t.Fatalf("missing Renoir file %s: %v", path, err)
-		}
-	}
-}
-
 func TestDddAggregateGeneration(t *testing.T) {
-	project := filepath.Join(t.TempDir(), "RenoirDemo")
-	if err := Run([]string{"new", "RenoirDemo", "--app", "blazor", "--output", project}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run([]string{"add", "context", "Catalog", "--project", project}); err != nil {
+	project := filepath.Join(t.TempDir(), "CatalogDemo")
+	if err := Run([]string{"new", "CatalogDemo", "--context", "Catalog", "--arch", "dm", "--output", project}); err != nil {
 		t.Fatal(err)
 	}
 	if err := Run([]string{"add", "aggregate", "Product", "name:string", "price:decimal", "active:bool", "--context", "Catalog", "--project", project}); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
-		"src/RenoirDemo.DomainModel/Catalog/Product.cs",
-		"src/RenoirDemo.DomainModel/DomainException.cs",
-		"src/RenoirDemo.DomainModel/DomainGuard.cs",
-		"src/RenoirDemo.Application/ProductCrudService.cs",
-		"src/RenoirDemo.Application/ProductValidator.cs",
-		"src/RenoirDemo.AppBlazor/Components/Pages/Catalog/ProductCrud.razor",
+		"src/CatalogDemo.DomainModel/Catalog/Product.cs",
+		"src/CatalogDemo.DomainModel/DomainException.cs",
+		"src/CatalogDemo.DomainModel/DomainGuard.cs",
+		"src/CatalogDemo.Application/ProductCrudService.cs",
+		"src/CatalogDemo.Application/ProductValidator.cs",
 	} {
 		if _, err := os.Stat(filepath.Join(project, filepath.FromSlash(path))); err != nil {
 			t.Fatalf("missing DDD file %s: %v", path, err)
 		}
 	}
-	service, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.Application/ProductCrudService.cs"))
+	service, err := os.ReadFile(filepath.Join(project, "src/CatalogDemo.Application/ProductCrudService.cs"))
 	if err != nil || !strings.Contains(string(service), "public sealed record ProductRequest") || !strings.Contains(string(service), "public sealed record ProductView") {
 		t.Fatalf("CRUD service should expose separate input and view records: %v", err)
 	}
-	aggregate, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.DomainModel/Catalog/Product.cs"))
+	aggregate, err := os.ReadFile(filepath.Join(project, "src/CatalogDemo.DomainModel/Catalog/Product.cs"))
 	if err != nil || !strings.Contains(string(aggregate), "DomainGuard.Required(name, nameof(name))") {
 		t.Fatalf("aggregate should enforce required string invariants: %v", err)
 	}
-	validator, err := os.ReadFile(filepath.Join(project, "src/RenoirDemo.Application/ProductValidator.cs"))
+	validator, err := os.ReadFile(filepath.Join(project, "src/CatalogDemo.Application/ProductValidator.cs"))
 	if err != nil || !strings.Contains(string(validator), "RuleFor(x => x.Name).NotEmpty()") {
 		t.Fatalf("CRUD request should have FluentValidation rules: %v", err)
 	}

@@ -26,13 +26,9 @@ var addHandlers = map[string]func(addRequest, *Manifest, *data) error{
 	"domain-service": addDomainServiceCmd,
 	"repository":     addRepositoryCmd,
 	"event":          addEventCmd,
-	"feature":        addFeatureCmd,
 	"ui":             addUICmd,
 	"entity":         addEntityCmd,
 	"entity-field":   addEntityFieldCmd,
-	"module":         addModuleCmd,
-	"database":       addDatabaseCmd,
-	"service":        addServiceCmd,
 }
 
 func add(args []string) error {
@@ -58,7 +54,7 @@ func add(args []string) error {
 	if err != nil {
 		return err
 	}
-	d := data{Project: m.Project, Namespace: m.Project, Name: name, Database: componentDatabase(m.Components), Seed: componentSeed(m.Components), SeedCount: componentSeedCount(m.Components)}
+	d := data{Project: m.Project, Namespace: m.Project, Name: name, Database: componentDatabase(m.Components)}
 	theme, err := themeOption(args[2:])
 	if err != nil {
 		return err
@@ -90,9 +86,6 @@ func add(args []string) error {
 		}
 	}
 	d.Backend = backend
-	if backend == "ddd" && !isWebAPI(m) {
-		d.Backend = "ddd-local"
-	}
 
 	handler, ok := addHandlers[component]
 	if !ok {
