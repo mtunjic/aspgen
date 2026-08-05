@@ -875,7 +875,13 @@ dotnet run --project src\WarehouseOps.WebMvc\WarehouseOps.WebMvc.csproj
 
 ### The full showcase: every command, creation to running
 
-Everything above in one place — copy, paste, and adjust paths/output directories as needed. This is the entire Northwind Trading system, from the very first `aspgen new` to four running apps:
+`scripts\demo-northwind-trading.ps1` (in this repo) automates everything below for you — generation plus `dotnet restore`/`build` for all five projects, with an optional `-Run` switch that launches every host/app in its own window:
+
+```powershell
+.\scripts\demo-northwind-trading.ps1 -Force -Run
+```
+
+Everything below is what that script runs, copy-pasted so you can adjust paths/output directories or run it by hand instead. This is the entire Northwind Trading system, from the very first `aspgen new` to four running apps:
 
 ```powershell
 # --- Catalog (ar): a lean, headless product API ---
