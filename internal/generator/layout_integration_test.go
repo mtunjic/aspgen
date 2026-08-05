@@ -675,6 +675,59 @@ func TestContextArchWpfUI(t *testing.T) {
 	}
 }
 
+// TestContextArchWpfUIMixedTiers covers a project whose contexts are at
+// DIFFERENT arch tiers (cqrs bootstrapped first via `new`, dm added
+// afterwards via `add context`) - a regression test for a bug where every
+// aggregate's WPF Store used the SAME project-wide backend (whichever
+// context was created first), instead of each aggregate's own context's
+// tier, wrongly generating an HTTP Store (and a Desktop.csproj missing the
+// Application project reference) for the dm-tier aggregate.
+func TestContextArchWpfUIMixedTiers(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "MixedTierDemo")
+	if err := Run([]string{"new", "MixedTierDemo", "--context", "Sales", "--arch", "cqrs", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "context", "Inventory", "--arch", "dm", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "StockItem", "quantity:int", "--context", "Inventory", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Order", "total:decimal", "--context", "Sales", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "ui", "wpf", "--framework", "wpf", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+
+	stockItemStore, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", "StockItem", "Services", "StockItemStore.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(stockItemStore), "StockItemCrudService service") {
+		t.Fatalf("expected the dm-tier StockItem aggregate to get an in-process Store even though Sales (cqrs) was created first: %s", stockItemStore)
+	}
+	if strings.Contains(string(stockItemStore), "HttpClient http") {
+		t.Fatalf("dm-tier StockItemStore.cs should not use HttpClient: %s", stockItemStore)
+	}
+
+	orderStore, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", "Order", "Services", "OrderStore.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(orderStore), "HttpClient http") {
+		t.Fatalf("expected the cqrs-tier Order aggregate to keep its HTTP Store: %s", orderStore)
+	}
+
+	desktopCsproj, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "MixedTierDemo.Desktop.csproj"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(desktopCsproj), `MixedTierDemo.Application\MixedTierDemo.Application.csproj`) {
+		t.Fatalf("expected Desktop.csproj to reference the Application project since a dm-tier context exists: %s", desktopCsproj)
+	}
+}
+
 // TestContextArchBlazorUI covers -ui blazor on the --context/--arch engine,
 // mirroring TestContextArchWpfUI: attaching at `new` time (aggregates added
 // afterwards) and attaching later via `add ui` (retrofitting a pre-existing

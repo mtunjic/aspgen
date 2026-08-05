@@ -61,6 +61,15 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 		return errors.New("at least one property or relation is required, e.g. name:string or customer:Customer")
 	}
 	d.Context, d.Aggregate, d.Properties, d.Relations, d.Crud = contextName, r.Name, props, relations, !hasFlag(r.Args, "--no-crud")
+	if ctx.Arch != "" {
+		// A --context/--arch engine project's manifest only records ONE
+		// project-wide "backend:" component (set by whichever context was
+		// created first via `new`); it must not be reused here for a
+		// different context's own arch tier, or UI generation (e.g. the WPF
+		// Store's HTTP vs in-process branch) would pick the wrong branch for
+		// every context but the first.
+		d.Backend = archBackend(ctx.Arch)
+	}
 	if err := renderTree(r.Project, aggregateTemplateGroup(ctx.Arch), *d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 		return err
 	}

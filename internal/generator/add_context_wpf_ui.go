@@ -13,11 +13,28 @@ package generator
 func attachContextWpfUI(project string, m *Manifest, theme, themeMode, override string, dryRun, force bool) error {
 	backend := componentBackend(m.Components)
 	shellData := data{Project: m.Project, Namespace: m.Project, Theme: theme, ThemeMode: themeMode, Backend: backend, Database: m.Persistence}
+	if projectHasDmContext(*m) {
+		// Desktop.csproj only needs an Application project reference (for
+		// in-process CrudService calls) when at least one dm-tier context
+		// exists ANYWHERE in the project - componentBackend above only
+		// reflects whichever context was created first via `new`, which
+		// may be cqrs/es in a mixed-tier project even though a dm context
+		// (and its Desktop module) exists too.
+		shellData.Backend = "dm"
+	}
 	if err := renderTree(project, "wpf", shellData, override, dryRun, force); err != nil {
 		return err
 	}
 	for _, entity := range m.Entities {
-		if err := renderContextWpfModule(project, m.Project, entity.Name, entity.Context, entity.Properties, nil, backend, theme, themeMode, override, dryRun, force); err != nil {
+		// Each entity's own context may be at a different arch tier than
+		// whichever context was created first (which is all `backend`
+		// above reflects) - resolve its Store's HTTP-vs-in-process branch
+		// from ITS OWN context, not the project-wide default.
+		entityBackend := backend
+		if ctx, ok := findContext(m.Contexts, entity.Context); ok && ctx.Arch != "" {
+			entityBackend = archBackend(ctx.Arch)
+		}
+		if err := renderContextWpfModule(project, m.Project, entity.Name, entity.Context, entity.Properties, nil, entityBackend, theme, themeMode, override, dryRun, force); err != nil {
 			return err
 		}
 	}

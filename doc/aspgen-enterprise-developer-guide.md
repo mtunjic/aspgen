@@ -34,21 +34,25 @@ A complete, production-oriented walkthrough of every architecture tier, UI frame
 
 ## 1. What you'll build
 
-**Northwind Trading** is a fictional wholesale distributor with four bounded contexts, each modeled at the architecture tier that actually fits its complexity — not the tier that looks the most impressive:
+**Northwind Trading** is a fictional wholesale distributor with four bounded contexts, each modeled at the architecture tier that actually fits its complexity — not the tier that looks the most impressive. The contexts split across **three separate solutions**, because aspgen currently scaffolds each solution's shared Domain/Application/Infrastructure skeleton from whichever context is created first, and that skeleton isn't interchangeable across every tier (see the callout in Section 4 and the Troubleshooting section):
 
-| Context | Business need | Tier | Why this tier |
-|---|---|---|---|
-| **Catalog** | Public product lookup, high read volume, few business rules | `ar` | Flat CRUD is the right amount of ceremony for "here is a product record." |
-| **Inventory** | Stock levels, reservations, warehouse transfers — invariants matter | `dm` | Needs an aggregate root protecting invariants, but no separate command/query host yet. |
-| **Sales** | Order capture, pricing, fulfillment — multiple verbs, a real API surface | `cqrs` | Vertical-slice commands/queries plus a WebApi host justify the extra layer. |
-| **Billing** | Invoices and ledger entries — full auditability, "what happened and when" | `es` | Event sourcing gives a true audit trail and time-travel debugging for money. |
+| Context | Business need | Tier | Solution | Why this shape |
+|---|---|---|---|---|
+| **Catalog** | Public product lookup, high read volume, few business rules | `ar` | `CatalogApi` (standalone) | Flat CRUD is the right amount of ceremony for "here is a product record," and `ar`'s lean single-project skeleton can't host `dm`/`cqrs`/`es` contexts alongside it. |
+| **Inventory** | Stock levels, reservations, warehouse transfers — invariants matter | `dm` | `NorthwindOps` (combined) | Needs an aggregate root protecting invariants; its needs are a subset of `cqrs`'s skeleton, so it shares a solution with Sales. |
+| **Sales** | Order capture, pricing, fulfillment — multiple verbs, a real API surface | `cqrs` | `NorthwindOps` (combined) | Vertical-slice commands/queries plus a WebApi host — bootstraps the shared skeleton Inventory then reuses. |
+| **Billing** | Invoices and ledger entries — full auditability, "what happened and when" | `es` | `BillingLedger` (standalone) | Event sourcing gives a true audit trail, but `es`'s event-sourced base class isn't compatible with `dm`/`cqrs`'s `BaseEntity` skeleton, so it gets its own solution. |
 
 ```mermaid
 flowchart LR
-    subgraph Solution["NorthwindTrading.sln"]
+    subgraph CatalogApi["CatalogApi.sln"]
         Catalog["Catalog\n(ar)"]
+    end
+    subgraph NorthwindOps["NorthwindOps.sln"]
         Inventory["Inventory\n(dm)"]
         Sales["Sales\n(cqrs)"]
+    end
+    subgraph BillingLedger["BillingLedger.sln"]
         Billing["Billing\n(es)"]
     end
     Desktop["Desktop\nPrism/DryIoc WPF shell"]
@@ -57,14 +61,11 @@ flowchart LR
     Storefront -->|REST| Catalog
     Desktop -->|in-process CrudService| Inventory
     Desktop -->|HTTP| Sales
-    Desktop -->|HTTP| Billing
 ```
 
-One `wpf` UI is attached to the solution, giving warehouse, sales, and finance staff a single Prism/DryIoc desktop shell with a module per context — because `wpf` is the only UI framework that spans `dm`, `cqrs`, and `es` tiers in one project. Catalog stays headless: `ar`-tier contexts get a real Minimal API host but no aspgen-generated UI screens, which is the correct trade-off for a lean, high-traffic read API meant to be called directly (curl, Postman, a separate storefront app, or a hand-written SPA).
+`NorthwindOps` attaches one `wpf` UI spanning its two contexts, giving warehouse and sales staff a single Prism/DryIoc desktop shell with a module per context — `wpf` is the UI framework most tolerant of mixed tiers within one project (it works against `dm`, `cqrs`, or `es` individually, and against a `dm`+`cqrs` combination specifically, since `cqrs`'s skeleton is a superset of what `dm` needs). `CatalogApi` stays headless: `ar`-tier contexts get a real Minimal API host but no aspgen-generated UI screens today, which is the correct trade-off for a lean, high-traffic read API meant to be called directly (curl, Postman, a separate storefront app, or a hand-written SPA). `BillingLedger` stands alone as its own deployable service, given its own UI in Section 10.
 
-Section 10 then tours the other three UI frameworks (`blazor`, `mvc`, `spa`) each in their own small, focused project, since a single project only gets one attached UI.
-
----
+Section 10 then tours all four UI frameworks (`wpf`, `blazor`, `mvc`, `spa`), each attached to whichever project actually supports it, since a single project only gets one attached UI.
 
 ## 2. How aspgen thinks: two workflows, one generator
 
@@ -127,64 +128,62 @@ A single solution may freely mix tiers across contexts — that's the point of t
 
 ---
 
+> **Callout — mixing tiers in one solution.** Each solution's shared Domain/Application/Infrastructure/Persistence project skeleton is created once, by whichever context is created first via `new`; a later `add context --arch X` records the new context's metadata but does not backfill skeleton files the first context's tier never rendered. In practice: a `dm` context can always be added to a project whose first context is `cqrs` (or another `dm`), since `dm`'s needs are a strict subset of `cqrs`'s. `es` uses a different aggregate base (`EventSourcedAggregate`, not `BaseEntity`) and needs its own event-store plumbing, and `ar` uses an entirely different, simpler single-project skeleton with no separate Domain/Application layers at all — mixing either of those with a different first tier in the same solution isn't reliably supported yet. Give `ar`-tier and `es`-tier contexts their own solution unless they are the very first (and, for `ar`, only) context. See Troubleshooting for the exact symptoms.
+
 ## 5. Scaffolding the solution shell
 
-Bootstrap the solution with its first context, Catalog, at the `ar` tier:
+Bootstrap **`NorthwindOps`** with Sales at the `cqrs` tier first — `cqrs`'s skeleton is the one that Inventory's `dm` context will reuse:
 
 ```powershell
-go run ./cmd/aspgen new NorthwindTrading `
-  --context Catalog --arch ar `
+go run ./cmd/aspgen new NorthwindOps `
+  --context Sales --arch cqrs `
   --database sqlite `
-  -ui wpf `
-  --output ./NorthwindTrading
+  --output ./NorthwindOps
 ```
 
-This single command:
-
-- creates `NorthwindTrading.sln` plus the Catalog context's Domain/Features/WebApi tree at the `ar` tier;
-- attaches the `wpf` UI (an empty Prism/DryIoc `Desktop` shell — Catalog is `ar`-tier, so it gets no screens yet; screens appear once `dm`/`cqrs`/`es` aggregates exist);
-- writes `tests\NorthwindTrading.UnitTests` and `tests\NorthwindTrading.IntegrationTests` (every context with a WebApi host gets integration tests; pass `--no-tests` to skip both);
-- writes `scripts\ci.ps1`, a local build/test/publish driver;
-- writes `.aspgen/manifest.json`, the source of truth every later `add` command reads.
+This single command creates `NorthwindOps.sln`, the Sales context's Domain/Application/Infrastructure/Persistence/WebApi tree at the `cqrs` tier, `tests\NorthwindOps.UnitTests`/`tests\NorthwindOps.IntegrationTests` (pass `--no-tests` to skip both), `scripts\ci.ps1`, and `.aspgen/manifest.json`.
 
 ```text
-NorthwindTrading/
-├── NorthwindTrading.sln
+NorthwindOps/
+├── NorthwindOps.sln
 ├── .aspgen/manifest.json
 ├── scripts/
 │   └── ci.ps1
 ├── src/
-│   ├── NorthwindTrading.DomainModel/
-│   │   └── Catalog/                       (ar entities live directly here)
-│   ├── NorthwindTrading.Application/
-│   ├── NorthwindTrading.Persistence/
-│   ├── NorthwindTrading.Resources/
-│   ├── WebApi/
-│   │   ├── Program.cs
-│   │   └── Features/Catalog/
-│   └── Desktop/                           (Prism/DryIoc shell, from -ui wpf)
+│   ├── NorthwindOps.DomainModel/
+│   │   └── Sales/
+│   ├── NorthwindOps.Application/
+│   ├── NorthwindOps.Infrastructure/
+│   ├── NorthwindOps.Persistence/
+│   ├── NorthwindOps.Resources/
+│   └── WebApi/
+│       ├── Program.cs
+│       └── Features/Sales/
 └── tests/
-    ├── NorthwindTrading.UnitTests/
-    └── NorthwindTrading.IntegrationTests/
+    ├── NorthwindOps.UnitTests/
+    └── NorthwindOps.IntegrationTests/
 ```
 
-The remaining three contexts are added with `add context`:
+Add Inventory as a `dm`-tier context on top of that same skeleton — this direction works because `dm` needs strictly less than `cqrs` already provides (no separate host, no vertical-slice Application layer):
 
 ```powershell
-go run ./cmd/aspgen add context Inventory --arch dm --project ./NorthwindTrading
-go run ./cmd/aspgen add context Sales --arch cqrs --project ./NorthwindTrading
-go run ./cmd/aspgen add context Billing --arch es --project ./NorthwindTrading
+go run ./cmd/aspgen add context Inventory --arch dm --project ./NorthwindOps
 ```
 
----
+Catalog and Billing get their own solutions instead of joining `NorthwindOps` (see the Section 4 callout for why):
+
+```powershell
+go run ./cmd/aspgen new CatalogApi --context Catalog --arch ar --database sqlite --output ./CatalogApi
+go run ./cmd/aspgen new BillingLedger --context Billing --arch es --database sqlite --output ./BillingLedger
+```
 
 ## 6. Context 1 — Catalog (`ar`): a lean, headless product API
 
 Catalog holds `Product` and `Category`, with a many-to-one relation from product to category:
 
 ```powershell
-go run ./cmd/aspgen add entity Category name:string --context Catalog --project ./NorthwindTrading
-go run ./cmd/aspgen add entity Product name:string sku:string price:decimal active:bool category:Category --context Catalog --project ./NorthwindTrading
+go run ./cmd/aspgen add entity Category name:string --context Catalog --project ./CatalogApi
+go run ./cmd/aspgen add entity Product name:string sku:string price:decimal active:bool category:Category --context Catalog --project ./CatalogApi
 ```
 
 `category:Category` synthesizes a required `CategoryId` foreign key and a `Category` navigation property (`nav:Entity?` would make it optional). Property types accepted by `name:type` are `string`, `int`, `long`, `decimal`, `float`, `bool`, `date` (`DateOnly`), `datetime` (`DateTime`), and `guid`/`uuid`; append `?` for nullable (`middleName:string?`). Unknown types are a hard error, not a silent pass-through.
@@ -229,7 +228,7 @@ Because Catalog has no attached UI screens, this is a real, callable REST API to
 If Catalog already exists as a legacy database, skip hand-typed properties entirely:
 
 ```powershell
-go run ./cmd/aspgen import-db --project ./NorthwindTrading `
+go run ./cmd/aspgen import-db --project ./CatalogApi `
   --script schema.sql --provider postgres --tables Products,Categories --context Catalog
 ```
 
@@ -242,17 +241,17 @@ go run ./cmd/aspgen import-db --project ./NorthwindTrading `
 `dm` is where the DDD building blocks appear: an aggregate root, immutable value objects, stateless domain services, an aggregate-scoped repository, and domain events — all as a synchronous, headless class-library graph (Domain ← Application ← Infrastructure/Persistence, no host until a UI attaches).
 
 ```powershell
-go run ./cmd/aspgen add aggregate StockItem sku:string quantityOnHand:int reorderPoint:int --context Inventory --project ./NorthwindTrading
-go run ./cmd/aspgen add value-object BinLocation aisle:string shelf:string --context Inventory --project ./NorthwindTrading
-go run ./cmd/aspgen add domain-service ReplenishmentPolicy --context Inventory --project ./NorthwindTrading
-go run ./cmd/aspgen add repository StockItemRepository --aggregate StockItem --context Inventory --project ./NorthwindTrading
-go run ./cmd/aspgen add event StockDepletedEvent stockItemId:long quantityOnHand:int --context Inventory --project ./NorthwindTrading
+go run ./cmd/aspgen add aggregate StockItem sku:string quantityOnHand:int reorderPoint:int --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add value-object BinLocation aisle:string shelf:string --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add domain-service ReplenishmentPolicy --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add repository StockItemRepository --aggregate StockItem --context Inventory --project ./NorthwindOps
+go run ./cmd/aspgen add event StockDepletedEvent stockItemId:long quantityOnHand:int --context Inventory --project ./NorthwindOps
 ```
 
 The aggregate is a partial class split across two files — state/constructor and behavior — always generated together:
 
 ```csharp
-// src/NorthwindTrading.DomainModel/Inventory/StockItem.cs (rendered)
+// src/NorthwindOps.DomainModel/Inventory/StockItem.cs (rendered)
 public sealed partial class StockItem : BaseEntity
 {
     private StockItem() { }
@@ -273,7 +272,7 @@ public sealed partial class StockItem : BaseEntity
 ```
 
 ```csharp
-// src/NorthwindTrading.DomainModel/Inventory/StockItem.Methods.cs (rendered)
+// src/NorthwindOps.DomainModel/Inventory/StockItem.Methods.cs (rendered)
 public sealed partial class StockItem
 {
     public void Update(string sku, int quantityOnHand, int reorderPoint)
@@ -291,13 +290,13 @@ public sealed partial class StockItem
 }
 ```
 
-`BaseEntity` (shared across every `dm`/`cqrs`/`es` aggregate) provides soft delete and audit timestamps: `Deleted`, `Created`/`LastUpdated` `TimeStamp` values, and `Init(author)`/`Mark(author)`/`SoftDelete()`/`SoftUndelete()`. Mutating operations return `CommandResponse` (`Success`, optional `Message`/`Extra`, `Ok()`/`Fail()`) instead of a bare `bool`.
+`BaseEntity` (shared across every `dm`/`cqrs` aggregate — `es`-tier aggregates use a different base, `EventSourcedAggregate`, covered in Section 9) provides soft delete and audit timestamps: `Deleted`, `Created`/`LastUpdated` `TimeStamp` values, and `Init(author)`/`Mark(author)`/`SoftDelete()`/`SoftUndelete()`. Mutating operations return `CommandResponse` (`Success`, optional `Message`/`Extra`, `Ok()`/`Fail()`) instead of a bare `bool`.
 
 The generated `CrudService` is the synchronous Application-layer entry point every `dm` aggregate gets by default:
 
 ```csharp
-// src/NorthwindTrading.Application/StockItemCrudService.cs (rendered, trimmed)
-public sealed class StockItemCrudService(NorthwindTradingDatabase database, IValidator<StockItemRequest> validator)
+// src/NorthwindOps.Application/StockItemCrudService.cs (rendered, trimmed)
+public sealed class StockItemCrudService(NorthwindOpsDatabase database, IValidator<StockItemRequest> validator)
 {
     public Task<List<StockItemView>> GetAllAsync(CancellationToken cancellationToken = default) => /* ... */;
     public async Task<StockItemView> CreateAsync(StockItemRequest request, CancellationToken cancellationToken = default)
@@ -324,17 +323,17 @@ Use `--no-crud` on `add aggregate` when a use case should be modeled with explic
 `add repository` generates and wires an aggregate-scoped repository contract (Domain) plus an EF implementation (Persistence), and **patches the CrudService to actually call it** rather than leaving it dead code: `CreateAsync` becomes `repository.AddAsync(entity, ct)`, `UpdateAsync` fetches via `repository.GetByIdAsync` and saves via `repository.SaveAsync`, and `DeleteAsync` collapses to a single `repository.DeleteAsync(id, ct)`. Reads (`GetAllAsync`/`SearchAsync`) deliberately keep querying the `DbContext` directly — a CQRS-style read/write split, not a shortcut.
 
 ```text
-src/NorthwindTrading.DomainModel/Inventory/
+src/NorthwindOps.DomainModel/Inventory/
 ├── StockItem.cs
 ├── StockItem.Methods.cs
 ├── BinLocation.cs                     (value object, immutable record)
 ├── ReplenishmentPolicy.cs             (domain service, stateless)
 ├── IStockItemRepository.cs            (repository contract)
 └── StockDepletedEvent.cs              (domain event, immutable)
-src/NorthwindTrading.Persistence/
+src/NorthwindOps.Persistence/
 ├── StockItemConfiguration.cs          (IEntityTypeConfiguration<StockItem>)
 └── Repositories/StockItemRepository.cs
-src/NorthwindTrading.Application/
+src/NorthwindOps.Application/
 ├── StockItemCrudService.cs
 └── StockItemValidator.cs
 ```
@@ -348,12 +347,12 @@ Inventory has no host of its own — the WPF Desktop shell (added in Section 10)
 `cqrs` keeps every `dm` building block and adds a WebApi host plus a genuine vertical-slice Application layer: one Command/Query, Handler, Validator per verb.
 
 ```powershell
-go run ./cmd/aspgen add aggregate Order number:string customer:string total:decimal placedOn:date --context Sales --project ./NorthwindTrading
-go run ./cmd/aspgen add repository OrderRepository --aggregate Order --context Sales --project ./NorthwindTrading
+go run ./cmd/aspgen add aggregate Order number:string customer:string total:decimal placedOn:date --context Sales --project ./NorthwindOps
+go run ./cmd/aspgen add repository OrderRepository --aggregate Order --context Sales --project ./NorthwindOps
 ```
 
 ```text
-src/NorthwindTrading.Application/Features/Sales/Order/
+src/NorthwindOps.Application/Features/Sales/Order/
 ├── CreateOrderCommand.cs
 ├── CreateOrderHandler.cs
 ├── UpdateOrderCommand.cs
@@ -375,14 +374,14 @@ Each Handler is a thin wrapper around the same `CrudService` the `dm` tier alrea
 
 ```csharp
 // Features/Sales/Order/CreateOrderCommand.cs (rendered)
-namespace NorthwindTrading.Application.Features.Sales.Order;
+namespace NorthwindOps.Application.Features.Sales.Order;
 
 public sealed record CreateOrderCommand(string Number, string Customer, decimal Total, DateOnly PlacedOn);
 ```
 
 ```csharp
 // Features/Sales/Order/CreateOrderHandler.cs (rendered)
-namespace NorthwindTrading.Application.Features.Sales.Order;
+namespace NorthwindOps.Application.Features.Sales.Order;
 
 public sealed class CreateOrderHandler(OrderCrudService service) : IHandler<CreateOrderCommand, OrderView>
 {
@@ -398,8 +397,8 @@ The WebApi host is a minimal `Program.cs` that mounts every feature via a marker
 
 ```csharp
 // src/WebApi/Program.cs (rendered)
-using NorthwindTrading.Application;
-using NorthwindTrading.Infrastructure;
+using NorthwindOps.Application;
+using NorthwindOps.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddApplication();
@@ -408,16 +407,16 @@ builder.Services.AddInfrastructure(builder.Configuration);
 var app = builder.Build();
 app.MapHealthChecks("/health");
 // aspgen:features
-app.MapGet("/", () => Results.Ok(new { application = "NorthwindTrading" }));
+app.MapGet("/", () => Results.Ok(new { application = "NorthwindOps" }));
 app.Run();
 
 public partial class Program { }
 ```
 
-Attach the WPF Desktop shell — already present from Section 5 — to Sales' aggregates by adding the aggregate first, then rendering (or refreshing) the UI:
+With both Inventory's `StockItem` and Sales' `Order` aggregates in place, attach the WPF Desktop shell:
 
 ```powershell
-go run ./cmd/aspgen add ui wpf --framework wpf --theme wpfui --theme-mode light --project ./NorthwindTrading
+go run ./cmd/aspgen add ui wpf --framework wpf --theme wpfui --theme-mode light --project ./NorthwindOps
 ```
 
 `Order`'s generated `Store` calls the WebApi host over HTTP (Sales is `cqrs`-tier), while the `StockItem` store from Section 7 calls its `CrudService` in-process (Inventory is `dm`-tier) — both branches live in the same templated `{{.Name}}Store.cs.tmpl`, selected by the aggregate's own tier:
@@ -475,14 +474,16 @@ public sealed class StockItemStore(StockItemCrudService service) : IStockItemSto
 
 `es` keeps everything `cqrs` has and rebuilds the aggregate around events instead of mutable state: an append-only event store with optimistic concurrency, an `EventSourcedAggregate` base class, and a synchronous read-model projection updated in the same unit of work as the event append.
 
+`Billing` gets its own solution (per Section 4/5) since `es`'s event-sourced base class isn't compatible with the `cqrs`/`dm` skeleton `NorthwindOps` already has:
+
 ```powershell
-go run ./cmd/aspgen add aggregate Invoice number:string customer:string amount:decimal issuedOn:date --context Billing --project ./NorthwindTrading
+go run ./cmd/aspgen add aggregate Invoice number:string customer:string amount:decimal issuedOn:date --context Billing --project ./BillingLedger
 ```
 
 The aggregate replays its own history instead of storing current-state columns directly:
 
 ```csharp
-// src/NorthwindTrading.DomainModel/Billing/Invoice.cs (rendered, trimmed)
+// src/BillingLedger.DomainModel/Billing/Invoice.cs (rendered, trimmed)
 public sealed partial class Invoice : EventSourcedAggregate
 {
     private Invoice() { }
@@ -523,8 +524,8 @@ public sealed partial class Invoice : EventSourcedAggregate
 The event-store repository loads by replaying, saves by appending only the newly-raised events (optimistic concurrency via an expected-version check), and immediately projects the change into a queryable read model:
 
 ```csharp
-// src/NorthwindTrading.Application/InvoiceEventStoreRepository.cs (rendered, trimmed)
-public sealed class InvoiceEventStoreRepository(EventStore eventStore, NorthwindTradingDatabase database)
+// src/BillingLedger.Application/InvoiceEventStoreRepository.cs (rendered, trimmed)
+public sealed class InvoiceEventStoreRepository(EventStore eventStore, BillingLedgerDatabase database)
 {
     public async Task<Invoice?> LoadAsync(long id, CancellationToken cancellationToken = default)
     {
@@ -552,15 +553,15 @@ public sealed class InvoiceEventStoreRepository(EventStore eventStore, Northwind
 `add repository` is rejected for `es`-tier aggregates — `{Aggregate}EventStoreRepository` already fills that role; there is no second contract to generate. Event versioning/schema evolution and snapshotting are deliberately out of scope for the generated code — plan for them yourself as the ledger grows.
 
 ```text
-src/NorthwindTrading.DomainModel/Billing/
+src/BillingLedger.DomainModel/Billing/
 ├── Invoice.cs
 ├── Invoice.Methods.cs
 └── InvoiceEvents.cs                         (Created/Updated/Deleted event records)
-src/NorthwindTrading.Application/
+src/BillingLedger.Application/
 ├── InvoiceEventStoreRepository.cs
 ├── InvoiceRequest.cs
 └── InvoiceValidator.cs
-src/NorthwindTrading.Application/Features/Billing/Invoice/
+src/BillingLedger.Application/Features/Billing/Invoice/
 ├── CreateInvoiceCommand.cs / Handler.cs
 ├── UpdateInvoiceCommand.cs / Handler.cs
 ├── DeleteInvoiceCommand.cs / Handler.cs
@@ -569,17 +570,17 @@ src/NorthwindTrading.Application/Features/Billing/Invoice/
 └── SearchInvoicesQuery.cs / Handler.cs
 ```
 
-`Invoice` now shows up in the same Desktop shell alongside `Order` and `StockItem` — the WPF Store's `cqrs`/`es` branch is identical (both call the WebApi host over HTTP); only the WebApi handler underneath differs.
+`BillingLedger` stands alone as its own deployable service — Section 10 attaches a UI to it directly (`spa` for API-first access, or `wpf`/`blazor` if a dedicated finance-desk UI is wanted; either works since `es` is the project's only, first context).
 
 ---
 
 ## 10. A tour of every UI framework
 
-A UI attaches to the **whole project** — one UI framework surfaces every compatible aggregate in every context, which is why Northwind Trading above picked a single `wpf` shell spanning `dm` + `cqrs` + `es`. This section builds one small, focused project per remaining UI framework so each gets full coverage without overstating what one project can combine.
+A UI attaches to the **whole project** — one UI framework surfaces every compatible aggregate in every context, which is why `NorthwindOps` above picked a single `wpf` shell spanning its `dm` + `cqrs` contexts. This section builds one small, focused project per remaining UI framework (reusing `BillingLedger` from Section 9 for the `es` case) so each gets full coverage without overstating what one project can combine.
 
 | UI (`-ui` / `--framework`) | Compatible tiers | Transport | Notes |
 |---|---|---|---|
-| `wpf` | `dm`, `cqrs`, `es` | in-process (`dm`) or HTTP (`cqrs`/`es`) | Only UI spanning all three; supports `--theme wpfui`/`--theme-mode`. |
+| `wpf` | `dm`, `cqrs`, `es` | in-process (`dm`) or HTTP (`cqrs`/`es`) | Most tolerant of mixed tiers (works with a `dm`+`cqrs` combination); supports `--theme wpfui`/`--theme-mode`. |
 | `blazor` | `cqrs`, `es` | HTTP | Blazor Server calling the WebApi host. |
 | `mvc` | `dm` only | in-process | Classic ASP.NET Core MVC, calls `CrudService` directly — no HTTP. |
 | `spa` | `cqrs`, `es` | HTTP (bring your own frontend) | Wires OpenAPI/Scalar + permissive local-dev CORS onto the host; scaffolds no frontend project. |
@@ -598,7 +599,7 @@ The Blazor host calls the WebApi over HTTP (not in-process — a deliberate diff
 ```razor
 @* Components/Pages/Sales/OrderCrud.razor (rendered, trimmed) *@
 @page "/sales/orders"
-@inject NorthwindTrading.Application.OrderCrudService Service
+@inject SalesPortal.Application.OrderCrudService Service
 <h1>Orders</h1>
 <EditForm Model="form" OnValidSubmit="SaveAsync">
     <DataAnnotationsValidator />
@@ -645,18 +646,19 @@ public sealed class StockItemController(StockItemCrudService service) : Controll
 
 ### `spa` — an API-first Billing service (`es`)
 
+`BillingLedger` (from Section 9) already has its `Invoice` aggregate; attach `spa` to it directly instead of scaffolding a new project:
+
 ```powershell
-go run ./cmd/aspgen new BillingApi --context Billing --arch es -ui spa --output ./BillingApi
-go run ./cmd/aspgen add aggregate Invoice number:string customer:string amount:decimal issuedOn:date --context Billing --project ./BillingApi
+go run ./cmd/aspgen add ui spa --framework spa --project ./BillingLedger
 ```
 
 `spa` scaffolds no frontend project at all — it patches `Program.cs`/`WebApi.csproj` in place with OpenAPI discovery, Scalar (`/scalar/v1`), and a permissive local-dev CORS policy, so any hand-written or separately generated frontend (React, Vue, Angular, a mobile app) can call the API immediately during development.
 
-Attach any UI after the fact instead of at `new` time with `add ui`:
+Every UI in this guide can be attached either at `new` time (`-ui`) or afterward with `add ui --framework`:
 
 ```powershell
-go run ./cmd/aspgen add ui spa --framework spa --project ./BillingApi
-go run ./cmd/aspgen add ui wpf --framework wpf --project ./NorthwindTrading
+go run ./cmd/aspgen add ui spa --framework spa --project ./BillingLedger
+go run ./cmd/aspgen add ui wpf --framework wpf --project ./NorthwindOps
 go run ./cmd/aspgen add ui blazor --framework blazor --project ./SalesPortal
 go run ./cmd/aspgen add ui mvc --framework mvc --project ./WarehouseOps
 ```
@@ -670,7 +672,7 @@ go run ./cmd/aspgen add ui mvc --framework mvc --project ./WarehouseOps
 - **Add a property to an existing aggregate/entity** without hand-editing every generated layer:
 
   ```powershell
-  go run ./cmd/aspgen add entity-field StockItem binLocation:string --project ./NorthwindTrading
+  go run ./cmd/aspgen add entity-field StockItem binLocation:string --project ./NorthwindOps
   ```
 
   `entity-field` patches the already-rendered Domain class, persistence configuration, Application request/response records, Handlers/Validators/Endpoints, seed data, and every attached UI layer (WPF Row/View/ViewModel, Blazor form model, MVC view model) in place — no regeneration, no duplication.
@@ -688,7 +690,7 @@ go run ./cmd/aspgen add ui mvc --framework mvc --project ./WarehouseOps
 - **Switch or add a database provider**:
 
   ```powershell
-  go run ./cmd/aspgen add database postgres --project ./NorthwindTrading
+  go run ./cmd/aspgen add database postgres --project ./NorthwindOps
   ```
 
   `sqlite` is the default everywhere; `postgres` is recorded in `.aspgen/manifest.json` and emitted into the EF Core provider registration, connection string, and DI setup. `dm`-tier contexts are class libraries with no host yet to attach a provider to — the provider takes effect once a UI or a `cqrs`/`es` host exists.
@@ -753,7 +755,7 @@ The Renoir profile's structural conventions are modeled directly on a real refer
 ```razor
 @* Components/Pages/Catalog/ProductCrud.razor (rendered, trimmed) *@
 @page "/catalog/products"
-@inject NorthwindTrading.Application.ProductCrudService Service
+@inject RenoirCommerce.Application.ProductCrudService Service
 <h1>Products</h1>
 <EditForm Model="form" OnValidSubmit="SaveAsync">
     <DataAnnotationsValidator />
@@ -905,6 +907,7 @@ Common `add` flags: `--project PATH` (default: search up from cwd for `.aspgen/m
 - **Property type rejected** — only the type list in Section 15's property syntax table is supported; anything else is a deliberate hard error rather than a silent pass-through.
 - **A generated entity is named something like `Task`** — avoid names that collide with common .NET/BCL types (`System.Threading.Tasks.Task` is the classic one); it compiles as ambiguous C#. Use a more specific domain name instead (`TodoItem`, not `Task`).
 - **`go test -race` on generated Go tooling changes fails locally with "requires cgo"** — a local-machine toolchain gap, not a generator bug; CI runners have cgo enabled.
+- **`add context --arch es`/`add aggregate` fails with a missing type like `EventSourcedAggregate`, or `add context --arch ar` fails with "no owning .csproj found"** — you mixed a tier into a solution whose first context can't support it (see the Section 4 callout). Bootstrap that tier's context first instead, or give it its own solution: `dm` contexts are safe to add on top of a `cqrs`-first (or `dm`-first) project; `es` and `ar` contexts should each get their own solution.
 - **`dotnet restore` fails with NU1301 against a corporate NuGet feed** — restore explicitly from `nuget.org` (`dotnet restore <project> -s https://api.nuget.org/v3/index.json`), then `dotnet build` normally.
 
 ---

@@ -53,6 +53,31 @@ func archAtLeast(arch, min string) bool {
 	return a >= 0 && m >= 0 && a >= m
 }
 
+// archBackend maps a --context/--arch engine tier to the `data.Backend`
+// value its own template family expects (used to pick the right Store
+// branch for UI generation): "ar" reuses the legacy "simple" identifier
+// since ar-tier entities render through the same HTTP-CRUD Store branch;
+// dm/cqrs/es already match their own backend component naming.
+func archBackend(arch string) string {
+	if arch == "ar" {
+		return "simple"
+	}
+	return arch
+}
+
+// projectHasDmContext reports whether any bounded context recorded in m is
+// at the dm arch tier (used to decide whether a shared shell project, e.g.
+// Desktop, needs a project reference it wouldn't otherwise get from
+// componentBackend, which only reflects the FIRST context created via `new`).
+func projectHasDmContext(m Manifest) bool {
+	for _, ctx := range m.Contexts {
+		if ctx.Arch == "dm" {
+			return true
+		}
+	}
+	return false
+}
+
 // isContextEngine reports whether m was created via the --context/--arch
 // engine (as opposed to the legacy --app/--backend flags).
 func isContextEngine(m Manifest) bool { return hasComponent(m.Components, "context-engine") }
