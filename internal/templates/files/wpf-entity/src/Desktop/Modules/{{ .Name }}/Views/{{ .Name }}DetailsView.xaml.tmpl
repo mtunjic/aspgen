@@ -16,10 +16,18 @@
         <DockPanel Margin="0,0,0,12">
 {{- if eq .Theme "wpfui" }}
             <ui:TextBlock DockPanel.Dock="Left" FontTypography="TitleLarge" Text="{{ .Name }} details" />
-            <ui:Button DockPanel.Dock="Right" Padding="12,6" Content="Back" Icon="{ui:SymbolIcon ArrowLeft24}" Command="{Binding BackCommand}" />
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <ui:Button Margin="4,0,0,0" Padding="12,6" Content="Edit" Icon="{ui:SymbolIcon Edit24}" Command="{Binding EditCommand}" />
+                <ui:Button Margin="4,0,0,0" Padding="12,6" Appearance="Danger" Content="Delete" Icon="{ui:SymbolIcon Delete24}" Command="{Binding DeleteCommand}" />
+                <ui:Button Margin="4,0,0,0" Padding="12,6" Content="Back" Icon="{ui:SymbolIcon ArrowLeft24}" Command="{Binding BackCommand}" />
+            </StackPanel>
 {{- else }}
             <TextBlock DockPanel.Dock="Left" FontSize="24" FontWeight="SemiBold" Text="{{ .Name }} details" />
-            <Button DockPanel.Dock="Right" Padding="12,6" Content="Back" Command="{Binding BackCommand}" />
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Margin="4,0,0,0" Padding="12,6" Content="Edit" Command="{Binding EditCommand}" />
+                <Button Margin="4,0,0,0" Padding="12,6" Content="Delete" Command="{Binding DeleteCommand}" />
+                <Button Margin="4,0,0,0" Padding="12,6" Content="Back" Command="{Binding BackCommand}" />
+            </StackPanel>
 {{- end }}
         </DockPanel>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -42,7 +50,20 @@
 {{- end }}
                 </StackPanel>
 {{- end }}
+{{- range .ReverseRelations }}
+                <StackPanel Margin="0,16,0,0">
+{{- if eq $.Theme "wpfui" }}
+                    <ui:TextBlock FontTypography="BodyStrong" Text="{{ .DisplayName }}" />
+                    <ui:DataGrid Margin="0,4,0,0" MaxHeight="220" AutoGenerateColumns="True" IsReadOnly="True" ItemsSource="{Binding {{ .DisplayName }}}" />
+{{- else }}
+                    <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}" />
+                    <DataGrid Margin="0,4,0,0" MaxHeight="220" AutoGenerateColumns="True" IsReadOnly="True" ItemsSource="{Binding {{ .DisplayName }}}" />
+{{- end }}
+                </StackPanel>
+{{- end }}
+                <!-- aspgen:children -->
             </StackPanel>
         </ScrollViewer>
     </Grid>
 </UserControl>
+

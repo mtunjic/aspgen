@@ -83,6 +83,9 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 		if err := updateInverseNavigation(path, rel.Target+".cs", r.Name, r.DryRun); err != nil {
 			return err
 		}
+		if err := patchReverseRelationUI(r, m, rel, contextName, props); err != nil {
+			return err
+		}
 	}
 	m.Entities = appendEntityMeta(m.Entities, EntityMeta{Name: r.Name, Context: contextName, Properties: props})
 	m.Contexts = appendAggregate(m.Contexts, contextName, r.Name)
@@ -91,6 +94,25 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 		return err
 	}
 	return nil
+}
+
+// patchReverseRelationUI retrofits a read-only reverse-relation child
+// collection onto rel.Target's already-rendered Details page/view-model, for
+// whichever UI (if any) is attached to the project. The target aggregate is
+// always rendered before r.Name can reference it, so this is always a
+// retrofit, never something the target's own initial render could have
+// included.
+func patchReverseRelationUI(r addRequest, m *Manifest, rel Relation, contextName string, sourceProperties []Property) error {
+	switch m.UI {
+	case "wpf":
+		return updateWpfDetailsChildren(r.Project, m.Project, rel.Target, r.Name, rel.FKProperty, r.DryRun)
+	case "mvc":
+		return updateMvcDetailsChildren(r.Project, m.Project, rel.Target, r.Name, rel.FKProperty, sourceProperties, r.DryRun)
+	case "blazor":
+		return updateBlazorDetailsChildren(r.Project, m.Project, contextName, rel.Target, r.Name, rel.FKProperty, r.DryRun)
+	default:
+		return nil
+	}
 }
 
 // aggregateTemplateGroup picks the template group that renders an

@@ -1,3 +1,12 @@
+using System.Collections.ObjectModel;
+using System.Threading.Tasks;
+{{- if eq .Theme "wpfui" }}
+using Wpf.Ui;
+using Wpf.Ui.Controls;
+using Wpf.Ui.Extensions;
+{{- else }}
+using System.Windows;
+{{- end }}
 using Prism.Mvvm;
 using Prism.Navigation;
 using Prism.Navigation.Regions;
@@ -6,6 +15,10 @@ using {{ .Namespace }}.Services;
 {{- range .Relations }}
 using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Services;
 using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Models;
+{{- end }}
+{{- range .ReverseRelations }}
+using {{ $.Project }}.Desktop.Modules.{{ .SourceEntity }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ .SourceEntity }}.Models;
 {{- end }}
 
 namespace {{ .Namespace }}.ViewModels;
@@ -17,27 +30,58 @@ public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
 {{- range .Relations }}
     private readonly I{{ .Target }}Store {{ camel .Target }}Store;
 {{- end }}
+{{- range .ReverseRelations }}
+    private readonly I{{ .SourceEntity }}Store {{ camel .SourceEntity }}Store;
+{{- end }}
+    // aspgen:childrenFields
+{{- if eq .Theme "wpfui" }}
+    private readonly IContentDialogService dialogService;
+    private readonly ISnackbarService snackbarService;
+{{- end }}
     private {{ .Name }}Row? item;
 
-    public {{ .Name }}DetailsViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range .Relations }}, I{{ .Target }}Store {{ camel .Target }}Store{{ end }})
+    public {{ .Name }}DetailsViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range .Relations }}, I{{ .Target }}Store {{ camel .Target }}Store{{ end }}{{ range .ReverseRelations }}, I{{ .SourceEntity }}Store {{ camel .SourceEntity }}Store{{ end }}{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }}/* aspgen:childrenParams */)
     {
         this.store = store;
         this.regionManager = regionManager;
 {{- range .Relations }}
         this.{{ camel .Target }}Store = {{ camel .Target }}Store;
 {{- end }}
+{{- range .ReverseRelations }}
+        this.{{ camel .SourceEntity }}Store = {{ camel .SourceEntity }}Store;
+{{- end }}
+        // aspgen:childrenAssignments
+{{- if eq .Theme "wpfui" }}
+        this.dialogService = dialogService;
+        this.snackbarService = snackbarService;
+{{- end }}
+        EditCommand = new Prism.Commands.DelegateCommand(Edit, () => Item is not null);
+        DeleteCommand = new Prism.Commands.DelegateCommand(Delete, () => Item is not null);
         BackCommand = new Prism.Commands.DelegateCommand(() => regionManager.RequestNavigate("MainRegion", "{{ .Name }}View"));
     }
 
     public {{ .Name }}Row? Item
     {
         get => item;
-        private set => SetProperty(ref item, value);
+        private set
+        {
+            if (SetProperty(ref item, value))
+            {
+                EditCommand.RaiseCanExecuteChanged();
+                DeleteCommand.RaiseCanExecuteChanged();
+            }
+        }
     }
 {{- range .Relations }}
     public {{ .Target }}Row? {{ .Target }} => Item is null ? null : {{ camel .Target }}Store.GetAll().FirstOrDefault(x => x.Id == Item.{{ .Target }}Id);
 {{- end }}
+{{- range .ReverseRelations }}
+    public ObservableCollection<{{ .SourceEntity }}Row> {{ .DisplayName }} { get; } = [];
+{{- end }}
+    // aspgen:childrenCollections
 
+    public Prism.Commands.DelegateCommand EditCommand { get; }
+    public Prism.Commands.DelegateCommand DeleteCommand { get; }
     public Prism.Commands.DelegateCommand BackCommand { get; }
 
     public bool IsNavigationTarget(NavigationContext navigationContext) => true;
@@ -53,5 +97,47 @@ public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
 {{- range .Relations }}
         RaisePropertyChanged(nameof({{ .Target }}));
 {{- end }}
+{{- range .ReverseRelations }}
+        {{ .DisplayName }}.Clear();
+        foreach (var child in {{ camel .SourceEntity }}Store.GetAll().Where(x => x.{{ .FKProperty }} == id)) {{ .DisplayName }}.Add(child);
+{{- end }}
+        // aspgen:childrenLoads
+    }
+
+    private void Edit()
+    {
+        if (Item is null) return;
+        var parameters = new NavigationParameters { { "id", Item.Id } };
+        regionManager.RequestNavigate("MainRegion", "{{ .Name }}EditView", parameters);
+    }
+
+    private void Delete() => _ = DeleteAsync();
+
+    private async Task DeleteAsync()
+    {
+        if (Item is null) return;
+{{- if eq .Theme "wpfui" }}
+        var result = await dialogService.ShowSimpleDialogAsync(new SimpleContentDialogCreateOptions
+        {
+            Title = "Delete {{ .Name }}?",
+            Content = "This will permanently delete the selected {{ .Name }} record.",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel"
+        });
+        if (result != ContentDialogResult.Primary) return;
+{{- else }}
+        var confirmed = MessageBox.Show(
+            "This will permanently delete the selected {{ .Name }} record.",
+            "Delete {{ .Name }}?",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        if (!confirmed) return;
+{{- end }}
+        store.Delete(Item.Id);
+{{- if eq .Theme "wpfui" }}
+        snackbarService.Show("Deleted", "{{ .Name }} deleted successfully.", ControlAppearance.Success, new SymbolIcon { Symbol = SymbolRegular.Delete24 }, TimeSpan.FromSeconds(4));
+{{- end }}
+        regionManager.RequestNavigate("MainRegion", "{{ .Name }}View");
     }
 }
+

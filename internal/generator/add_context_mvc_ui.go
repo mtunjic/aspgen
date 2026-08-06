@@ -12,7 +12,8 @@ func attachContextMvcUI(project string, m *Manifest, override string, dryRun, fo
 		return err
 	}
 	for _, entity := range m.Entities {
-		if err := renderContextMvcCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), override, dryRun, force); err != nil {
+		reverseRelations := computeReverseRelations(m.Entities, entity.Name, entity.Context)
+		if err := renderContextMvcCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), reverseRelations, override, dryRun, force); err != nil {
 			return err
 		}
 		if err := registerMvcCrudService(project, m.Project, entity.Name, dryRun); err != nil {
@@ -25,14 +26,15 @@ func attachContextMvcUI(project string, m *Manifest, override string, dryRun, fo
 // renderContextMvcCrud renders a single aggregate's Controller/Views. Shared
 // by attachContextMvcUI (existing aggregates) and renderAggregateCrud's dm
 // case (aggregates added after -ui mvc is already attached).
-func renderContextMvcCrud(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, override string, dryRun, force bool) error {
+func renderContextMvcCrud(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, reverseRelations []ReverseRelation, override string, dryRun, force bool) error {
 	pageData := data{
-		Project:    projectName,
-		Namespace:  projectName,
-		Context:    contextName,
-		Aggregate:  aggregate,
-		Properties: properties,
-		Relations:  relations,
+		Project:          projectName,
+		Namespace:        projectName,
+		Context:          contextName,
+		Aggregate:        aggregate,
+		Properties:       properties,
+		Relations:        relations,
+		ReverseRelations: reverseRelations,
 	}
 	return renderTree(project, "mvc-context-crud", pageData, override, dryRun, force)
 }
@@ -53,7 +55,8 @@ func renderContextMvcCrudIfAttached(r addRequest, m *Manifest, d data) error {
 	if m.UI != "mvc" {
 		return nil
 	}
-	if err := renderContextMvcCrud(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+	reverseRelations := computeReverseRelations(m.Entities, d.Aggregate, d.Context)
+	if err := renderContextMvcCrud(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, reverseRelations, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 		return err
 	}
 	return registerMvcCrudService(r.Project, m.Project, d.Aggregate, r.DryRun)

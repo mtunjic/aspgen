@@ -1,0 +1,97 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Json
+@page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit/{id:long?}"
+@using {{ .Project }}.Application
+@using {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }}
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<h1>@Title</h1>
+<EditForm Model="form" OnValidSubmit="SaveAsync">
+    <DataAnnotationsValidator />
+{{- range .Properties }}
+    <div class="mb-3">
+        <label>{{ .DisplayName }}</label>
+{{- if .RelationTarget }}
+        <InputSelect @bind-Value="form.{{ .Name }}" class="form-control">
+            @foreach (var option in {{ .RelationTarget }}Items)
+            {
+                <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
+            }
+        </InputSelect>
+{{- else if eq .CSharpType "Guid" }}
+        <InputText @bind-Value="form.{{ .Name }}Text" class="form-control" />
+{{- else }}
+        <{{ .UIControl }} @bind-Value="form.{{ .Name }}" class="form-control" />
+{{- end }}
+    </div>
+{{- end }}
+    <button class="btn btn-primary" type="submit">Save</button>
+    <button class="btn btn-outline-secondary" type="button" @onclick="Cancel">Cancel</button>
+</EditForm>
+
+@code {
+    [Parameter] public long? Id { get; set; }
+    private const string ApiPath = "/api/{{ kebab .Context }}/{{ kebab .Aggregate }}";
+    private long editingId;
+    private {{ .Aggregate }}Editor form = new();
+{{- range .Relations }}
+    private List<{{ .Target }}View> {{ .Target }}Items = [];
+{{- end }}
+    private bool IsEditing => editingId != 0;
+    private string Title => IsEditing ? "Edit {{ .Aggregate }}" : "New {{ .Aggregate }}";
+
+    protected override async Task OnInitializedAsync()
+    {
+{{- range .Relations }}
+        {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
+{{- end }}
+        editingId = Id ?? 0;
+        if (editingId != 0)
+        {
+            var item = await Http.GetFromJsonAsync<{{ .Aggregate }}View>($"{ApiPath}/{editingId}");
+            if (item is not null)
+            {
+{{- range .Properties }}
+{{- if eq .CSharpType "Guid" }}
+                form.{{ .Name }}Text = item.{{ .Name }}.ToString();
+{{- else }}
+                form.{{ .Name }} = item.{{ .Name }};
+{{- end }}
+{{- end }}
+            }
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        var request = new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }});
+        if (editingId == 0)
+        {
+            var response = await Http.PostAsJsonAsync(ApiPath, request);
+            if (!response.IsSuccessStatusCode) return;
+            var created = await response.Content.ReadFromJsonAsync<{{ .Aggregate }}View>();
+            Navigation.NavigateTo(created is null ? "/{{ kebab .Context }}/{{ kebab .Aggregate }}s" : $"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{created.Id}");
+        }
+        else
+        {
+            var response = await Http.PutAsJsonAsync($"{ApiPath}/{editingId}", request);
+            if (!response.IsSuccessStatusCode) return;
+            Navigation.NavigateTo($"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{editingId}");
+        }
+    }
+
+    private void Cancel() => Navigation.NavigateTo(IsEditing ? $"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{editingId}" : "/{{ kebab .Context }}/{{ kebab .Aggregate }}s");
+
+    private sealed class {{ .Aggregate }}Editor
+    {
+{{- range .Properties }}
+{{- if eq .CSharpType "Guid" }}
+        public string {{ .Name }}Text { get; set; } = "";
+{{- else }}
+        public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
+{{- end }}
+{{- end }}
+    }
+}

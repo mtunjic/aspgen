@@ -308,15 +308,16 @@ func TestContextArchBlazorUI(t *testing.T) {
 	if err := Run([]string{"add", "aggregate", "Product", "name:string", "price:decimal", "--context", "Billing", "--project", project}); err != nil {
 		t.Fatal(err)
 	}
-	assertExists(t, project, "src/BlazorCqrsDemo.AppBlazor/Components/Pages/Billing/ProductCrud.razor")
+	assertExists(t, project, "src/BlazorCqrsDemo.AppBlazor/Components/Pages/Billing/ProductIndex.razor")
+	assertExists(t, project, "src/BlazorCqrsDemo.AppBlazor/Components/Pages/Billing/ProductEdit.razor")
 	assertExists(t, project, "src/BlazorCqrsDemo.AppBlazor/Components/Pages/Billing/ProductDetails.razor")
 
-	page, err := os.ReadFile(filepath.Join(project, "src", "BlazorCqrsDemo.AppBlazor", "Components", "Pages", "Billing", "ProductCrud.razor"))
+	page, err := os.ReadFile(filepath.Join(project, "src", "BlazorCqrsDemo.AppBlazor", "Components", "Pages", "Billing", "ProductIndex.razor"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(page), `private const string ApiPath = "/api/billing/product";`) {
-		t.Fatalf("expected a context-qualified API path in ProductCrud.razor: %s", page)
+		t.Fatalf("expected a context-qualified API path in ProductIndex.razor: %s", page)
 	}
 
 	solution, err := os.ReadFile(filepath.Join(project, "BlazorCqrsDemo.sln"))
@@ -342,13 +343,13 @@ func TestContextArchBlazorUI(t *testing.T) {
 	if err := Run([]string{"add", "ui", "Order", "--framework", "blazor", "--project", retrofit}); err != nil {
 		t.Fatal(err)
 	}
-	assertExists(t, retrofit, "src/EsBlazorDemo.AppBlazor/Components/Pages/Sales/OrderCrud.razor")
-	retrofitPage, err := os.ReadFile(filepath.Join(retrofit, "src", "EsBlazorDemo.AppBlazor", "Components", "Pages", "Sales", "OrderCrud.razor"))
+	assertExists(t, retrofit, "src/EsBlazorDemo.AppBlazor/Components/Pages/Sales/OrderIndex.razor")
+	retrofitPage, err := os.ReadFile(filepath.Join(retrofit, "src", "EsBlazorDemo.AppBlazor", "Components", "Pages", "Sales", "OrderIndex.razor"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(retrofitPage), `private const string ApiPath = "/api/sales/order";`) {
-		t.Fatalf("expected a context-qualified API path in retrofitted OrderCrud.razor: %s", retrofitPage)
+		t.Fatalf("expected a context-qualified API path in retrofitted OrderIndex.razor: %s", retrofitPage)
 	}
 }
 

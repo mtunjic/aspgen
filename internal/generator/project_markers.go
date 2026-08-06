@@ -306,6 +306,158 @@ func updateInverseNavigation(path, description, childEntity string, dryRun bool)
 	return writeMarkerFile(path, textContent, dryRun)
 }
 
+// updateWpfDetailsChildren adds a read-only reverse-relation child grid to
+// an already-rendered {targetEntity}DetailsView.xaml/{targetEntity}
+// DetailsViewModel.cs, for a NEW relation just declared on sourceEntity
+// pointing back at targetEntity. The target's Details page is always
+// rendered before this relation exists (a relation target must already be
+// in the manifest before anything can reference it), so this always runs as
+// a retrofit patch, never at the target's own initial render. The source
+// entity's store is resolved via Prism's ContainerLocator instead of
+// constructor injection, since the target ViewModel's constructor has
+// already been rendered - no signature patching required.
+func updateWpfDetailsChildren(project, projectName, targetEntity, sourceEntity, fkProperty string, dryRun bool) error {
+	displayName := sourceEntity + "s"
+	viewModelPath := filepath.Join(project, "src", "Desktop", "Modules", targetEntity, "ViewModels", targetEntity+"DetailsViewModel.cs")
+	content, err := readPatchFile(viewModelPath)
+	if err != nil {
+		return err
+	}
+	collectionProperty := "    public ObservableCollection<" + sourceEntity + "Row> " + displayName + " { get; } = [];"
+	if strings.Contains(content, collectionProperty) {
+		return nil
+	}
+	usingServices := "using " + projectName + ".Desktop.Modules." + sourceEntity + ".Services;\n"
+	usingModels := "using " + projectName + ".Desktop.Modules." + sourceEntity + ".Models;\n"
+	if !strings.Contains(content, usingServices) {
+		content = usingServices + content
+	}
+	if !strings.Contains(content, usingModels) {
+		content = usingModels + content
+	}
+	var ok bool
+	content, ok = insertBeforeMarker(content, "    // aspgen:childrenCollections", collectionProperty)
+	if !ok {
+		return patchErr(targetEntity+"DetailsViewModel.cs", "// aspgen:childrenCollections")
+	}
+	loadLines := "        " + displayName + ".Clear();\n" +
+		"        foreach (var child in Prism.Ioc.ContainerLocator.Current.Resolve<I" + sourceEntity + "Store>().GetAll().Where(x => x." + fkProperty + " == id)) " + displayName + ".Add(child);"
+	content, ok = insertBeforeMarker(content, "        // aspgen:childrenLoads", loadLines)
+	if !ok {
+		return patchErr(targetEntity+"DetailsViewModel.cs", "// aspgen:childrenLoads")
+	}
+	if err := writePatchFile(viewModelPath, content, dryRun); err != nil {
+		return err
+	}
+
+	viewPath := filepath.Join(project, "src", "Desktop", "Modules", targetEntity, "Views", targetEntity+"DetailsView.xaml")
+	viewContent, err := readPatchFile(viewPath)
+	if err != nil {
+		return err
+	}
+	childGrid := "                <StackPanel Margin=\"0,16,0,0\">\n" +
+		"                    <TextBlock FontWeight=\"SemiBold\" Text=\"" + displayName + "\" />\n" +
+		"                    <DataGrid Margin=\"0,4,0,0\" MaxHeight=\"220\" AutoGenerateColumns=\"True\" IsReadOnly=\"True\" ItemsSource=\"{Binding " + displayName + "}\" />\n" +
+		"                </StackPanel>"
+	viewContent, ok = insertBeforeMarker(viewContent, "                <!-- aspgen:children -->", childGrid)
+	if !ok {
+		return patchErr(targetEntity+"DetailsView.xaml", "<!-- aspgen:children -->")
+	}
+	return writePatchFile(viewPath, viewContent, dryRun)
+}
+
+// updateMvcDetailsChildren adds a read-only reverse-relation child table to
+// an already-rendered {targetEntity}Controller.cs/Views/{targetEntity}/
+// Details.cshtml, for a NEW relation just declared on sourceEntity pointing
+// back at targetEntity. Unlike the WPF case, the Controller's primary
+// constructor is patched directly (via the /* aspgen:childrenParams */
+// marker) since ASP.NET Core resolves it fresh per request - there's no
+// already-constructed instance to work around.
+func updateMvcDetailsChildren(project, projectName, targetEntity, sourceEntity, fkProperty string, sourceProperties []Property, dryRun bool) error {
+	displayName := sourceEntity + "s"
+	controllerPath := filepath.Join(project, "src", projectName+".WebMvc", "Controllers", targetEntity+"Controller.cs")
+	content, err := readPatchFile(controllerPath)
+	if err != nil {
+		return err
+	}
+	loadLine := "        ViewBag." + displayName + " = (await " + camel(sourceEntity) + "Service.GetAllAsync(cancellationToken)).Where(x => x." + fkProperty + " == id).ToList();"
+	if strings.Contains(content, loadLine) {
+		return nil
+	}
+	if !strings.Contains(content, "/* aspgen:childrenParams */") {
+		return patchErr(targetEntity+"Controller.cs", "/* aspgen:childrenParams */")
+	}
+	ctorParam := ", " + sourceEntity + "CrudService " + camel(sourceEntity) + "Service"
+	content = strings.Replace(content, "/* aspgen:childrenParams */", ctorParam+"/* aspgen:childrenParams */", 1)
+	content, ok := insertBeforeMarker(content, "        // aspgen:childrenLoads", loadLine)
+	if !ok {
+		return patchErr(targetEntity+"Controller.cs", "// aspgen:childrenLoads")
+	}
+	if err := writePatchFile(controllerPath, content, dryRun); err != nil {
+		return err
+	}
+
+	viewPath := filepath.Join(project, "src", projectName+".WebMvc", "Views", targetEntity, "Details.cshtml")
+	viewContent, err := readPatchFile(viewPath)
+	if err != nil {
+		return err
+	}
+	var header, cells strings.Builder
+	for _, p := range sourceProperties {
+		if p.RelationTarget != "" {
+			continue
+		}
+		header.WriteString("            <th>" + p.DisplayName + "</th>\n")
+		cells.WriteString("            <td>@child." + p.Name + "</td>\n")
+	}
+	table := "<h3>" + displayName + "</h3>\n" +
+		"<table class=\"table\">\n" +
+		"    <thead>\n        <tr>\n" + header.String() + "        </tr>\n    </thead>\n" +
+		"    <tbody>\n    @foreach (var child in (List<" + sourceEntity + "View>)ViewBag." + displayName + ")\n    {\n" +
+		"        <tr>\n" + cells.String() + "        </tr>\n    }\n    </tbody>\n</table>"
+	viewContent, ok = insertBeforeMarker(viewContent, "<!-- aspgen:children -->", table)
+	if !ok {
+		return patchErr(targetEntity+"/Details.cshtml", "<!-- aspgen:children -->")
+	}
+	return writePatchFile(viewPath, viewContent, dryRun)
+}
+
+// updateBlazorDetailsChildren adds a read-only reverse-relation child table
+// to an already-rendered {targetEntity}Details.razor, for a NEW relation
+// just declared on sourceEntity (in the same bounded context, relations are
+// same-context only) pointing back at targetEntity. Reuses the page's
+// existing @inject HttpClient - Blazor Details pages already call the
+// related entity's own REST endpoint directly for forward relations, so the
+// reverse direction needs no new @inject at all, just new @code lines.
+func updateBlazorDetailsChildren(project, projectName, contextName, targetEntity, sourceEntity, fkProperty string, dryRun bool) error {
+	displayName := sourceEntity + "s"
+	path := filepath.Join(project, "src", projectName+".AppBlazor", "Components", "Pages", contextName, targetEntity+"Details.razor")
+	content, err := readPatchFile(path)
+	if err != nil {
+		return err
+	}
+	field := "    private List<" + sourceEntity + "View> " + displayName + " = [];"
+	if strings.Contains(content, field) {
+		return nil
+	}
+	content, ok := insertBeforeMarker(content, "    // aspgen:childrenFields", field)
+	if !ok {
+		return patchErr(targetEntity+"Details.razor", "// aspgen:childrenFields")
+	}
+	loadLine := "        " + displayName + " = (await Http.GetFromJsonAsync<List<" + sourceEntity + "View>>(\"/api/" + kebab(contextName) + "/" + kebab(sourceEntity) + "\") ?? []).Where(x => x." + fkProperty + " == Id).ToList();"
+	content, ok = insertBeforeMarker(content, "        // aspgen:childrenLoads", loadLine)
+	if !ok {
+		return patchErr(targetEntity+"Details.razor", "// aspgen:childrenLoads")
+	}
+	markup := "    <h3>" + displayName + "</h3>\n" +
+		"    <table class=\"table\">\n        <tbody>\n        @foreach (var child in " + displayName + ")\n        {\n            <tr>@child.ToString()</tr>\n        }\n        </tbody>\n    </table>"
+	content, ok = insertBeforeMarker(content, "    @* aspgen:children *@", markup)
+	if !ok {
+		return patchErr(targetEntity+"Details.razor", "@* aspgen:children *@")
+	}
+	return writePatchFile(path, content, dryRun)
+}
+
 // hasWebApiHost reports whether project has a --context/--arch engine WebApi
 // host (cqrs/es tiers only; ar/dm stay headless class libraries).
 func hasWebApiHost(project string) bool {

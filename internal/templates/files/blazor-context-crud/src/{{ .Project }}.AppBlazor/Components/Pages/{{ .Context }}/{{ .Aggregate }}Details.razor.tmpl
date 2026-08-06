@@ -23,7 +23,23 @@ else
 {{- end }}
 {{- end }}
     </dl>
-    <button class="btn btn-secondary" @onclick="Back">Back</button>
+    <div class="mb-3">
+        <button class="btn btn-secondary" @onclick="Edit">Edit</button>
+        <button class="btn btn-danger" @onclick="DeleteAsync">Delete</button>
+        <button class="btn btn-outline-secondary" @onclick="Back">Back</button>
+    </div>
+{{- range .ReverseRelations }}
+    <h3>{{ .DisplayName }}</h3>
+    <table class="table">
+        <tbody>
+        @foreach (var child in {{ .DisplayName }})
+        {
+            <tr>@child.ToString()</tr>
+        }
+        </tbody>
+    </table>
+{{- end }}
+    @* aspgen:children *@
 }
 
 @code {
@@ -32,6 +48,10 @@ else
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
 {{- end }}
+{{- range .ReverseRelations }}
+    private List<{{ .SourceEntity }}View> {{ .DisplayName }} = [];
+{{- end }}
+    // aspgen:childrenFields
 
     protected override async Task OnInitializedAsync()
     {
@@ -39,7 +59,21 @@ else
 {{- range .Relations }}
         {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
 {{- end }}
+{{- range .ReverseRelations }}
+        {{ .DisplayName }} = (await Http.GetFromJsonAsync<List<{{ .SourceEntity }}View>>("/api/{{ kebab .SourceContext }}/{{ kebab .SourceEntity }}") ?? []).Where(x => x.{{ .FKProperty }} == Id).ToList();
+{{- end }}
+        // aspgen:childrenLoads
+    }
+
+    private void Edit() => Navigation.NavigateTo($"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit/{Id}");
+
+    private async Task DeleteAsync()
+    {
+        var response = await Http.DeleteAsync($"/api/{{ kebab .Context }}/{{ kebab .Aggregate }}/{Id}");
+        if (!response.IsSuccessStatusCode) return;
+        Navigation.NavigateTo("/{{ kebab .Context }}/{{ kebab .Aggregate }}s");
     }
 
     private void Back() => Navigation.NavigateTo("/{{ kebab .Context }}/{{ kebab .Aggregate }}s");
 }
+

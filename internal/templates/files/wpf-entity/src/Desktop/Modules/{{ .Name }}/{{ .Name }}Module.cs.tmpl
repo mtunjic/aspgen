@@ -67,6 +67,7 @@ public sealed class {{ .Name }}Module : IModule
 {{- end }}
         containerRegistry.RegisterSingleton<Services.I{{ .Name }}Store, Services.{{ .Name }}Store>();
         containerRegistry.RegisterForNavigation<Views.{{ .Name }}View>();
+        containerRegistry.RegisterForNavigation<Views.{{ .Name }}EditView>("{{ .Name }}EditView");
         containerRegistry.RegisterForNavigation<Views.{{ .Name }}DetailsView>("{{ .Name }}DetailsView");
     }
 

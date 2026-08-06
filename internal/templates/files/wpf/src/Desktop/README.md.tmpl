@@ -32,7 +32,7 @@ The dashboard is the initial landing page. It includes a Fluent hero banner and 
 
 Generated entity forms use WPF-UI controls based on property type: `TextBox`, `NumberBox`, `CalendarDatePicker`, `TimePicker`, and `ToggleSwitch`. Lists use a themed `DataGrid` with typed columns, empty-state feedback, validation and success `InfoBar` messages, and Fluent action icons. Deleting a record prompts for confirmation in a Fluent `ContentDialog` (hosted by the shell's `ContentDialogHost`) before removing it.
 
-CRUD keyboard shortcuts are available in each module: `Ctrl+N` (new), `Ctrl+S` (save), `F5` (refresh), `Delete` (delete selected), and `Escape` (cancel). Double-click a grid row to edit it.
+CRUD keyboard shortcuts are available in each module: `Ctrl+N` (add new) and `F5` (refresh) on the list page; `Ctrl+S` (save) and `Escape` (cancel) on the edit page. Double-click (or press Enter on) a grid row to open its details page, which has Edit and Delete buttons.
 
 Global shell shortcuts are also available: `Alt+Home` returns to the dashboard and `Ctrl+,` opens Settings.
 {{- end }}

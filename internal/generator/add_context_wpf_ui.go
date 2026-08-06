@@ -34,7 +34,8 @@ func attachContextWpfUI(project string, m *Manifest, theme, themeMode, override 
 		if ctx, ok := findContext(m.Contexts, entity.Context); ok && ctx.Arch != "" {
 			entityBackend = archBackend(ctx.Arch)
 		}
-		if err := renderContextWpfModule(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), entityBackend, theme, themeMode, override, dryRun, force); err != nil {
+		reverseRelations := computeReverseRelations(m.Entities, entity.Name, entity.Context)
+		if err := renderContextWpfModule(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), reverseRelations, entityBackend, theme, themeMode, override, dryRun, force); err != nil {
 			return err
 		}
 	}
@@ -46,18 +47,19 @@ func attachContextWpfUI(project string, m *Manifest, theme, themeMode, override 
 // the Desktop shell's module catalog. Shared by attachContextWpfUI (existing
 // aggregates) and renderAggregateCrud's cqrs/es cases (aggregates added after
 // -ui wpf is already attached).
-func renderContextWpfModule(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, backend, theme, themeMode, override string, dryRun, force bool) error {
+func renderContextWpfModule(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, reverseRelations []ReverseRelation, backend, theme, themeMode, override string, dryRun, force bool) error {
 	namespace := projectName + ".Desktop.Modules." + aggregate
 	moduleData := data{
-		Project:    projectName,
-		Namespace:  namespace,
-		Name:       aggregate,
-		Context:    contextName,
-		Properties: properties,
-		Relations:  relations,
-		Backend:    backend,
-		Theme:      theme,
-		ThemeMode:  themeMode,
+		Project:          projectName,
+		Namespace:        namespace,
+		Name:             aggregate,
+		Context:          contextName,
+		Properties:       properties,
+		Relations:        relations,
+		ReverseRelations: reverseRelations,
+		Backend:          backend,
+		Theme:            theme,
+		ThemeMode:        themeMode,
 	}
 	if err := renderTree(project, "wpf-entity", moduleData, override, dryRun, force); err != nil {
 		return err
@@ -73,5 +75,6 @@ func renderContextWpfModuleIfAttached(r addRequest, m *Manifest, d data) error {
 	if m.UI != "wpf" {
 		return nil
 	}
-	return renderContextWpfModule(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, d.Backend, d.Theme, d.ThemeMode, templateDir(r.Args), r.DryRun, r.Force)
+	reverseRelations := computeReverseRelations(m.Entities, d.Aggregate, d.Context)
+	return renderContextWpfModule(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, reverseRelations, d.Backend, d.Theme, d.ThemeMode, templateDir(r.Args), r.DryRun, r.Force)
 }

@@ -106,6 +106,44 @@ func splitRelationArgs(declaring string, args []string, entities []EntityMeta, c
 	return remaining, relations, manyToMany, nil
 }
 
+// ReverseRelation describes a many-to-one relation declared on ANOTHER
+// entity (SourceEntity) that points back at the entity currently being
+// rendered, surfaced so a Details page can show a read-only child
+// collection (e.g. a Customer's Details page lists its Orders). Because a
+// relation target must already exist in the manifest before anything can
+// reference it, the target is always rendered before its reverse relations
+// exist - they can only ever be discovered later, when the referring entity
+// is added (see patchReverseRelationUI in add_ddd.go).
+type ReverseRelation struct {
+	SourceEntity  string // entity holding the FK, e.g. "Order"
+	SourceContext string
+	FKProperty    string // e.g. "CustomerId"
+	DisplayName   string // pluralized nav name shown in the UI, e.g. "Orders"
+}
+
+// computeReverseRelations scans every entity recorded in the same context as
+// targetEntity for a many-to-one relation pointing back at it.
+func computeReverseRelations(entities []EntityMeta, targetEntity, context string) []ReverseRelation {
+	var out []ReverseRelation
+	for _, e := range entities {
+		if e.Context != context || e.Name == targetEntity {
+			continue
+		}
+		for _, p := range e.Properties {
+			if p.RelationTarget != targetEntity {
+				continue
+			}
+			out = append(out, ReverseRelation{
+				SourceEntity:  e.Name,
+				SourceContext: e.Context,
+				FKProperty:    p.Name,
+				DisplayName:   e.Name + "s",
+			})
+		}
+	}
+	return out
+}
+
 // isPropertySkipFlag reports whether arg is a flag whose value token must
 // also be skipped when scanning for `name:type` property/relation args.
 func isPropertySkipFlag(arg string) bool {

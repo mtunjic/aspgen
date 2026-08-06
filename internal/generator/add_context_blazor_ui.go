@@ -11,7 +11,8 @@ func attachContextBlazorUI(project string, m *Manifest, override string, dryRun,
 		return err
 	}
 	for _, entity := range m.Entities {
-		if err := renderContextBlazorCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), override, dryRun, force); err != nil {
+		reverseRelations := computeReverseRelations(m.Entities, entity.Name, entity.Context)
+		if err := renderContextBlazorCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), reverseRelations, override, dryRun, force); err != nil {
 			return err
 		}
 	}
@@ -22,14 +23,15 @@ func attachContextBlazorUI(project string, m *Manifest, override string, dryRun,
 // pages. Shared by attachContextBlazorUI (existing aggregates) and
 // renderAggregateCrud's cqrs/es cases (aggregates added after -ui blazor is
 // already attached).
-func renderContextBlazorCrud(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, override string, dryRun, force bool) error {
+func renderContextBlazorCrud(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, reverseRelations []ReverseRelation, override string, dryRun, force bool) error {
 	pageData := data{
-		Project:    projectName,
-		Namespace:  projectName,
-		Context:    contextName,
-		Aggregate:  aggregate,
-		Properties: properties,
-		Relations:  relations,
+		Project:          projectName,
+		Namespace:        projectName,
+		Context:          contextName,
+		Aggregate:        aggregate,
+		Properties:       properties,
+		Relations:        relations,
+		ReverseRelations: reverseRelations,
 	}
 	return renderTree(project, "blazor-context-crud", pageData, override, dryRun, force)
 }
@@ -41,5 +43,6 @@ func renderContextBlazorCrudIfAttached(r addRequest, m *Manifest, d data) error 
 	if m.UI != "blazor" {
 		return nil
 	}
-	return renderContextBlazorCrud(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, templateDir(r.Args), r.DryRun, r.Force)
+	reverseRelations := computeReverseRelations(m.Entities, d.Aggregate, d.Context)
+	return renderContextBlazorCrud(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, reverseRelations, templateDir(r.Args), r.DryRun, r.Force)
 }

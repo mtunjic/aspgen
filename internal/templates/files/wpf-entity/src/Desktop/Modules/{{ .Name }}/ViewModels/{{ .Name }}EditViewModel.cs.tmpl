@@ -1,0 +1,223 @@
+using System.Collections.ObjectModel;
+{{- if eq .Theme "wpfui" }}
+using Wpf.Ui;
+using Wpf.Ui.Controls;
+{{- end }}
+using Prism.Commands;
+using Prism.Mvvm;
+using Prism.Navigation;
+using Prism.Navigation.Regions;
+using {{ .Namespace }}.Models;
+using {{ .Namespace }}.Services;
+{{- range .Relations }}
+using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Models;
+{{- end }}
+
+namespace {{ .Namespace }}.ViewModels;
+
+public sealed class {{ .Name }}EditViewModel : BindableBase, INavigationAware
+{
+    private readonly I{{ .Name }}Store store;
+    private readonly IRegionManager regionManager;
+{{- range .Relations }}
+    private readonly I{{ .Target }}Store {{ camel .Target }}Store;
+{{- end }}
+{{- if eq .Theme "wpfui" }}
+    private readonly ISnackbarService snackbarService;
+{{- end }}
+    private long editingId;
+    private string validationMessage = string.Empty;
+    private bool isBusy;
+
+    public {{ .Name }}EditViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range .Relations }}, I{{ .Target }}Store {{ camel .Target }}Store{{ end }}{{ if eq .Theme "wpfui" }}, ISnackbarService snackbarService{{ end }})
+    {
+        this.store = store;
+        this.regionManager = regionManager;
+{{- range .Relations }}
+        this.{{ camel .Target }}Store = {{ camel .Target }}Store;
+{{- end }}
+{{- if eq .Theme "wpfui" }}
+        this.snackbarService = snackbarService;
+{{- end }}
+        Form = new {{ .Name }}Editor();
+        SaveCommand = new DelegateCommand(Save, () => !IsBusy);
+        CancelCommand = new DelegateCommand(Cancel, () => !IsBusy);
+        LoadRelated();
+    }
+
+    public {{ .Name }}Editor Form { get; }
+{{- range .Relations }}
+    public ObservableCollection<{{ .Target }}Row> {{ .Target }}Items { get; } = [];
+{{- end }}
+    public bool IsEditing => editingId != 0;
+    public string Title => IsEditing ? "Edit {{ .Name }}" : "New {{ .Name }}";
+    public string ValidationMessage
+    {
+        get => validationMessage;
+        private set
+        {
+            if (SetProperty(ref validationMessage, value))
+            {
+                RaisePropertyChanged(nameof(HasValidationError));
+            }
+        }
+    }
+    public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationMessage);
+    public bool IsBusy
+    {
+        get => isBusy;
+        private set
+        {
+            if (SetProperty(ref isBusy, value))
+            {
+                SaveCommand.RaiseCanExecuteChanged();
+                CancelCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public DelegateCommand SaveCommand { get; }
+    public DelegateCommand CancelCommand { get; }
+
+    public bool IsNavigationTarget(NavigationContext navigationContext) => true;
+
+    public void OnNavigatedFrom(NavigationContext navigationContext)
+    {
+    }
+
+    public void OnNavigatedTo(NavigationContext navigationContext)
+    {
+        editingId = navigationContext.Parameters.ContainsKey("id") ? navigationContext.Parameters.GetValue<long>("id") : 0;
+        var item = editingId == 0 ? null : store.GetAll().FirstOrDefault(x => x.Id == editingId);
+        Form.Reset(item);
+        ValidationMessage = string.Empty;
+        RaisePropertyChanged(nameof(IsEditing));
+        RaisePropertyChanged(nameof(Title));
+    }
+
+    private void LoadRelated()
+    {
+{{- range .Relations }}
+        {{ .Target }}Items.Clear();
+        foreach (var item in {{ camel .Target }}Store.GetAll()) {{ .Target }}Items.Add(item);
+{{- end }}
+    }
+
+    private void Save()
+    {
+        if (!TryBuild(out var value)) return;
+        IsBusy = true;
+        try
+        {
+            var operation = editingId == 0 ? "created" : "updated";
+            var saved = store.Save(editingId, value);
+{{- if eq .Theme "wpfui" }}
+            snackbarService.Show("Saved", $"{{ .Name }} {operation} successfully.", ControlAppearance.Success, new SymbolIcon { Symbol = SymbolRegular.CheckmarkCircle24 }, TimeSpan.FromSeconds(4));
+{{- end }}
+            var parameters = new NavigationParameters { { "id", saved.Id } };
+            regionManager.RequestNavigate("MainRegion", "{{ .Name }}DetailsView", parameters);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        if (IsEditing)
+        {
+            var parameters = new NavigationParameters { { "id", editingId } };
+            regionManager.RequestNavigate("MainRegion", "{{ .Name }}DetailsView", parameters);
+        }
+        else
+        {
+            regionManager.RequestNavigate("MainRegion", "{{ .Name }}View");
+        }
+    }
+
+    private bool Invalid(string propertyName)
+    {
+        ValidationMessage = $"{propertyName} is invalid.";
+        return false;
+    }
+
+    private bool TryBuild(out {{ .Name }}Row value)
+    {
+        value = default!;
+{{- range .Properties }}
+{{- if eq .CSharpType "string" }}
+        var {{ camel .Name }} = Form.{{ .Name }}.Trim();
+        if ({{ camel .Name }}.Length == 0) return Invalid(nameof(Form.{{ .Name }}));
+{{- else if eq .CSharpType "string?" }}
+        var {{ camel .Name }} = string.IsNullOrWhiteSpace(Form.{{ .Name }}) ? null : Form.{{ .Name }}!.Trim();
+{{- else if eq .CSharpType "bool" }}
+        var {{ camel .Name }} = Form.{{ .Name }};
+{{- else if eq .CSharpType "DateOnly" }}
+        if (Form.{{ .Name }} is null) return Invalid(nameof(Form.{{ .Name }}));
+        var {{ camel .Name }} = DateOnly.FromDateTime(Form.{{ .Name }}.Value);
+{{- else if eq .CSharpType "DateTime" }}
+        if (Form.{{ .Name }} is null) return Invalid(nameof(Form.{{ .Name }}));
+        if (Form.{{ .Name }}Time is null) return Invalid(nameof(Form.{{ .Name }}));
+        var {{ camel .Name }} = DateTime.SpecifyKind(Form.{{ .Name }}.Value.Date + Form.{{ .Name }}Time.Value, DateTimeKind.Unspecified);
+{{- else if or (eq .CSharpType "int") (eq .CSharpType "long") (eq .CSharpType "decimal") (eq .CSharpType "float") (eq .CSharpType "Guid") }}
+        if (!{{ .CSharpType }}.TryParse(Form.{{ .Name }}, out var {{ camel .Name }})) return Invalid(nameof(Form.{{ .Name }}));
+{{- else if eq .CSharpType "DateOnly?" }}
+        DateOnly? {{ camel .Name }} = Form.{{ .Name }} is null ? null : DateOnly.FromDateTime(Form.{{ .Name }}.Value);
+{{- else if eq .CSharpType "DateTime?" }}
+        DateTime? {{ camel .Name }} = Form.{{ .Name }} is null || Form.{{ .Name }}Time is null ? null : DateTime.SpecifyKind(Form.{{ .Name }}.Value.Date + Form.{{ .Name }}Time.Value, DateTimeKind.Unspecified);
+{{- else if or (eq .CSharpType "int?") (eq .CSharpType "long?") (eq .CSharpType "decimal?") (eq .CSharpType "float?") (eq .CSharpType "Guid?") }}
+        {{ .CSharpType }} {{ camel .Name }} = null;
+        if (!string.IsNullOrWhiteSpace(Form.{{ .Name }}))
+        {
+            if (!{{ trimSuffix .CSharpType "?" }}.TryParse(Form.{{ .Name }}, out var parsed{{ .Name }})) return Invalid(nameof(Form.{{ .Name }}));
+            {{ camel .Name }} = parsed{{ .Name }};
+        }
+{{- end }}
+{{- end }}
+        value = new {{ .Name }}Row(editingId{{ range .Properties }}, {{ camel .Name }}{{ end }});
+        return true;
+    }
+}
+
+public sealed class {{ .Name }}Editor : BindableBase
+{
+{{- range .Properties }}
+{{- if eq .CSharpType "bool" }}
+    private bool {{ camel .Name }};
+    public bool {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- else if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
+    private DateTime? {{ camel .Name }};
+    public DateTime? {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- if or (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
+    private TimeSpan? {{ camel .Name }}Time;
+    public TimeSpan? {{ .Name }}Time { get => {{ camel .Name }}Time; set => SetProperty(ref {{ camel .Name }}Time, value); }
+{{- end }}
+{{- else }}
+    private string {{ camel .Name }} = string.Empty;
+    public string {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- end }}
+{{- end }}
+
+    public void Reset({{ .Name }}Row? item)
+    {
+{{- range .Properties }}
+{{- if eq .CSharpType "bool" }}
+        {{ .Name }} = item?.{{ .Name }} ?? false;
+{{- else if eq .CSharpType "DateOnly" }}
+        {{ .Name }} = item is null ? null : item.{{ .Name }}.ToDateTime(TimeOnly.MinValue);
+{{- else if eq .CSharpType "DateOnly?" }}
+        {{ .Name }} = item?.{{ .Name }}?.ToDateTime(TimeOnly.MinValue);
+{{- else if eq .CSharpType "DateTime" }}
+        {{ .Name }} = item?.{{ .Name }};
+        {{ .Name }}Time = item?.{{ .Name }}.TimeOfDay;
+{{- else if eq .CSharpType "DateTime?" }}
+        {{ .Name }} = item?.{{ .Name }};
+        {{ .Name }}Time = item?.{{ .Name }}?.TimeOfDay;
+{{- else }}
+        {{ .Name }} = item is null ? string.Empty : item.{{ .Name }}.ToString();
+{{- end }}
+{{- end }}
+    }
+}

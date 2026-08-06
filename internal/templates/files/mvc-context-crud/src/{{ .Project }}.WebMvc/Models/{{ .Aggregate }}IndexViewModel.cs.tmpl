@@ -10,6 +10,7 @@ public sealed class {{ .Aggregate }}IndexViewModel({{ .Aggregate }}View[] items,
     public int PageSize { get; } = pageSize;
     public string? Search { get; } = search;
     public bool HasMore => (long)Page * PageSize < TotalCount;
+    public int TotalPages => (int)Math.Max(1, Math.Ceiling(TotalCount / (double)PageSize));
 {{- range .Properties }}
 {{- if .RelationTarget }}
     public long? {{ .Name }} { get; } = {{ camel .Name }};

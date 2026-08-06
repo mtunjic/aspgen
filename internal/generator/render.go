@@ -20,15 +20,19 @@ type data struct {
 	// Relations holds many-to-one references declared on this entity;
 	// the corresponding foreign key is also present in Properties.
 	Relations []Relation
-	Context   string
-	Aggregate string
-	Crud      bool
-	Theme     string
-	ThemeMode string
-	Backend   string
-	Database  string
-	Seed      string
-	SeedCount int
+	// ReverseRelations holds many-to-one references OTHER entities declare
+	// back at this one, used to render a read-only child collection on this
+	// entity's Details page.
+	ReverseRelations []ReverseRelation
+	Context          string
+	Aggregate        string
+	Crud             bool
+	Theme            string
+	ThemeMode        string
+	Backend          string
+	Database         string
+	Seed             string
+	SeedCount        int
 	// Arch is the --context/--arch tier ("ar", "dm", "cqrs", "es") the
 	// current render belongs to; used by shared template groups (e.g.
 	// tests-unit) that need to branch on which DbContext/host shape a

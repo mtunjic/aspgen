@@ -241,21 +241,42 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 		"ui:Button",
 		"ui:TextBlock",
 		"ui:TextBox",
-		"ui:NumberBox",
-		"ControlStrokeColorDefaultBrush",
 		"TextFillColorSecondaryBrush",
+		"Add new Event",
+		"PrevPageCommand",
+		"NextPageCommand",
+		"PageLabel",
+	} {
+		if !strings.Contains(viewText, expected) {
+			t.Fatalf("WPF-UI entity list view was missing %q", expected)
+		}
+	}
+	editView, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/Views/EventEditView.xaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	editViewText := string(editView)
+	for _, expected := range []string{
+		"ui:NumberBox",
 		"ui:CalendarDatePicker",
 		`Date="{Binding Form.EventDate`,
 		"ui:TimePicker",
 		`SelectedTime="{Binding Form.StartsAtTime`,
 		"ui:ToggleSwitch",
 	} {
-		if !strings.Contains(viewText, expected) {
-			t.Fatalf("WPF-UI entity control was not generated: missing %q", expected)
+		if !strings.Contains(editViewText, expected) {
+			t.Fatalf("WPF-UI entity edit view was missing %q", expected)
 		}
 	}
-	if strings.Contains(viewText, `SelectedDate="{Binding Form.EventDate`) {
+	if strings.Contains(editViewText, `SelectedDate="{Binding Form.EventDate`) {
 		t.Fatal("WPF-UI CalendarDatePicker must bind Date rather than SelectedDate")
+	}
+	detailsView, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/Views/EventDetailsView.xaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(detailsView), "Command=\"{Binding EditCommand}\"") || !strings.Contains(string(detailsView), "Command=\"{Binding DeleteCommand}\"") {
+		t.Fatal("WPF-UI details view is missing Edit/Delete buttons")
 	}
 	menu, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/Views/EventMenuView.xaml"))
 	if err != nil {

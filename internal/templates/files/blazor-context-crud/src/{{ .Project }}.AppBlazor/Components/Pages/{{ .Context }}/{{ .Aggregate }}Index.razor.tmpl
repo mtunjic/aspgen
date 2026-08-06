@@ -7,27 +7,7 @@
 @inject NavigationManager Navigation
 
 <h1>{{ .Aggregate }}s</h1>
-<EditForm Model="form" OnValidSubmit="SaveAsync">
-    <DataAnnotationsValidator />
-{{- range .Properties }}
-    <div class="mb-3">
-        <label>{{ .DisplayName }}</label>
-{{- if .RelationTarget }}
-        <InputSelect @bind-Value="form.{{ .Name }}" class="form-control">
-            @foreach (var option in {{ .RelationTarget }}Items)
-            {
-                <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
-            }
-        </InputSelect>
-{{- else if eq .CSharpType "Guid" }}
-        <InputText @bind-Value="form.{{ .Name }}Text" class="form-control" />
-{{- else }}
-        <{{ .UIControl }} @bind-Value="form.{{ .Name }}" class="form-control" />
-{{- end }}
-    </div>
-{{- end }}
-    <button class="btn btn-primary" type="submit">Save</button>
-</EditForm>
+<p><button class="btn btn-primary" @onclick="AddNew">+ Add new {{ .Aggregate }}</button></p>
 
 <div class="mb-3 d-flex gap-2">
     <input @bind="searchText" @bind:event="oninput" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
@@ -90,25 +70,33 @@
 </details>
 
 <table class="table">
+    <thead>
+        <tr>
+{{- range .Properties }}
+            <th>{{ .DisplayName }}</th>
+{{- end }}
+        </tr>
+    </thead>
     <tbody>
     @foreach (var item in items)
     {
         <tr style="cursor:pointer" @onclick="() => ViewDetails(item.Id)">
 {{- range .Properties }}
+{{- if .RelationTarget }}
+            <td>@({{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</td>
+{{- else }}
             <td>@item.{{ .Name }}</td>
 {{- end }}
-            <td>
-                <button class="btn btn-secondary" @onclick="() => EditAsync(item.Id)" @onclick:stopPropagation="true">Edit</button>
-                <button class="btn btn-danger" @onclick="() => DeleteAsync(item.Id)" @onclick:stopPropagation="true">Delete</button>
-            </td>
+{{- end }}
         </tr>
     }
     </tbody>
 </table>
-@if (hasMore)
-{
-    <button class="btn btn-outline-secondary" @onclick="LoadMoreAsync">Load more</button>
-}
+<div class="d-flex align-items-center gap-2">
+    <button class="btn btn-outline-secondary" disabled="@(page <= 1)" @onclick="PrevPageAsync">Prev</button>
+    <span>Page @(page) of @TotalPages</span>
+    <button class="btn btn-outline-secondary" disabled="@(!hasMore)" @onclick="NextPageAsync">Next</button>
+</div>
 
 @code {
     private const string ApiPath = "/api/{{ kebab .Context }}/{{ kebab .Aggregate }}";
@@ -116,13 +104,12 @@
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
 {{- end }}
-    private {{ .Aggregate }}Editor form = new();
-    private long editingId;
     private string? searchText;
     private int page = 1;
     private long totalCount;
     private const int PageSize = 25;
     private bool hasMore => (long)page * PageSize < totalCount;
+    private int TotalPages => (int)Math.Max(1, Math.Ceiling(totalCount / (double)PageSize));
 {{- range .Properties }}
 {{- if .RelationTarget }}
     private long? filter{{ .Name }};
@@ -150,16 +137,24 @@
     private async Task SearchAsync()
     {
         page = 1;
-        await LoadPageAsync(append: false);
+        await LoadPageAsync();
     }
 
-    private async Task LoadMoreAsync()
+    private async Task PrevPageAsync()
     {
-        page++;
-        await LoadPageAsync(append: true);
+        if (page <= 1) return;
+        page--;
+        await LoadPageAsync();
     }
 
-    private async Task LoadPageAsync(bool append)
+    private async Task NextPageAsync()
+    {
+        if (!hasMore) return;
+        page++;
+        await LoadPageAsync();
+    }
+
+    private async Task LoadPageAsync()
     {
         var query = new List<string>();
         if (!string.IsNullOrWhiteSpace(searchText)) query.Add($"search={Uri.EscapeDataString(searchText)}");
@@ -182,7 +177,7 @@
         query.Add($"pageSize={PageSize}");
         var result = await Http.GetFromJsonAsync<{{ .Aggregate }}PagedResponse>($"{ApiPath}/search?{string.Join("&", query)}");
         if (result is null) return;
-        if (append) items.AddRange(result.Items); else items = result.Items.ToList();
+        items = result.Items.ToList();
         totalCount = result.TotalCount;
     }
 
@@ -209,54 +204,5 @@
 
     private void ViewDetails(long id) => Navigation.NavigateTo($"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{id}");
 
-    private async Task SaveAsync()
-    {
-        var request = new {{ .Aggregate }}Request(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }});
-        if (editingId == 0)
-        {
-            var response = await Http.PostAsJsonAsync(ApiPath, request);
-            if (!response.IsSuccessStatusCode) return;
-        }
-        else
-        {
-            var response = await Http.PutAsJsonAsync($"{ApiPath}/{editingId}", request);
-            if (!response.IsSuccessStatusCode) return;
-        }
-        form = new();
-        editingId = 0;
-        await SearchAsync();
-    }
-
-    private void EditAsync(long id)
-    {
-        var item = items.FirstOrDefault(x => x.Id == id);
-        if (item is null) return;
-        editingId = id;
-{{- range .Properties }}
-{{- if eq .CSharpType "Guid" }}
-        form.{{ .Name }}Text = item.{{ .Name }}.ToString();
-{{- else }}
-        form.{{ .Name }} = item.{{ .Name }};
-{{- end }}
-{{- end }}
-    }
-
-    private async Task DeleteAsync(long id)
-    {
-        var response = await Http.DeleteAsync($"{ApiPath}/{id}");
-        if (!response.IsSuccessStatusCode) return;
-        await SearchAsync();
-    }
-
-    private sealed class {{ .Aggregate }}Editor
-    {
-{{- range .Properties }}
-{{- if eq .CSharpType "Guid" }}
-        public string {{ .Name }}Text { get; set; } = "";
-{{- else }}
-        public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
-{{- end }}
-{{- end }}
-    }
+    private void AddNew() => Navigation.NavigateTo("/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit");
 }

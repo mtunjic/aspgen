@@ -6,7 +6,7 @@ using {{ .Project }}.WebMvc.Models;
 namespace {{ .Project }}.WebMvc.Controllers;
 
 [Route("{{ kebab .Context }}/{{ kebab .Aggregate }}")]
-public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService service{{ range .Relations }}, {{ .Target }}CrudService {{ camel .Target }}Service{{ end }}) : Controller
+public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService service{{ range .Relations }}, {{ .Target }}CrudService {{ camel .Target }}Service{{ end }}{{ range .ReverseRelations }}, {{ .SourceEntity }}CrudService {{ camel .SourceEntity }}Service{{ end }}/* aspgen:childrenParams */) : Controller
 {
     private const int PageSize = 25;
 
@@ -30,6 +30,10 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
 {{- range .Relations }}
         ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
 {{- end }}
+{{- range .ReverseRelations }}
+        ViewBag.{{ .DisplayName }} = (await {{ camel .SourceEntity }}Service.GetAllAsync(cancellationToken)).Where(x => x.{{ .FKProperty }} == id).ToList();
+{{- end }}
+        // aspgen:childrenLoads
         return View(item);
     }
 

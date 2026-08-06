@@ -3,7 +3,7 @@
     ViewData["Title"] = "{{ .Aggregate }}s";
 }
 <h1>{{ .Aggregate }}s</h1>
-<p><a asp-action="Create">Create new</a></p>
+<p><a asp-action="Create" class="btn btn-primary">+ Add new {{ .Aggregate }}</a></p>
 
 <form method="get" class="mb-3 d-flex gap-2">
     <input type="text" name="search" value="@Model.Search" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
@@ -72,13 +72,12 @@
 {{- range .Properties }}
             <th>{{ .DisplayName }}</th>
 {{- end }}
-            <th></th>
         </tr>
     </thead>
     <tbody>
     @foreach (var item in Model.Items)
     {
-        <tr>
+        <tr style="cursor:pointer" onclick="location.href='@Url.Action("Details", new { id = item.Id })'">
 {{- range .Properties }}
 {{- if .RelationTarget }}
             <td>@(Model.{{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</td>
@@ -86,18 +85,13 @@
             <td>@item.{{ .Name }}</td>
 {{- end }}
 {{- end }}
-            <td>
-                <a asp-action="Details" asp-route-id="@item.Id">Details</a>
-                <a asp-action="Edit" asp-route-id="@item.Id">Edit</a>
-                <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this {{ .Aggregate }}?');">
-                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                </form>
-            </td>
         </tr>
     }
     </tbody>
 </table>
-@if (Model.HasMore)
-{
-    <a asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-search="@Model.Search" class="btn btn-outline-secondary">Load more</a>
-}
+<div class="d-flex align-items-center gap-2">
+    <a asp-action="Index" asp-route-page="@(Model.Page - 1)" asp-route-search="@Model.Search" class="btn btn-outline-secondary @(Model.Page <= 1 ? "disabled" : "")">Prev</a>
+    <span>Page @Model.Page of @Model.TotalPages</span>
+    <a asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-search="@Model.Search" class="btn btn-outline-secondary @(!Model.HasMore ? "disabled" : "")">Next</a>
+</div>
+

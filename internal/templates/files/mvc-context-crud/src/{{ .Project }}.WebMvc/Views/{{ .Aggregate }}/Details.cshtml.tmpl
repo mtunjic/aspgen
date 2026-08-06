@@ -14,4 +14,38 @@
 {{- end }}
 {{- end }}
 </dl>
-<a asp-action="Index" class="btn btn-secondary">Back</a>
+<div class="mb-3">
+    <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-secondary">Edit</a>
+    <form asp-action="Delete" asp-route-id="@Model.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this {{ .Aggregate }}?');">
+        <button type="submit" class="btn btn-danger">Delete</button>
+    </form>
+    <a asp-action="Index" class="btn btn-outline-secondary">Back</a>
+</div>
+{{- range .ReverseRelations }}
+<h3>{{ .DisplayName }}</h3>
+<table class="table">
+    <thead>
+        <tr>
+{{- range $.Properties }}
+{{- if not .RelationTarget }}
+            <th>{{ .DisplayName }}</th>
+{{- end }}
+{{- end }}
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var child in (List<{{ .SourceEntity }}View>)ViewBag.{{ .DisplayName }})
+    {
+        <tr>
+{{- range $.Properties }}
+{{- if not .RelationTarget }}
+            <td>@child.{{ .Name }}</td>
+{{- end }}
+{{- end }}
+        </tr>
+    }
+    </tbody>
+</table>
+{{- end }}
+<!-- aspgen:children -->
+

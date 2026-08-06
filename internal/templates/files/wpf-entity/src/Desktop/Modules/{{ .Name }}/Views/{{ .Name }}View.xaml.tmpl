@@ -15,10 +15,7 @@
 {{- end }}
     <UserControl.InputBindings>
         <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewCommand}" />
-        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
-        <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
-        <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
         <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding ViewDetailsCommand}" />
     </UserControl.InputBindings>
     <Grid Margin="8">
@@ -27,8 +24,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <DockPanel Margin="0,0,0,12">
@@ -43,18 +38,15 @@
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
 {{- if eq .Theme "wpfui" }}
                 <ui:ProgressRing Width="20" Height="20" Margin="0,0,12,0" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
-                <ui:Button Margin="4,0,0,0" Padding="12,6" Appearance="Primary" Content="New" Icon="{ui:SymbolIcon Add24}" ToolTip="Create a new {{ .Name }}" Command="{Binding NewCommand}" />
-                <ui:Button Margin="4,0,0,0" Padding="12,6" Content="Edit" Icon="{ui:SymbolIcon Edit24}" ToolTip="Edit the selected {{ .Name }}" Command="{Binding EditCommand}" />
-                <ui:Button Margin="4,0,0,0" Padding="12,6" Appearance="Danger" Content="Delete" Icon="{ui:SymbolIcon Delete24}" ToolTip="Delete the selected {{ .Name }}" Command="{Binding DeleteCommand}" />
+                <ui:Button Margin="4,0,0,0" Padding="12,6" Appearance="Primary" Content="Add new {{ .Name }}" Icon="{ui:SymbolIcon Add24}" ToolTip="Create a new {{ .Name }}" Command="{Binding NewCommand}" />
                 <ui:Button Margin="4,0,0,0" Padding="12,6" Content="Refresh" Icon="{ui:SymbolIcon ArrowClockwise16}" ToolTip="Refresh {{ .Name }} records" Command="{Binding RefreshCommand}" />
 {{- else }}
-                <Button Margin="4,0,0,0" Padding="12,6" Content="New" Command="{Binding NewCommand}" />
-                <Button Margin="4,0,0,0" Padding="12,6" Content="Edit" Command="{Binding EditCommand}" />
-                <Button Margin="4,0,0,0" Padding="12,6" Content="Delete" Command="{Binding DeleteCommand}" />
+                <Button Margin="4,0,0,0" Padding="12,6" Content="Add new {{ .Name }}" Command="{Binding NewCommand}" />
                 <Button Margin="4,0,0,0" Padding="12,6" Content="Refresh" ToolTip="Refresh {{ .Name }} records" Command="{Binding RefreshCommand}" />
 {{- end }}
             </StackPanel>
         </DockPanel>
+
 {{- if eq .Theme "wpfui" }}
         <DockPanel Grid.Row="1" Margin="0,0,0,8">
             <ui:Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="12,6" Content="Search" Icon="{ui:SymbolIcon Search24}" Command="{Binding SearchCommand}" />
@@ -161,95 +153,18 @@
         <ui:InfoBar Grid.Row="3" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" IsOpen="{Binding IsEmpty}" IsClosable="False" Severity="Informational" Title="No {{ .Name }} records" Message="Create a new {{ .Name }} to get started." />
 {{- end }}
 {{- if eq .Theme "wpfui" }}
-        <ui:Button Grid.Row="4" Margin="0,8,0,0" HorizontalAlignment="Center" Content="Load more" Visibility="{Binding HasMore, Converter={StaticResource BoolToVisibility}}" Command="{Binding LoadMoreCommand}" />
+        <DockPanel Grid.Row="4" Margin="0,8,0,0" HorizontalAlignment="Center">
+            <ui:Button Margin="0,0,8,0" Content="Prev" Icon="{ui:SymbolIcon ArrowLeft24}" Command="{Binding PrevPageCommand}" />
+            <ui:TextBlock VerticalAlignment="Center" Text="{Binding PageLabel}" />
+            <ui:Button Margin="8,0,0,0" Content="Next" Icon="{ui:SymbolIcon ArrowRight24}" Command="{Binding NextPageCommand}" />
+        </DockPanel>
 {{- else }}
-        <Button Grid.Row="4" Margin="0,8,0,0" HorizontalAlignment="Center" Padding="12,6" Content="Load more" Command="{Binding LoadMoreCommand}">
-            <Button.Style>
-                <Style TargetType="Button">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding HasMore}" Value="True">
-                            <Setter Property="Visibility" Value="Visible" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Button.Style>
-        </Button>
+        <DockPanel Grid.Row="4" Margin="0,8,0,0" HorizontalAlignment="Center">
+            <Button Margin="0,0,8,0" Padding="12,6" Content="Prev" Command="{Binding PrevPageCommand}" />
+            <TextBlock VerticalAlignment="Center" Text="{Binding PageLabel}" />
+            <Button Margin="8,0,0,0" Padding="12,6" Content="Next" Command="{Binding NextPageCommand}" />
+        </DockPanel>
 {{- end }}
-{{- if eq .Theme "wpfui" }}
-        <Border Grid.Row="5" Margin="0,12,0,0" Padding="12" Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
-{{- else }}
-        <Border Grid.Row="5" Margin="0,12,0,0" Padding="12" BorderBrush="Gray" BorderThickness="1">
-{{- end }}
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel>
-{{- if eq .Theme "wpfui" }}
-                <ui:TextBlock FontSize="18" FontWeight="SemiBold" Text="Edit {{ .Name }}" />
-{{- else }}
-                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Edit {{ .Name }}" />
-{{- end }}
-{{- range .Properties }}
-                <StackPanel Margin="0,8,0,0">
-{{- if eq $.Theme "wpfui" }}
-                    <ui:TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{{ .DisplayName }}" />
-{{- else }}
-                    <TextBlock Text="{{ .DisplayName }}" />
-{{- end }}
-{{- if .RelationTarget }}
-                    <ComboBox Margin="0,4,0,0" ItemsSource="{Binding {{ .RelationTarget }}Items}" DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
-{{- else if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") }}
-{{- if eq $.Theme "wpfui" }}
-                    <ui:CalendarDatePicker Margin="0,4,0,0" Date="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
-{{- else }}
-                    <DatePicker Margin="0,4,0,0" SelectedDate="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
-{{- end }}
-{{- else if or (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
-{{- if eq $.Theme "wpfui" }}
-                    <StackPanel Orientation="Horizontal">
-                        <ui:CalendarDatePicker Width="180" Margin="0,4,8,0" Date="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
-                        <ui:TimePicker Width="140" Margin="0,4,0,0" SelectedTime="{Binding Form.{{ .Name }}Time, Mode=TwoWay}" />
-                    </StackPanel>
-{{- else }}
-                    <DatePicker Margin="0,4,0,0" SelectedDate="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
-{{- end }}
-{{- else if eq .CSharpType "bool" }}
-{{- if eq $.Theme "wpfui" }}
-                    <ui:ToggleSwitch Margin="0,4,0,0" IsChecked="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
-{{- else }}
-                    <CheckBox Margin="0,4,0,0" IsChecked="{Binding Form.{{ .Name }}, Mode=TwoWay}" />
-{{- end }}
-{{- else if or (eq .CSharpType "int") (eq .CSharpType "int?") (eq .CSharpType "long") (eq .CSharpType "long?") (eq .CSharpType "decimal") (eq .CSharpType "decimal?") (eq .CSharpType "float") (eq .CSharpType "float?") }}
-{{- if eq $.Theme "wpfui" }}
-                    <ui:NumberBox Margin="0,4,0,0" ClearButtonEnabled="True" PlaceholderText="{{ .DisplayName }}" Text="{Binding Form.{{ .Name }}, UpdateSourceTrigger=PropertyChanged}" />
-{{- else }}
-                    <TextBox Margin="0,4,0,0" Text="{Binding Form.{{ .Name }}, UpdateSourceTrigger=PropertyChanged}" />
-{{- end }}
-{{- else }}
-{{- if eq $.Theme "wpfui" }}
-                    <ui:TextBox Margin="0,4,0,0" ClearButtonEnabled="True" PlaceholderText="{{ .DisplayName }}" Text="{Binding Form.{{ .Name }}, UpdateSourceTrigger=PropertyChanged}" />
-{{- else }}
-                    <TextBox Margin="0,4,0,0" Text="{Binding Form.{{ .Name }}, UpdateSourceTrigger=PropertyChanged}" />
-{{- end }}
-{{- end }}
-                </StackPanel>
-{{- end }}
-{{- if eq .Theme "wpfui" }}
-                <ui:InfoBar Margin="0,8,0,0" IsOpen="{Binding HasValidationError}" IsClosable="False" Severity="Error" Title="Validation" Message="{Binding ValidationMessage}" />
-{{- else }}
-                <TextBlock Margin="0,8,0,0" Foreground="Firebrick" Text="{Binding ValidationMessage}" />
-{{- end }}
-                <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
-{{- if eq .Theme "wpfui" }}
-                    <ui:Button Padding="12,6" Appearance="Primary" Content="Save" Icon="{ui:SymbolIcon Save24}" ToolTip="Save changes" Command="{Binding SaveCommand}" />
-                    <ui:Button Margin="8,0,0,0" Padding="12,6" Content="Cancel" Icon="{ui:SymbolIcon Dismiss24}" ToolTip="Cancel editing" Command="{Binding CancelCommand}" />
-{{- else }}
-                    <Button Padding="12,6" Content="Save" Command="{Binding SaveCommand}" />
-                    <Button Margin="8,0,0,0" Padding="12,6" Content="Cancel" Command="{Binding CancelCommand}" />
-{{- end }}
-                </StackPanel>
-            </StackPanel>
-            </ScrollViewer>
-        </Border>
-        <!-- aspgen:related -->
     </Grid>
 </UserControl>
+
