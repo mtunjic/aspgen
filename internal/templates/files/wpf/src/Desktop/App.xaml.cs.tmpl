@@ -34,4 +34,20 @@ public partial class App : PrismApplication
     {
         // aspgen:modules
     }
+
+    // Disposing the container here (window close, File > Exit, Alt+F4 -- any
+    // shutdown path that actually runs application code, unlike a hard kill
+    // from Task Manager or `Stop-Process -Force`, which no process can
+    // intercept) cascades into disposing every per-module singleton the
+    // container tracks, e.g. each dm-tier module's own {{ .Project }}Database/
+    // AppDbContext and each HTTP-tier module's HttpClient, so SQLite
+    // connections and HTTP handles are released cleanly instead of lingering.
+    protected override void OnExit(ExitEventArgs e)
+    {
+        if (Container is IDisposable disposableContainer)
+        {
+            disposableContainer.Dispose();
+        }
+        base.OnExit(e);
+    }
 }

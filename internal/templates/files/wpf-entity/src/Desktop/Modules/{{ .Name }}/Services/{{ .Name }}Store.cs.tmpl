@@ -13,8 +13,12 @@ public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
     private const string Path = "/api/{{ kebab .Name }}";
 {{- end }}
 
+    // Task.Run(...) offloads the async call onto a thread-pool thread with no
+    // SynchronizationContext, so its await continuations never need to marshal
+    // back to the (blocked) calling thread -- calling .GetAwaiter().GetResult()
+    // directly here would deadlock on the WPF UI thread instead.
     public IReadOnlyList<{{ .Name }}Row> GetAll() =>
-        http.GetFromJsonAsync<List<{{ .Name }}Row>>(Path).GetAwaiter().GetResult() ?? [];
+        Task.Run(() => http.GetFromJsonAsync<List<{{ .Name }}Row>>(Path)).GetAwaiter().GetResult() ?? [];
 
     public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
     {
@@ -38,7 +42,7 @@ public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
         query.Add($"page={criteria.Page}");
         query.Add($"pageSize={criteria.PageSize}");
         var url = $"{Path}/search?{string.Join("&", query)}";
-        var result = http.GetFromJsonAsync<{{ .Name }}PageResult>(url).GetAwaiter().GetResult();
+        var result = Task.Run(() => http.GetFromJsonAsync<{{ .Name }}PageResult>(url)).GetAwaiter().GetResult();
         return result ?? new {{ .Name }}PageResult([], 0, criteria.Page, criteria.PageSize);
     }
 
@@ -46,19 +50,19 @@ public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
     {
         if (editingId == 0)
         {
-            var response = http.PostAsJsonAsync(Path, value).GetAwaiter().GetResult();
+            var response = Task.Run(() => http.PostAsJsonAsync(Path, value)).GetAwaiter().GetResult();
             response.EnsureSuccessStatusCode();
-            return response.Content.ReadFromJsonAsync<{{ .Name }}Row>().GetAwaiter().GetResult() ?? value;
+            return Task.Run(() => response.Content.ReadFromJsonAsync<{{ .Name }}Row>()).GetAwaiter().GetResult() ?? value;
         }
 
-        var update = http.PutAsJsonAsync($"{Path}/{editingId}", value).GetAwaiter().GetResult();
+        var update = Task.Run(() => http.PutAsJsonAsync($"{Path}/{editingId}", value)).GetAwaiter().GetResult();
         update.EnsureSuccessStatusCode();
         return value with { Id = editingId };
     }
 
     public void Delete(long id)
     {
-        var response = http.DeleteAsync($"{Path}/{id}").GetAwaiter().GetResult();
+        var response = Task.Run(() => http.DeleteAsync($"{Path}/{id}")).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
     }
 }
@@ -67,14 +71,18 @@ using {{ .Project }}.Application;
 
 public sealed class {{ .Name }}Store({{ .Name }}CrudService service) : I{{ .Name }}Store
 {
+    // Task.Run(...) offloads the async call onto a thread-pool thread with no
+    // SynchronizationContext, so its await continuations never need to marshal
+    // back to the (blocked) calling thread -- calling .GetAwaiter().GetResult()
+    // directly here would deadlock on the WPF UI thread instead.
     public IReadOnlyList<{{ .Name }}Row> GetAll() =>
-        service.GetAllAsync().GetAwaiter().GetResult()
+        Task.Run(() => service.GetAllAsync()).GetAwaiter().GetResult()
             .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}))
             .ToList();
 
     public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
     {
-        var (items, totalCount) = service.SearchAsync(criteria.Search{{ filterParamNames .Properties "criteria." "pascal" }}, criteria.Page, criteria.PageSize).GetAwaiter().GetResult();
+        var (items, totalCount) = Task.Run(() => service.SearchAsync(criteria.Search{{ filterParamNames .Properties "criteria." "pascal" }}, criteria.Page, criteria.PageSize)).GetAwaiter().GetResult();
         var rows = items.Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }})).ToList();
         return new {{ .Name }}PageResult(rows, totalCount, criteria.Page, criteria.PageSize);
     }
@@ -84,14 +92,14 @@ public sealed class {{ .Name }}Store({{ .Name }}CrudService service) : I{{ .Name
         var request = new {{ .Name }}Request({{ range $index, $property := .Properties }}{{ if $index }}, {{ end }}value.{{ $property.Name }}{{ end }});
         if (editingId == 0)
         {
-            var created = service.CreateAsync(request).GetAwaiter().GetResult();
+            var created = Task.Run(() => service.CreateAsync(request)).GetAwaiter().GetResult();
             return new {{ .Name }}Row(created.Id{{ range .Properties }}, created.{{ .Name }}{{ end }});
         }
-        service.UpdateAsync(editingId, request).GetAwaiter().GetResult();
+        Task.Run(() => service.UpdateAsync(editingId, request)).GetAwaiter().GetResult();
         return value with { Id = editingId };
     }
 
-    public void Delete(long id) => service.DeleteAsync(id).GetAwaiter().GetResult();
+    public void Delete(long id) => Task.Run(() => service.DeleteAsync(id)).GetAwaiter().GetResult();
 }
 {{- else if eq .Backend "ddd-local" }}
 using Microsoft.EntityFrameworkCore;

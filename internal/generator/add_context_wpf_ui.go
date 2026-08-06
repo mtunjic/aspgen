@@ -6,10 +6,10 @@ package generator
 // wpf-entity module for every aggregate already recorded in the manifest.
 // cqrs/es tiers always have a WebApi host, so every module gets the existing
 // HTTP-backed Store variant (see {{ .Name }}Store.cs.tmpl's Backend branch).
-// Relations are not retrofitted for aggregates added before -ui wpf was
-// attached, since EntityMeta only persists Properties, not Relations;
-// aggregates added afterwards get full relation support via
-// renderAggregateCrud's live *data (see add_ddd.go).
+// Relations for aggregates added before -ui wpf was attached are rebuilt via
+// reconstructRelations from each EntityMeta's persisted Properties (the only
+// thing the manifest keeps); aggregates added afterwards get relations
+// straight from renderAggregateCrud's live *data (see add_ddd.go).
 func attachContextWpfUI(project string, m *Manifest, theme, themeMode, override string, dryRun, force bool) error {
 	backend := componentBackend(m.Components)
 	shellData := data{Project: m.Project, Namespace: m.Project, Theme: theme, ThemeMode: themeMode, Backend: backend, Database: m.Persistence}
@@ -34,7 +34,7 @@ func attachContextWpfUI(project string, m *Manifest, theme, themeMode, override 
 		if ctx, ok := findContext(m.Contexts, entity.Context); ok && ctx.Arch != "" {
 			entityBackend = archBackend(ctx.Arch)
 		}
-		if err := renderContextWpfModule(project, m.Project, entity.Name, entity.Context, entity.Properties, nil, entityBackend, theme, themeMode, override, dryRun, force); err != nil {
+		if err := renderContextWpfModule(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), entityBackend, theme, themeMode, override, dryRun, force); err != nil {
 			return err
 		}
 	}

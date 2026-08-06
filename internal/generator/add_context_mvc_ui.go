@@ -12,7 +12,7 @@ func attachContextMvcUI(project string, m *Manifest, override string, dryRun, fo
 		return err
 	}
 	for _, entity := range m.Entities {
-		if err := renderContextMvcCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, nil, override, dryRun, force); err != nil {
+		if err := renderContextMvcCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), override, dryRun, force); err != nil {
 			return err
 		}
 		if err := registerMvcCrudService(project, m.Project, entity.Name, dryRun); err != nil {

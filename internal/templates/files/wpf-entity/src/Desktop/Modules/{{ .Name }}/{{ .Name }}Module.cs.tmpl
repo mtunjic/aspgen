@@ -36,7 +36,7 @@ public sealed class {{ .Name }}Module : IModule
         containerRegistry.RegisterSingleton<AppDbContext>(() =>
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseSqlite("Data Source={{ kebab .Project }}.db")
+                .UseSqlite("Data Source={{ .Project }}.db")
                 .Options;
             var db = new AppDbContext(options);
             db.Database.EnsureCreated();
@@ -49,8 +49,14 @@ public sealed class {{ .Name }}Module : IModule
 {{- if eq .Backend "dm" }}
         containerRegistry.RegisterSingleton<{{ .Project }}Database>(() =>
         {
+            // Must match the exact "Data Source={{.Project}}.db" fallback connection
+            // string cqrs/es's own Infrastructure/DependencyInjection.cs.tmpl uses for
+            // the SAME shared {{ .Project }}Database in a mixed dm+cqrs solution -- a
+            // kebab-cased filename here would silently point this module at a second,
+            // completely separate (and empty) SQLite file instead of the one the WebApi
+            // host (and any data seeded into it) actually uses.
             var options = new DbContextOptionsBuilder<{{ .Project }}Database>()
-                .UseSqlite("Data Source={{ kebab .Project }}.db")
+                .UseSqlite("Data Source={{ .Project }}.db")
                 .Options;
             var db = new {{ .Project }}Database(options);
             db.Database.EnsureCreated();

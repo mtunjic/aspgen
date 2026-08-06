@@ -8,7 +8,24 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 {{- else }}
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 {{- end }}
+// Give in-flight requests real time to finish on a graceful stop (Ctrl+C,
+// closing the console window, a non-forced Stop-Process) instead of the 5s
+// default -- a hard kill (Task Manager "End task", Stop-Process -Force) still
+// terminates immediately with no chance to run this or any other cleanup;
+// no process can intercept that, by OS design.
+builder.Host.ConfigureHostOptions(options => options.ShutdownTimeout = TimeSpan.FromSeconds(20));
+
 var app = builder.Build();
+app.Lifetime.ApplicationStopping.Register(() => app.Logger.LogInformation("{{ .Project }} is stopping; draining in-flight requests..."));
+app.Lifetime.ApplicationStopped.Register(() => app.Logger.LogInformation("{{ .Project }} stopped."));
+
+// Dev-time schema bootstrap; switch to `dotnet ef database update` once the
+// schema needs real migrations (EnsureCreated and migrations do not mix).
+using (var scope = app.Services.CreateScope())
+{
+    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
+}
+
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 // aspgen:seed
 // aspgen:features

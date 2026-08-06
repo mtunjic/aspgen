@@ -228,12 +228,13 @@ go run ./cmd/aspgen add entity Supplier name:string contactEmail:string --contex
 
 The context/arch engine has no built-in `--seed` flag, so for a demo that actually looks like a wholesale distributor, hand-add a small idempotent seeding block at the `// aspgen:seed` marker `new`/`add entity` already left in `Program.cs`, using the real classic Northwind categories and products (the same public sample dataset Microsoft has shipped in Access/SQL Server tutorials for decades):
 
+Every generated host already calls `Database.EnsureCreated()` once at startup (right before this marker), so the schema always exists by the time this block runs — the seed block below only needs to check whether data already exists, not create the schema itself:
+
 ```csharp
 // src/WebApi/Program.cs — add right after "// aspgen:seed"
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
     if (!db.Categorys.Any())
     {
         var categories = new[]
@@ -273,7 +274,7 @@ using (var scope = app.Services.CreateScope())
 }
 ```
 
-Add `using CatalogApi.WebApi.Models.Catalog;` alongside the existing `using` block so `Category`/`Product` resolve. Verified end to end: `dotnet run` then `GET /api/catalog/product` returns all 16 products with the right category IDs and prices — e.g. `{ "name": "Chai", "sku": "BEV-001", "price": 18.0, "categoryId": 1 }`. `EnsureCreated()` is a demo convenience (no EF migrations required); switch to `dotnet ef database update` once the schema needs to evolve, since `EnsureCreated()` and migrations don't mix.
+Add `using CatalogApi.WebApi.Models.Catalog;` alongside the existing `using` block so `Category`/`Product` resolve. Verified end to end: `dotnet run` then `GET /api/catalog/product` returns all 16 products with the right category IDs and prices — e.g. `{ "name": "Chai", "sku": "BEV-001", "price": 18.0, "categoryId": 1 }`. The startup `EnsureCreated()` call is a dev-time convenience (no EF migrations required); switch to `dotnet ef database update` once the schema needs to evolve, since `EnsureCreated()` and migrations don't mix — see the Section 16 troubleshooting note for the exact symptom of forgetting that.
 
 ### Importing Catalog from an existing database
 
@@ -1040,6 +1041,7 @@ Common `add` flags: `--project PATH` (default: search up from cwd for `.aspgen/m
 - **`go test -race` on generated Go tooling changes fails locally with "requires cgo"** — a local-machine toolchain gap, not a generator bug; CI runners have cgo enabled.
 - **`add context --arch es`/`add aggregate` fails with a missing type like `EventSourcedAggregate`, or `add context --arch ar` fails with "no owning .csproj found"** — you mixed a tier into a solution whose first context can't support it (see the Section 4 callout). Bootstrap that tier's context first instead, or give it its own solution: `dm` contexts are safe to add on top of a `cqrs`-first (or `dm`-first) project; `es` and `ar` contexts should each get their own solution.
 - **`dotnet restore` fails with NU1301 against a corporate NuGet feed** — restore explicitly from `nuget.org` (`dotnet restore <project> -s https://api.nuget.org/v3/index.json`), then `dotnet build` normally.
+- **A query throws `SqliteException: no such table: X` (or the Npgsql equivalent) the first time you call an endpoint** — every generated host calls `Database.EnsureCreated()` once at startup specifically to prevent this, so if you still see it, either you're on an older generated project from before this was added (regenerate, or add the `EnsureCreated()` scope block from Section 6 to `Program.cs` yourself), or you've since switched to real EF Core migrations (`dotnet ef database update`) — in that case remove the `EnsureCreated()` call from `Program.cs` first, since `EnsureCreated()` and migrations actively conflict (an `EnsureCreated()`-created database has no migrations history table, so `dotnet ef database update` on it fails, and vice versa).
 - **A host builds fine but "dies" immediately after `dotnet run` starts it, right when running several Northwind Trading services at once (Section 12's full showcase, or `scripts\demo-northwind-trading.ps1 -Run`)** — none of the generated hosts (`WebApi`, `WebMvc`, `AppBlazor`) ship a `launchSettings.json`, so every one of them binds Kestrel's own default, `http://localhost:5000`, unless told otherwise. Start more than one at once without giving each its own port and only the first process to start actually binds — every later one throws "address already in use" and exits right after startup, which looks like a crash rather than a naming conflict. Fix: pass a distinct `--urls http://localhost:PORT` to each `dotnet run`, and set `ASPGENT_API_URL` before starting `Desktop`/`AppBlazor` client processes so they call their own backend's port instead of the hardcoded `http://localhost:5000` default — see the updated Section 12 script and `scripts\demo-northwind-trading.ps1` for the exact port assignments used.
 
 ---

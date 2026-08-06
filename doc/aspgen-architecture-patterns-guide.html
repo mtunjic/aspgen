@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aspgen Architecture Patterns — A Guide for Architects</title>
+<style>
+:root { --navy:#0b2545; --blue:#2e74b5; --darkblue:#1f4d78; --gold:#b7831e;
+        --ink:#182230; --muted:#5b6573; --pale:#e8eef5; --light:#f4f6f9; --line:#c8d0d9; }
+* { box-sizing:border-box; }
+body { margin:0; background:#eef2f6; color:var(--ink); font:16px/1.58 Calibri,Arial,sans-serif; }
+.page { max-width:980px; margin:32px auto; background:#fff; padding:54px 78px 72px; box-shadow:0 12px 38px rgba(11,37,69,.12); }
+header { border-bottom:1px solid #dfe5eb; padding-bottom:28px; margin-bottom:34px; }
+.eyebrow { color:var(--gold); font-weight:700; letter-spacing:.12em; font-size:.78rem; margin:0 0 8px; text-transform:uppercase; }
+header h1 { color:var(--navy); font-size:2.7rem; line-height:1.05; margin:0 0 10px; letter-spacing:-.02em; }
+header .subtitle { color:var(--muted); font-size:1.15rem; margin:0 0 22px; }
+.meta { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--line); margin:22px 0; }
+.meta div { padding:12px 14px; border-right:1px solid var(--line); }
+.meta div:last-child { border-right:0; }
+.meta strong { display:block; color:var(--navy); font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; }
+.meta span { font-size:.85rem; }
+.callout, blockquote { background:var(--pale); border-left:5px solid var(--blue); padding:15px 18px; margin:18px 0 22px; }
+blockquote { border-radius:0 6px 6px 0; }
+blockquote p { margin:0; }
+h1 { color:var(--navy); }
+h2 { color:var(--blue); font-size:1.5rem; margin:38px 0 11px; border-bottom:1px solid #e0e6ec; padding-bottom:5px; }
+h3 { color:var(--darkblue); font-size:1.15rem; margin:25px 0 8px; }
+h4 { color:var(--darkblue); font-size:1.02rem; margin:18px 0 6px; }
+p { margin:0 0 10px; }
+ul, ol { margin:0 0 14px; padding-left:24px; }
+li { margin-bottom:4px; }
+pre, code { font:13px/1.5 Consolas,"Courier New",monospace; }
+p code, li code, td code, h1 code, h2 code, h3 code { background:var(--light); color:var(--darkblue); padding:1px 5px; border-radius:4px; }
+pre { background:var(--navy); color:#dce6f0; padding:14px 18px; border-radius:8px; overflow-x:auto; margin:14px 0 20px; }
+pre code { background:none; color:inherit; padding:0; border-radius:0; }
+.table-wrap { overflow-x:auto; margin:14px 0 20px; }
+table { border-collapse:collapse; width:100%; font-size:.86rem; }
+th { background:var(--navy); color:#fff; text-align:left; padding:9px 10px; }
+td { border:1px solid var(--line); padding:8px 10px; vertical-align:top; }
+tbody tr:nth-child(even) td { background:var(--light); }
+a { color:var(--blue); }
+hr { border:0; border-top:1px solid #dfe5eb; margin:26px 0; }
+.toc { background:var(--light); border:1px solid #dfe5eb; padding:18px 24px; margin:20px 0 32px; }
+.toc h2 { margin:0 0 8px; border:0; font-size:1.05rem; }
+.toc ol { margin:0; padding-left:22px; columns:2; column-gap:32px; }
+footer.doc-footer { margin-top:45px; padding-top:14px; border-top:1px solid #dfe5eb; color:var(--muted); font-size:.84rem; }
+@media print {
+  body { background:#fff; }
+  .page { box-shadow:none; margin:0; max-width:none; padding:0; }
+  a { color:inherit; text-decoration:none; }
+  pre { padding:10px 14px; }
+}
+@page { size: Letter; margin: 1in;
+  @bottom-center { content: "aspgen Architecture Patterns Guide  \2022  page " counter(page); color:#5b6573; font-size:8.5pt; font-family:Calibri,Arial,sans-serif; }
+}
+</style></head><body><div class="page">
+<header>
+  <p class="eyebrow">ARCHITECTURE GUIDE</p>
+  <h1>aspgen Architecture Patterns — A Guide for Architects</h1>
+  <p class="subtitle">Four architecture patterns, one generator: what each layer does, how the patterns relate, when to choose each one, and how they combine inside a single solution.</p>
+  <div class="meta"><div><strong>Document</strong><span>Architecture Patterns Guide</span></div><div><strong>Audience</strong><span>Solution architects and tech leads evaluating or governing aspgen-based solutions</span></div><div><strong>Status</strong><span>v1.0, 2026-08-06</span></div><div><strong>Theme</strong><span><a href="aspgen-document-theme.md">aspgen Document Theme</a></span></div></div>
+  <aside class="callout"><p><strong>DECISION</strong> aspgen does not generate "one architecture" — it generates from an <strong>ordinal ladder of four patterns</strong> (<code>ar</code> → <code>dm</code> → <code>cqrs</code> → <code>es</code>), each a strict superset of the one before it, so every bounded context in a solution can be modeled at the tier its own complexity actually earns instead of a single ceremony level imposed on the whole system. A public read-heavy catalog does not need event sourcing; a financial ledger should not be modeled as flat CRUD. This guide gives architects the layer diagrams, dependency rules, and decision criteria to assign the right pattern per context, know which patterns can share one solution, and defend that choice in review.</p></aside>
+</header>
+<main>
+<nav class="toc"><h2>Contents</h2><ol>
+<li>Why four patterns, not one architecture</li>
+<li>The pattern ladder</li>
+<li>Pattern 1 — Active Record (<code>ar</code>)</li>
+<li>Pattern 2 — Domain Model (<code>dm</code>)</li>
+<li>Pattern 3 — CQRS (<code>cqrs</code>)</li>
+<li>Pattern 4 — Event Sourcing (<code>es</code>)</li>
+<li>Choosing a pattern per bounded context</li>
+<li>Combining patterns in one solution</li>
+<li>The UI layer: how presentation attaches to each pattern</li>
+<li>Anti-patterns and common mistakes</li>
+<li>Architect's decision checklist</li>
+<li>Further reading</li>
+</ol></nav>
+<hr />
+<h2 id="1-why-four-patterns-not-one-architecture">1. Why four patterns, not one architecture</h2>
+<p>Most code generators pick one architecture and apply it uniformly to every entity in a system, regardless of whether that entity is a lookup table or the core of the business domain. That trade-off looks efficient at generation time and expensive at maintenance time: simple read models drown in ceremony (repositories, handlers, validators, event streams) they will never need, while the one aggregate that actually enforces business invariants is stuck fighting the same flat CRUD shape as everything else.</p>
+<p>aspgen's <strong>context/arch engine</strong> takes the opposite position: every <strong>bounded context</strong> — Catalog, Inventory, Sales, Billing, whatever your domain calls its own sub-systems — picks its <strong>own</strong> architecture tier, independent of every other context in the solution. The tiers form a deliberate ladder, not four unrelated options: each is a strict superset of the concepts in the tier below it, so moving a context up the ladder is additive (new layers, new ceremony) rather than a rewrite.</p>
+<pre><code class="language-mermaid">flowchart LR
+    classDef tier fill:#E8EEF5,stroke:#2E74B5,stroke-width:1.5px,color:#182230
+    classDef decision fill:#FFF7E8,stroke:#B7831E,stroke-width:1.5px,color:#182230
+
+    AR[&quot;ar\nActive Record&quot;]:::tier --&gt;|adds Domain + Application| DM[&quot;dm\nDomain Model&quot;]:::tier
+    DM --&gt;|adds vertical-slice Application + WebApi host| CQRS[&quot;cqrs\nCQRS&quot;]:::tier
+    CQRS --&gt;|replaces mutable state with an event log| ES[&quot;es\nEvent Sourcing&quot;]:::tier
+
+    Q1{&quot;Does this context\nhave real invariants?&quot;}:::decision
+    Q1 --&gt;|No| AR
+    Q1 --&gt;|Yes| DM
+</code></pre>
+<p>The rest of this guide walks the ladder one rung at a time — what each tier's layers actually are, what dependency direction they enforce, and the concrete signal that tells an architect "this context belongs here."</p>
+<hr />
+<h2 id="2-the-pattern-ladder">2. The pattern ladder</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Architectural pattern</th>
+<th>Adds on top of the previous tier</th>
+<th>Host project</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ar</code></td>
+<td>Active Record</td>
+<td>— (baseline)</td>
+<td>WebApi (Minimal API)</td>
+</tr>
+<tr>
+<td><code>dm</code></td>
+<td>Domain Model / DDD building blocks</td>
+<td>Aggregate root, value objects, domain services, repository (contract + EF implementation), domain events, synchronous Application-layer CRUD service</td>
+<td><em>(none — class libraries only, until a UI attaches)</em></td>
+</tr>
+<tr>
+<td><code>cqrs</code></td>
+<td>Command Query Responsibility Segregation</td>
+<td>Vertical-slice Application layer: one Command/Query, Handler, and FluentValidation validator per verb</td>
+<td>WebApi (Minimal API)</td>
+</tr>
+<tr>
+<td><code>es</code></td>
+<td>Event Sourcing</td>
+<td>Append-only event store, event-sourced aggregates rehydrated by replaying history, synchronous read-model projections</td>
+<td>WebApi (Minimal API)</td>
+</tr>
+</tbody>
+</table></div>
+<p>Two properties of this ladder matter for architectural review:</p>
+<ul>
+<li><strong>It is ordinal, not a menu.</strong> <code>cqrs</code> is not an alternative to <code>dm</code> — it <em>is</em> <code>dm</code>, plus a vertical-slice Application layer and a host. <code>es</code> is not an alternative to <code>cqrs</code> — it <em>is</em> <code>cqrs</code>'s shape, with the aggregate's persistence mechanism replaced by an event log. Choosing a tier is choosing "how far up the ladder does this context's complexity justify climbing," not picking between four unrelated styles.</li>
+<li><strong>Complexity is monotonic, not the enemy.</strong> Every rung adds ceremony (more files, more layers, more concepts a new engineer must learn) in exchange for a specific capability (testable domain invariants, an explicit read/write API split, a full audit trail). The architectural job is matching the rung to the capability the context actually needs — not defaulting everything to the top of the ladder "to be safe," which is the single most common misuse this guide will call out in Section 10.</li>
+</ul>
+<hr />
+<h2 id="3-pattern-1-active-record-ar">3. Pattern 1 — Active Record (<code>ar</code>)</h2>
+<p><strong>What it is:</strong> the entity and its persistence are the same thing. A property bag with a primary key, mapped straight to a database row, with CRUD endpoints operating directly against it. No separate Domain layer, no repository abstraction, no Application layer.</p>
+<pre><code class="language-mermaid">flowchart TB
+    classDef layer fill:#E8EEF5,stroke:#2E74B5,stroke-width:1.5px,color:#182230
+    classDef store fill:#F4F6F9,stroke:#5B6573,stroke-width:1px,color:#182230
+
+    Client[&quot;HTTP client&quot;] --&gt; WebApi[&quot;WebApi\nMinimal API endpoints + flat entity models&quot;]:::layer
+    WebApi --&gt; Db[(&quot;SQLite / PostgreSQL\nvia a single AppDbContext&quot;)]:::store
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Lives at</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WebApi</td>
+<td><code>src/WebApi/Models/{Context}/{Entity}.cs</code>, <code>src/WebApi/Features/{Context}/{Entity}/{Entity}Endpoints.cs</code></td>
+<td>The entity <em>is</em> the model, the model <em>is</em> the DTO, and the Minimal API endpoint talks to <code>AppDbContext</code> directly — list, paged search, get-by-id, create, update, delete.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Dependency direction:</strong> none to speak of — one project, one layer. That absence is the entire point of the pattern.</p>
+<p><strong>When to choose it:</strong></p>
+<ul>
+<li>The context is a read-heavy lookup/reference/catalog surface with few or no business rules beyond "this field is required" or "this value is within a range."</li>
+<li>Every operation is a straightforward CRUD verb — nothing conditionally forbidden, no multi-step invariant that spans several fields or related rows.</li>
+<li>The team wants the lowest possible ceremony and fastest possible delivery for this specific context, and is comfortable that any future invariant will require migrating the context up the ladder (Section 8 covers that path).</li>
+</ul>
+<p><strong>What you deliberately give up:</strong> invariant protection (nothing stops a caller from <code>PUT</code>-ing an entity into a nonsensical state — the model has no behavior, only properties), a testable domain layer independent of EF Core, and any vocabulary richer than "rows and columns." Accept this trade only when the context's own complexity doesn't need any of it yet.</p>
+<hr />
+<h2 id="4-pattern-2-domain-model-dm">4. Pattern 2 — Domain Model (<code>dm</code>)</h2>
+<p><strong>What it is:</strong> Clean Architecture's classic four-layer graph, with a proper aggregate root protecting its own invariants instead of a property bag. No host project of its own — <code>dm</code>-tier contexts are class libraries, callable in-process by whatever UI or synchronous caller needs them, until a <code>cqrs</code>/<code>es</code> host or a UI is attached on top.</p>
+<pre><code class="language-mermaid">flowchart TB
+    classDef layer fill:#E8EEF5,stroke:#2E74B5,stroke-width:1.5px,color:#182230
+    classDef store fill:#F4F6F9,stroke:#5B6573,stroke-width:1px,color:#182230
+
+    Caller[&quot;In-process caller\n(WPF Desktop, MVC controller,\nor a future cqrs/es host)&quot;] --&gt; App[&quot;Application\nCrudService + Validator&quot;]:::layer
+    App --&gt; Domain[&quot;DomainModel\nAggregate root, value objects,\ndomain services, repository contracts, domain events&quot;]:::layer
+    App --&gt; Infra[&quot;Infrastructure / Persistence\nEF configuration + repository implementations&quot;]:::layer
+    Infra --&gt; Domain
+    Infra --&gt; Db[(&quot;SQLite / PostgreSQL&quot;)]:::store
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Lives at</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DomainModel</td>
+<td><code>src/{Project}.DomainModel/{Context}/</code></td>
+<td>The aggregate root (<code>sealed partial class : BaseEntity</code>, private setters, invariants enforced in the constructor and <code>Update</code>), value objects (immutable records), domain services (stateless), repository <strong>contracts</strong>, and domain event records. Depends on nothing else.</td>
+</tr>
+<tr>
+<td>Application</td>
+<td><code>src/{Project}.Application/</code></td>
+<td><code>{Aggregate}CrudService</code> — the synchronous entry point every <code>dm</code> aggregate gets by default (<code>GetAllAsync</code>/<code>CreateAsync</code>/<code>UpdateAsync</code>/<code>DeleteAsync</code>/<code>SearchAsync</code>), plus a FluentValidation validator. Depends only on DomainModel.</td>
+</tr>
+<tr>
+<td>Infrastructure / Persistence</td>
+<td><code>src/{Project}.Infrastructure/</code>, <code>src/{Project}.Persistence/</code></td>
+<td><code>IEntityTypeConfiguration&lt;T&gt;</code> per aggregate, and — once <code>add repository</code> is run — a concrete EF repository implementation that the CrudService is patched to actually call instead of hitting <code>DbContext</code> directly. Depends on Application and DomainModel.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Dependency direction:</strong> strictly inward — <code>Infrastructure/Persistence → Application → DomainModel</code>, and DomainModel depends on nothing. This is the one rule every <code>dm</code>+ tier enforces without exception, and the one architects should check first in any code review: a domain type referencing <code>Microsoft.EntityFrameworkCore</code> or an Infrastructure namespace is a Clean Architecture violation, full stop.</p>
+<p><strong>When to choose it:</strong></p>
+<ul>
+<li>The context has a real aggregate — a cluster of entities/value objects that must change together under one set of invariants (stock levels that can't go negative, an order that can't be marked shipped before payment, and so on).</li>
+<li>You want the domain behavior unit-testable independent of EF Core, HTTP, or any UI.</li>
+<li>The context doesn't yet need a rich external API surface — it's consumed in-process (by a WPF Desktop shell or an MVC controller) or is a stepping stone toward <code>cqrs</code>.</li>
+</ul>
+<p><strong>What you get over <code>ar</code>:</strong> invariant protection, a real ubiquitous-language vocabulary in code, and a repository seam that lets persistence be swapped or mocked in tests. <strong>What you still don't have:</strong> an HTTP API of its own (it's headless until a host or UI attaches) and a vertical-slice command/query split — every write still goes through one general-purpose <code>CrudService</code>.</p>
+<hr />
+<h2 id="5-pattern-3-cqrs-cqrs">5. Pattern 3 — CQRS (<code>cqrs</code>)</h2>
+<p><strong>What it is:</strong> everything <code>dm</code> has, plus a genuine Command Query Responsibility Segregation vertical-slice Application layer and a real WebApi host. This is the first tier with its own network-facing API.</p>
+<pre><code class="language-mermaid">flowchart TB
+    classDef layer fill:#E8EEF5,stroke:#2E74B5,stroke-width:1.5px,color:#182230
+    classDef store fill:#F4F6F9,stroke:#5B6573,stroke-width:1px,color:#182230
+
+    Client[&quot;HTTP client\n(Blazor, WPF over HTTP,\nany external caller)&quot;] --&gt; WebApi[&quot;WebApi\nMinimal API endpoints\nper aggregate&quot;]:::layer
+    WebApi --&gt; Slice[&quot;Application/Features/{Context}/{Aggregate}\nCommand/Query + Handler + Validator, per verb&quot;]:::layer
+    Slice --&gt; Crud[&quot;Application\n{Aggregate}CrudService\n(reused from dm)&quot;]:::layer
+    Crud --&gt; Domain[&quot;DomainModel\n(identical to dm)&quot;]:::layer
+    Crud --&gt; Infra[&quot;Infrastructure / Persistence&quot;]:::layer
+    Infra --&gt; Domain
+    Infra --&gt; Db[(&quot;SQLite / PostgreSQL&quot;)]:::store
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Lives at</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WebApi</td>
+<td><code>src/WebApi/Features/{Context}/{Aggregate}/{Aggregate}Endpoints.cs</code></td>
+<td>Thin Minimal API endpoints, mounted automatically via the <code>// aspgen:features</code> marker — pure HTTP-shape adapters that call a Handler and translate its <code>Result&lt;T&gt;</code> into a status code.</td>
+</tr>
+<tr>
+<td>Application — vertical slice</td>
+<td><code>src/{Project}.Application/Features/{Context}/{Aggregate}/</code></td>
+<td>One <code>Create{Aggregate}Command</code>/<code>Update.../Delete.../Get{Aggregate}ById...</code>/<code>Get{Aggregate}s...</code>/<code>Search{Aggregate}s...</code>, each with its own record, <code>Handler</code> (<code>IHandler&lt;TRequest, TResponse&gt;</code>), and implicit validation. Handlers are thin — they translate into a call on the same <code>{Aggregate}CrudService</code> the <code>dm</code> tier already generates; <strong>no second repository contract or persistence path is invented</strong>.</td>
+</tr>
+<tr>
+<td>DomainModel, Application (CrudService), Infrastructure/Persistence</td>
+<td>identical to <code>dm</code></td>
+<td><code>cqrs</code> does not replace <code>dm</code>'s layers — it sits <strong>in front of</strong> them.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Dependency direction:</strong> unchanged from <code>dm</code> at the bottom (<code>Infrastructure/Persistence → Application → DomainModel</code>), with one new rule at the top: <code>WebApi → vertical-slice Application → CrudService</code>. A Handler must never talk to <code>DbContext</code>/Infrastructure directly — that would bypass the exact separation CQRS exists to enforce.</p>
+<p><strong>When to choose it:</strong></p>
+<ul>
+<li>The context needs a real, versioned, externally callable API surface — not just in-process access.</li>
+<li>Different verbs on the same aggregate genuinely have different concerns worth separating (a <code>Search</code> query's filtering/paging logic has nothing to do with a <code>Create</code> command's validation rules) — vertical slices keep each verb's code together and independently testable, instead of one increasingly bloated service class.</li>
+<li>You expect this context's API to grow — more verbs, more query shapes, more handlers — and want that growth to add new files, not new branches inside an existing method.</li>
+</ul>
+<p><strong>What you get over <code>dm</code>:</strong> a real host, one file per verb instead of one growing service class, and <code>add repository</code> registering with the WebApi host's own DI container. <strong>What you still don't have:</strong> any notion of "what happened, in order" — the read model is still current-state rows, not a replayable history.</p>
+<hr />
+<h2 id="6-pattern-4-event-sourcing-es">6. Pattern 4 — Event Sourcing (<code>es</code>)</h2>
+<p><strong>What it is:</strong> <code>cqrs</code>'s exact vertical-slice shape, with the aggregate's persistence mechanism replaced end to end: instead of storing current-state columns, every state change is an immutable event appended to a log, and the aggregate's current state is <em>derived</em> by replaying that log.</p>
+<pre><code class="language-mermaid">flowchart TB
+    classDef layer fill:#E8EEF5,stroke:#2E74B5,stroke-width:1.5px,color:#182230
+    classDef store fill:#F4F6F9,stroke:#5B6573,stroke-width:1px,color:#182230
+    classDef decision fill:#FFF7E8,stroke:#B7831E,stroke-width:1.5px,color:#182230
+
+    Client[&quot;HTTP client&quot;] --&gt; WebApi[&quot;WebApi\nMinimal API endpoints&quot;]:::layer
+    WebApi --&gt; Slice[&quot;Application/Features/{Context}/{Aggregate}\nCommand/Query + Handler + Validator&quot;]:::layer
+    Slice --&gt; Repo[&quot;{Aggregate}EventStoreRepository&quot;]:::layer
+    Repo --&gt;|&quot;LoadAsync: replay history&quot;| Agg[&quot;EventSourcedAggregate\nApply(event) per case&quot;]:::decision
+    Repo --&gt;|&quot;SaveAsync: append only\nthe NEW events&quot;| EventStore[(&quot;Event store\n(append-only, optimistic\nconcurrency by expected version)&quot;)]:::store
+    Repo --&gt;|&quot;project the change&quot;| ReadModel[(&quot;Read model\n(queryable current-state table,\nupdated in the same unit of work)&quot;)]:::store
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Lives at</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DomainModel</td>
+<td><code>src/{Project}.DomainModel/{Context}/{Aggregate}.cs</code></td>
+<td><code>EventSourcedAggregate</code> (not <code>BaseEntity</code>) — a <code>LoadFromHistory</code> static factory that replays events through an <code>Apply(object domainEvent)</code> switch, and a <code>DequeueUncommittedEvents()</code> used on save. State fields are only ever set inside <code>Apply</code>.</td>
+</tr>
+<tr>
+<td>Application</td>
+<td><code>{Aggregate}EventStoreRepository</code></td>
+<td><code>LoadAsync</code> replays the aggregate's full event history; <code>SaveAsync</code> appends only the newly raised events with an optimistic-concurrency expected-version check, then immediately projects the change into a queryable read-model table in the same unit of work.</td>
+</tr>
+<tr>
+<td>WebApi / vertical-slice Application</td>
+<td>identical shape to <code>cqrs</code></td>
+<td>Same Command/Query/Handler/Endpoint files — <code>es</code> does not change the API-facing shape at all, only what backs it.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Dependency direction:</strong> identical to <code>cqrs</code> at the top; the one architecturally significant difference is at the bottom — there is no <code>IEntityTypeConfiguration&lt;T&gt;</code> mapping current state directly, because current state is never the source of truth. The event log is.</p>
+<p><strong>When to choose it:</strong></p>
+<ul>
+<li>The context's core value proposition <strong>is</strong> its history — "what happened, when, and why" is a first-class requirement, not an afterthought (a financial ledger, an audit-critical workflow, anything where after-the-fact reconstruction of past state matters).</li>
+<li>You need true point-in-time reconstruction ("what did this invoice look like on March 3rd") that a mutable current-state table structurally cannot give you.</li>
+<li>The team is prepared to own the operational cost: <code>add repository</code> is rejected outright for <code>es</code>-tier aggregates (the event-store repository already fills that role — there's no second contract to generate), and event versioning/schema evolution/snapshotting are deliberately <strong>not</strong> generated — they are real engineering work you take on once the ledger grows.</li>
+</ul>
+<p><strong>What you get over <code>cqrs</code>:</strong> a true audit trail and point-in-time replay. <strong>What it costs:</strong> every future change to an event's shape is a schema-evolution problem, not a column migration, and reasoning about "current state" always goes through the projection layer instead of a direct query. Choose <code>es</code> because the audit trail is the requirement — not because it "sounds more rigorous" than <code>cqrs</code> (Section 10 names this failure mode explicitly).</p>
+<hr />
+<h2 id="7-choosing-a-pattern-per-bounded-context">7. Choosing a pattern per bounded context</h2>
+<p>Run this decision sequence per bounded context — not once per solution. Two contexts in the same solution routinely land on different tiers, and that is the intended outcome, not an inconsistency to resolve.</p>
+<pre><code class="language-mermaid">flowchart TD
+    classDef decision fill:#FFF7E8,stroke:#B7831E,stroke-width:1.5px,color:#182230
+    classDef tier fill:#E8EEF5,stroke:#2E74B5,stroke-width:1.5px,color:#182230
+
+    Q1{&quot;Does this context enforce\nreal invariants across\nmore than one field/entity?&quot;}:::decision
+    Q1 --&gt;|No — it's flat CRUD| AR[&quot;ar — Active Record&quot;]:::tier
+    Q1 --&gt;|Yes| Q2{&quot;Does an external caller\nneed a versioned API,\nor is in-process access enough?&quot;}:::decision
+    Q2 --&gt;|In-process is enough| DM[&quot;dm — Domain Model&quot;]:::tier
+    Q2 --&gt;|Needs a real API surface| Q3{&quot;Is 'what happened, in order'\na first-class business\nrequirement — a true audit trail?&quot;}:::decision
+    Q3 --&gt;|No — current state is enough| CQRS[&quot;cqrs — CQRS&quot;]:::tier
+    Q3 --&gt;|Yes| ES[&quot;es — Event Sourcing&quot;]:::tier
+</code></pre>
+<p>Use these as concrete tie-breakers when the diagram alone doesn't settle it:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Points toward</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"It's basically a lookup table with a few columns."</td>
+<td><code>ar</code></td>
+</tr>
+<tr>
+<td>"Two or three fields must always change together, or a value can never go negative/invalid."</td>
+<td><code>dm</code> or higher</td>
+</tr>
+<tr>
+<td>"This will be called by a separate frontend team, a mobile app, or a partner integration."</td>
+<td><code>cqrs</code> or <code>es</code> (needs a real host)</td>
+</tr>
+<tr>
+<td>"Compliance/finance needs to reconstruct exactly what happened and when."</td>
+<td><code>es</code></td>
+</tr>
+<tr>
+<td>"We're not sure yet."</td>
+<td><code>dm</code> — it is the cheapest tier that still protects invariants, and climbing to <code>cqrs</code> later is additive (Section 8), not a rewrite.</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="8-combining-patterns-in-one-solution">8. Combining patterns in one solution</h2>
+<p>The ladder's superset property has one direct architectural consequence: <strong>each solution's shared skeleton (DomainModel/Application/Infrastructure/Persistence project shapes) is rendered once, by whichever context is created first via <code>new</code>.</strong> A later <code>add context --arch X</code> only records that context's metadata — it does not retroactively backfill skeleton files the first context's tier never needed. That makes some tier combinations safe to mix in one solution, and others not yet reliable:</p>
+<pre><code class="language-mermaid">flowchart LR
+    classDef ok fill:#E8EEF5,stroke:#2E74B5,stroke-width:1.5px,color:#182230
+    classDef bad fill:#FBEAEA,stroke:#B23A3A,stroke-width:1.5px,color:#182230
+
+    CQRSFirst[&quot;Solution bootstrapped\nwith a cqrs (or dm) context first&quot;]:::ok --&gt; AddDM[&quot;add context --arch dm\n(safe — dm's needs are a\nstrict subset of cqrs's skeleton)&quot;]:::ok
+    ArAlone[&quot;ar bootstrapped alone&quot;]:::ok
+    EsAlone[&quot;es bootstrapped alone&quot;]:::ok
+    Mixed[&quot;Mixing ar or es into a\ndifferent tier's first-context solution&quot;]:::bad
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Combination</th>
+<th>Status</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dm</code> context added to a <code>cqrs</code>-first (or <code>dm</code>-first) solution</td>
+<td><strong>Safe</strong></td>
+<td><code>dm</code>'s required skeleton files are a strict subset of what <code>cqrs</code> already renders at <code>new</code> time.</td>
+</tr>
+<tr>
+<td><code>ar</code> context in a solution whose first context is <code>dm</code>/<code>cqrs</code>/<code>es</code> (or vice versa)</td>
+<td><strong>Not reliable</strong></td>
+<td><code>ar</code> uses a completely different, flat single-project skeleton with no separate Domain/Application/Infrastructure layers at all — there is no shared shape to slot into.</td>
+</tr>
+<tr>
+<td><code>es</code> context in a solution whose first context is <code>dm</code>/<code>cqrs</code> (or vice versa)</td>
+<td><strong>Not reliable</strong></td>
+<td><code>es</code> aggregates extend <code>EventSourcedAggregate</code>, not <code>BaseEntity</code>, and need event-store plumbing (<code>EventStore</code>, <code>EventStoreRecord</code>s) that a <code>dm</code>/<code>cqrs</code>-first skeleton never renders.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Architectural guidance:</strong> give <code>ar</code>-tier and <code>es</code>-tier contexts <strong>their own solution</strong> unless one of them is the very first (and, for <code>ar</code>, <em>only</em>) context in that solution. <code>dm</code> and <code>cqrs</code> contexts are the only pairing that reliably shares one solution today — model a multi-context system as <strong>one solution per skeleton shape</strong>, not one solution per bounded-context boundary, and let contexts of a compatible tier share a solution deliberately. A real worked example: a wholesale-distributor system split as <code>CatalogApi</code> (<code>ar</code>, standalone), <code>NorthwindOps</code> (<code>dm</code> Inventory + <code>cqrs</code> Sales, combined), and <code>BillingLedger</code> (<code>es</code>, standalone) — three solutions, four bounded contexts, each context at the tier its own complexity earned.</p>
+<blockquote>
+<p><strong>Callout — this is a solution-skeleton constraint, not a domain-modeling one.</strong> Nothing about DDD or CQRS theory says <code>ar</code> and <code>es</code> can't coexist logically in one system; the constraint is specific to how aspgen currently bootstraps a solution's shared project skeleton from the first context created. Treat it as a generator limitation to plan around (separate solutions), not as architectural guidance about bounded-context design itself.</p>
+</blockquote>
+<hr />
+<h2 id="9-the-ui-layer-how-presentation-attaches-to-each-pattern">9. The UI layer: how presentation attaches to each pattern</h2>
+<p>A UI framework attaches to the <strong>whole project</strong>, not to one context — whichever framework you pick surfaces a screen for every already-compatible aggregate across every context in that solution, and keeps generating one automatically as new aggregates are added.</p>
+<pre><code class="language-mermaid">flowchart TB
+    classDef ui fill:#E8EEF5,stroke:#2E74B5,stroke-width:1.5px,color:#182230
+    classDef tier fill:#F4F6F9,stroke:#5B6573,stroke-width:1px,color:#182230
+
+    WPF[&quot;wpf\nPrism/DryIoc desktop shell&quot;]:::ui --&gt;|in-process CrudService call| DMTier[&quot;dm&quot;]:::tier
+    WPF --&gt;|HTTP| CQRSTier[&quot;cqrs / es&quot;]:::tier
+    Blazor[&quot;blazor\nBlazor Server&quot;]:::ui --&gt;|HTTP| CQRSTier
+    MVC[&quot;mvc\nASP.NET Core MVC&quot;]:::ui --&gt;|in-process CrudService call| DMTier
+    SPA[&quot;spa\nOpenAPI/Scalar + CORS only,\nno frontend project generated&quot;]:::ui --&gt;|HTTP, bring your own frontend| CQRSTier
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>UI</th>
+<th>Compatible tiers</th>
+<th>Transport</th>
+<th>Architectural note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wpf</code></td>
+<td><code>dm</code>, <code>cqrs</code>, <code>es</code></td>
+<td>In-process (<code>dm</code>) or HTTP (<code>cqrs</code>/<code>es</code>)</td>
+<td>The only UI that spans a <code>dm</code>+<code>cqrs</code> mixed solution, because it can address both transport styles from one shell — one navigation entry per aggregate, each wired to whichever transport its own context's tier requires.</td>
+</tr>
+<tr>
+<td><code>blazor</code></td>
+<td><code>cqrs</code>, <code>es</code></td>
+<td>HTTP</td>
+<td>A genuine HTTP client of the WebApi host — architecturally, treat it as an external caller like any other, not as part of the backend's own dependency graph.</td>
+</tr>
+<tr>
+<td><code>mvc</code></td>
+<td><code>dm</code> only</td>
+<td>In-process</td>
+<td>Deliberately scoped to <code>dm</code> — <code>cqrs</code>/<code>es</code> already have a working HTTP-based UI story (<code>blazor</code>/<code>spa</code>), so <code>mvc</code> fills the specific gap of an in-process UI for the otherwise-headless <code>dm</code> tier.</td>
+</tr>
+<tr>
+<td><code>spa</code></td>
+<td><code>cqrs</code>, <code>es</code></td>
+<td>HTTP (bring your own frontend)</td>
+<td>Not a UI at all in the generated-code sense — it patches CORS/OpenAPI/Scalar onto an existing host so a separately built or generated frontend can call it. Choose this when the frontend is out of aspgen's scope entirely (a separate React/Vue/mobile team).</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Architectural takeaway:</strong> the UI choice is a <strong>transport decision</strong>, not a modeling decision. It never changes which pattern a context is modeled at — it only changes how a screen reaches that context's Application layer (a direct in-process call for <code>dm</code>, an HTTP round-trip for <code>cqrs</code>/<code>es</code>). Decide the UI framework after the tier, driven by who's actually consuming the screens (a desktop operations team → <code>wpf</code>; a browser-based sales portal → <code>blazor</code>; an admin back-office with no JS-heavy needs → <code>mvc</code>; someone else's frontend team → <code>spa</code>).</p>
+<hr />
+<h2 id="10-anti-patterns-and-common-mistakes">10. Anti-patterns and common mistakes</h2>
+<ul>
+<li><strong>Defaulting every context to the top of the ladder "to be safe."</strong> <code>es</code> for a simple lookup table is not more rigorous — it's unjustified ceremony, a schema-evolution burden with no audit-trail requirement to justify it, and a real cost to onboarding new engineers who now must understand event replay for a table that never needed it.</li>
+<li><strong>Modeling a context that genuinely has cross-field invariants as <code>ar</code>.</strong> The Active Record pattern has no behavior layer — nothing stops a caller from <code>PUT</code>-ing the aggregate into an invalid state. If two contexts disagree on whether "flat CRUD" fairly describes the domain, that disagreement is the actual signal to escalate to <code>dm</code>.</li>
+<li><strong>Treating the tier ladder as a per-solution choice instead of per-context.</strong> The whole point of the engine is that Catalog can be <code>ar</code> while Billing is <code>es</code> in the same overall system (just not, today, the same <em>solution</em> — Section 8). Don't force every context in a system onto one uniform tier because "the architecture should be consistent" — consistency of <em>pattern-to-complexity fit</em> is the actual architectural goal, not uniformity of ceremony.</li>
+<li><strong>Mixing <code>ar</code> or <code>es</code> into an already-bootstrapped <code>dm</code>/<code>cqrs</code> solution and being surprised it fails.</strong> This is a generator-skeleton constraint (Section 8), not a design flaw to work around with more code — plan solution boundaries around it up front rather than discovering it mid-project.</li>
+<li><strong>Choosing the UI framework before the tier.</strong> A UI choice is downstream of the architecture decision, not a substitute for it (Section 9) — picking <code>wpf</code> doesn't make a context "DDD," and picking <code>spa</code> doesn't make it "microservices."</li>
+<li><strong>Assuming <code>add repository</code>/<code>add entity-field</code>/relations work identically at every tier.</strong> They mostly do, with two tier-specific exceptions worth remembering in review: <code>add repository</code> is rejected outright for <code>es</code> aggregates (the event-store repository already owns that role), and relationships (<code>nav:Entity</code>/<code>nav:Entity?</code>/<code>nav:Entity[]</code>) only get a bidirectional inverse navigation at <code>dm</code>+ tiers — <code>ar</code>-tier relations are one-directional by design. See the <a href="aspgen-entity-relationships.md">Entity Relationships guide</a> for the full model.</li>
+</ul>
+<hr />
+<h2 id="11-architects-decision-checklist">11. Architect's decision checklist</h2>
+<p>Before signing off on a bounded context's tier assignment:</p>
+<ol>
+<li><strong>Name the invariant, if any.</strong> If you can't state a rule that spans more than one field/entity, you likely don't need more than <code>ar</code>.</li>
+<li><strong>Name the consumer.</strong> In-process only (a desktop/MVC screen you also control) points at <code>dm</code>; an external, versioned, independently evolving API surface points at <code>cqrs</code>/<code>es</code>.</li>
+<li><strong>Name the audit requirement, explicitly, in business terms</strong> — not "it would be nice to have history," but a named compliance/finance/support need for point-in-time reconstruction. Only that justifies <code>es</code>.</li>
+<li><strong>Check the solution-skeleton compatibility table (Section 8)</strong> before deciding two contexts can share one solution — verify the combination is <code>dm</code>-on-<code>cqrs</code>(-or-<code>dm</code>)-first, not <code>ar</code> or <code>es</code> mixed with a different first tier.</li>
+<li><strong>Pick the UI framework last</strong>, driven by who consumes the screens, using the compatibility table in Section 9 — never let the UI choice retroactively justify a tier decision.</li>
+<li><strong>Write the tier decision down</strong> next to the context in whatever architecture record your team keeps — Section 7's decision sequence, restated in one sentence per context, is enough: <em>"Billing is <code>es</code> because finance requires point-in-time invoice reconstruction for audit."</em></li>
+</ol>
+<hr />
+<h2 id="12-further-reading">12. Further reading</h2>
+<ul>
+<li><a href="aspgen-enterprise-developer-guide.md">aspgen Enterprise Developer Guide</a> — the full command reference, generated-code walkthroughs, and a real worked multi-context system (Northwind Trading) built and run end to end.</li>
+<li><a href="aspgen-entity-relationships.md">aspgen Entity Relationships</a> — how <code>nav:Entity</code>/<code>nav:Entity?</code>/<code>nav:Entity[]</code> relationships map to primary keys, foreign keys, and EF Core configuration at each tier.</li>
+<li><a href="architecture-theta.md">Architecture Theta</a> — the earlier, legacy <code>--app</code>/<code>--backend</code> profile's Clean Architecture/DDD/Prism conventions; superseded for new work by the <code>--context</code>/<code>--arch</code> engine this guide describes, but still the reference for desktop/Prism/MVVM conventions shared across both workflows.</li>
+</ul></main>
+<footer class="doc-footer">aspgen &middot; Architecture Patterns Guide &middot; generated from aspgen-architecture-patterns-guide.md</footer>
+</div></body></html>

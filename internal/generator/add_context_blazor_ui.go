@@ -11,7 +11,7 @@ func attachContextBlazorUI(project string, m *Manifest, override string, dryRun,
 		return err
 	}
 	for _, entity := range m.Entities {
-		if err := renderContextBlazorCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, nil, override, dryRun, force); err != nil {
+		if err := renderContextBlazorCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), override, dryRun, force); err != nil {
 			return err
 		}
 	}

@@ -128,7 +128,20 @@
 {{- end }}
             <DataGrid.Columns>
 {{- range .Properties }}
-{{- if eq .CSharpType "bool" }}
+{{- if .RelationTarget }}
+                <DataGridTemplateColumn Header="{{ .DisplayName }}">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <!-- Read-only lookup reusing the same ItemsSource/DisplayMemberPath/
+                                 SelectedValuePath idiom as the edit-form and filter-panel pickers,
+                                 so the grid shows the related record's name instead of its raw id. -->
+                            <ComboBox IsHitTestVisible="False" Focusable="False" BorderThickness="0" Background="Transparent"
+                                      ItemsSource="{Binding DataContext.{{ .RelationTarget }}Items, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                      DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding {{ .Name }}, Mode=OneWay}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+{{- else if eq .CSharpType "bool" }}
                 <DataGridCheckBoxColumn Header="{{ .DisplayName }}" Binding="{Binding {{ .Name }}}" />
 {{- else if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") }}
                 <DataGridTextColumn Header="{{ .DisplayName }}" Binding="{Binding {{ .Name }}, StringFormat=d}" />

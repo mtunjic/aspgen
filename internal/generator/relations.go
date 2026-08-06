@@ -177,3 +177,28 @@ func synthesizeRelationProperty(rel Relation) Property {
 		RelationDisplayProperty: rel.DisplayProperty,
 	}
 }
+
+// reconstructRelations rebuilds the []Relation slice a manifest's persisted
+// EntityMeta.Properties implies, for call sites (like retrofitting a UI onto
+// aggregates that already existed) that only have Properties on hand, not
+// the original *data.Relations from the `add` call that created them. The
+// navigation name is recovered by trimming the FKProperty's "Id" suffix,
+// which is always how synthesizeRelationProperty built it in the first
+// place (FKProperty = navName + "Id"); Optional is recovered from whether
+// the FK's CSharpType is nullable ("long?" vs "long").
+func reconstructRelations(properties []Property) []Relation {
+	var relations []Relation
+	for _, p := range properties {
+		if p.RelationTarget == "" {
+			continue
+		}
+		relations = append(relations, Relation{
+			Name:            strings.TrimSuffix(p.Name, "Id"),
+			Target:          p.RelationTarget,
+			FKProperty:      p.Name,
+			DisplayProperty: p.RelationDisplayProperty,
+			Optional:        strings.HasSuffix(p.CSharpType, "?"),
+		})
+	}
+	return relations
+}
