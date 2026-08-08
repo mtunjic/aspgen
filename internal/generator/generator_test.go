@@ -293,21 +293,32 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 	}
 	viewText := string(view)
 	for _, expected := range []string{
-		"ui:ListView",
+		"<controls:ListPage>",
+		"<controls:ListPage.FilterFields>",
+		"<controls:ListPage.RowTemplate>",
 		"ui:Button",
-		"ui:TextBlock",
-		"ui:TextBox",
 		"ControlStrokeColorDefaultBrush",
-		"TextFillColorSecondaryBrush",
 		"DataContext.EditCommand",
 		"DataContext.DeleteCommand",
 	} {
 		if !strings.Contains(viewText, expected) {
-			t.Fatalf("WPF-UI entity list control was not generated: missing %q", expected)
+			t.Fatalf("WPF-UI entity list view was not generated: missing %q", expected)
 		}
 	}
 	if strings.Contains(viewText, "ui:DataGrid") {
 		t.Fatal("WPF-UI list must use ui:ListView, not ui:DataGrid")
+	}
+	// The list chrome (ui:ListView, search box, header, paging) lives once in
+	// the shared ListPage control rather than in every module view.
+	listPage, err := os.ReadFile(filepath.Join(project, "src/Desktop/Shared/Controls/ListPage.xaml"))
+	if err != nil {
+		t.Fatalf("shared ListPage.xaml was not generated: %v", err)
+	}
+	listPageText := string(listPage)
+	for _, expected := range []string{"ui:ListView", "ui:TextBox", "ui:TextBlock", "ui:Button", "TextFillColorSecondaryBrush", "Advanced filters", `ItemsSource="{Binding Items}"`} {
+		if !strings.Contains(listPageText, expected) {
+			t.Fatalf("WPF-UI shared ListPage.xaml is missing %q", expected)
+		}
 	}
 	editView, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/Views/EventEditView.xaml"))
 	if err != nil {
@@ -321,15 +332,25 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 		"ui:TimePicker",
 		`SelectedTime="{Binding Form.StartsAtTime`,
 		"ui:ToggleSwitch",
-		`Command="{Binding SaveCommand}"`,
-		`Command="{Binding CancelCommand}"`,
+		"<controls:EditPage>",
+		"<controls:EditPage.FormContent>",
 	} {
 		if !strings.Contains(editViewText, expected) {
-			t.Fatalf("WPF-UI entity edit control was not generated: missing %q", expected)
+			t.Fatalf("WPF-UI entity edit view was not generated: missing %q", expected)
 		}
 	}
 	if strings.Contains(editViewText, `SelectedDate="{Binding Form.EventDate`) {
 		t.Fatal("WPF-UI CalendarDatePicker must bind Date rather than SelectedDate")
+	}
+	// Save/Cancel/validation chrome lives once in the shared EditPage control.
+	editPage, err := os.ReadFile(filepath.Join(project, "src/Desktop/Shared/Controls/EditPage.xaml"))
+	if err != nil {
+		t.Fatalf("shared EditPage.xaml was not generated: %v", err)
+	}
+	for _, expected := range []string{`Command="{Binding SaveCommand}"`, `Command="{Binding CancelCommand}"`, "ValidationMessage", `Text="{Binding Title}"`} {
+		if !strings.Contains(string(editPage), expected) {
+			t.Fatalf("shared EditPage.xaml is missing %q", expected)
+		}
 	}
 	menu, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/Views/EventMenuView.xaml"))
 	if err != nil {

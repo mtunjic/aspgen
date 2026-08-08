@@ -1,0 +1,19 @@
+namespace {{ .Project }}.AppBlazor.Components.Shared;
+
+// A single advanced-filter field descriptor. The SearchFilterBar renders the
+// input based on Kind and passes raw string values back through SetValue; the
+// owning page's closure parses them into its typed filter variable.
+public sealed class FilterField
+{
+    public string Label { get; init; } = "";
+
+    // "string" | "number" | "date" | "bool" | "relation"
+    public string Kind { get; init; } = "string";
+
+    public Func<object?> GetValue { get; init; } = () => null;
+    public Action<object?> SetValue { get; init; } = _ => { };
+
+    public IReadOnlyList<FilterOption>? Options { get; init; }
+}
+
+public sealed record FilterOption(long Id, string Display);

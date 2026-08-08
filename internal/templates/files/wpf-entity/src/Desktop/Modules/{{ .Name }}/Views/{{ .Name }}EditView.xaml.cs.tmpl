@@ -6,7 +6,11 @@ namespace {{ .Namespace }}.Views;
 
 public partial class {{ .Name }}EditView : UserControl
 {
+{{- $hasQuickAdd := false }}
+{{- range .Relations }}{{- if index $.RelationQuickAdds .Target }}{{- $hasQuickAdd = true }}{{- end }}{{- end }}
+{{- if $hasQuickAdd }}
     private bool justActivatedEdit;
+{{- end }}
 
     public {{ .Name }}EditView() => InitializeComponent();
 {{- range .Relations }}{{- if index $.RelationQuickAdds .Target }}
@@ -37,14 +41,19 @@ public partial class {{ .Name }}EditView : UserControl
     }
 
     // "+" commits whatever is typed in the editable combo as a new related
-    // record, reading the text directly from the control (no binding needed).
+    // record. The combo is found as the sibling of the "+" button inside
+    // their shared DockPanel -- it cannot carry an x:Name, because named
+    // elements inside a UserControl's property content would conflict with
+    // the control's own namescope (MC3093).
     private void OnAdd{{ .Target }}Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is {{ $.Namespace }}.ViewModels.{{ $.Name }}EditViewModel viewModel)
+        if (DataContext is {{ $.Namespace }}.ViewModels.{{ $.Name }}EditViewModel viewModel
+            && sender is FrameworkElement { Parent: DockPanel panel })
         {
-            if (viewModel.Add{{ .Target }}({{ camel .Target }}Combo.Text))
+            var combo = panel.Children.OfType<ComboBox>().FirstOrDefault();
+            if (combo is not null && viewModel.Add{{ .Target }}(combo.Text))
             {
-                {{ camel .Target }}Combo.Text = string.Empty;
+                combo.Text = string.Empty;
             }
         }
     }

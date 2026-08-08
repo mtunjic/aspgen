@@ -1,0 +1,21 @@
+using System.Windows;
+using System.Windows.Controls;
+
+namespace {{ .Project }}.Desktop.Shared.Controls;
+
+// Shared read-only details-page chrome: header with title + back button and
+// a scrollable card. Derived modules only supply the label/value rows via
+// FieldsContent; everything else binds to the DetailsViewModelBase subclass.
+public partial class DetailsPage : UserControl
+{
+    public static readonly DependencyProperty FieldsContentProperty = DependencyProperty.Register(
+        nameof(FieldsContent), typeof(object), typeof(DetailsPage));
+
+    public object? FieldsContent
+    {
+        get => GetValue(FieldsContentProperty);
+        set => SetValue(FieldsContentProperty, value);
+    }
+
+    public DetailsPage() => InitializeComponent();
+}

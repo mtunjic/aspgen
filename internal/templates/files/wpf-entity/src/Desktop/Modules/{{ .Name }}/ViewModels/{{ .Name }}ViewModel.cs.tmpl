@@ -36,7 +36,7 @@ public sealed class {{ .Name }}ViewModel : ListViewModelBase<I{{ .Name }}Store, 
     public ObservableCollection<{{ .Target }}Row> {{ .Target }}Items { get; } = [];
 {{- end }}
 
-    protected override string EntityName => "{{ .Name }}";
+    public override string EntityName => "{{ .Name }}";
     protected override string EditViewName => "{{ .Name }}Edit";
     protected override string DetailsViewName => "{{ .Name }}Details";
 

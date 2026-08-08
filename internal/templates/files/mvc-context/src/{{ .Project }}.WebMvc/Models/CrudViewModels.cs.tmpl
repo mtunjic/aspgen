@@ -1,0 +1,62 @@
+namespace {{ .Project }}.WebMvc.Models;
+
+// A selectable option for a relation/bool advanced-filter dropdown.
+public sealed record SelectOption(long Id, string Display);
+
+// One advanced-filter field. The shared _FilterBar partial renders the input
+// from Kind and binds it by Name (which matches the controller's action
+// parameter), so no per-aggregate markup is needed.
+public sealed class FilterFieldDescriptor
+{
+    public string Name { get; init; } = "";
+    public string Label { get; init; } = "";
+    // "string" | "number" | "date" | "bool" | "relation"
+    public string Kind { get; init; } = "string";
+    public string? CurrentValue { get; init; }
+    public IReadOnlyList<SelectOption>? Options { get; init; }
+}
+
+// One table column. Scalar columns render PropertyName via reflection; relation
+// columns resolve the FK to the target's display string via RelationLookup.
+public sealed class ColumnDescriptor
+{
+    public string Label { get; init; } = "";
+    public string? PropertyName { get; init; }
+    public string? FkProperty { get; init; }
+    public string? Format { get; init; }
+    public IReadOnlyDictionary<long, string>? RelationLookup { get; init; }
+}
+
+// Shared list-page view model: search + advanced filters + a paginated table.
+// Every aggregate's IndexViewModel is a thin subclass supplying its typed
+// Items, descriptors and active-filter state; the shared partials render them.
+public abstract class IndexViewModelBase
+{
+    public string? Search { get; protected set; }
+    public int Page { get; protected set; }
+    public int PageSize { get; protected set; } = 25;
+    public long TotalCount { get; protected set; }
+    public bool HasMore => (long)Page * PageSize < TotalCount;
+    public string SearchPlaceholder { get; protected set; } = "Search...";
+    public string EmptyMessage { get; protected set; } = "No records found.";
+
+    public abstract IReadOnlyList<object> Items { get; }
+    public abstract IReadOnlyList<FilterFieldDescriptor> FilterFields { get; }
+    public abstract IReadOnlyList<ColumnDescriptor> Columns { get; }
+    // search + advanced filter values, for preserving the query on "Load more".
+    public abstract IReadOnlyList<KeyValuePair<string, string?>> RouteValues { get; }
+    public abstract bool HasActiveFilters { get; }
+
+    public static string? Display(object item, ColumnDescriptor column)
+    {
+        if (column.FkProperty is not null && column.RelationLookup is not null)
+        {
+            var fk = item.GetType().GetProperty(column.FkProperty)?.GetValue(item);
+            return fk is long id && column.RelationLookup.TryGetValue(id, out var display) ? display : null;
+        }
+        if (column.PropertyName is null) return null;
+        var value = item.GetType().GetProperty(column.PropertyName)?.GetValue(item);
+        if (value is null) return null;
+        return column.Format is null ? value.ToString() : string.Format("{0:" + column.Format + "}", value);
+    }
+}

@@ -1,21 +1,46 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Serilog;
 using {{ .Project }}.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
+// Structured logging with levels. The Serilog section of appsettings.json
+// controls verbosity (console + rolling file sink under logs/). User-facing
+// messages stay in the UI (validation summaries, the friendly error page);
+// full exception detail only ever goes to the log.
+builder.Host.UseSerilog((context, configuration) => configuration.ReadFrom.Configuration(context.Configuration));
 builder.Services.AddControllersWithViews();
 builder.Services.AddValidatorsFromAssemblyContaining<{{ .Project }}.Application.ApplicationServiceBase>();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
 {{- if eq .Database "postgres" }}
     ?? "Host=localhost;Database={{ kebab .Project }};Username=postgres;Password=postgres";
 builder.Services.AddDbContext<{{ .Project }}Database>(options => options.UseNpgsql(connectionString));
+// CrudServices create a fresh pooled DbContext per operation via this
+// singleton factory. It builds its OWN options (independent of the scoped
+// AddDbContext registration above) so the singleton does not depend on a
+// scoped service.
+builder.Services.AddSingleton<IDbContextFactory<{{ .Project }}Database>>(_ =>
+    new PooledDbContextFactory<{{ .Project }}Database>(
+        new DbContextOptionsBuilder<{{ .Project }}Database>().UseNpgsql(connectionString).Options));
 {{- else }}
     ?? "Data Source={{ .Project }}.db";
 builder.Services.AddDbContext<{{ .Project }}Database>(options => options.UseSqlite(connectionString));
+// CrudServices create a fresh pooled DbContext per operation via this
+// singleton factory. It builds its OWN options (independent of the scoped
+// AddDbContext registration above) so the singleton does not depend on a
+// scoped service.
+builder.Services.AddSingleton<IDbContextFactory<{{ .Project }}Database>>(_ =>
+    new PooledDbContextFactory<{{ .Project }}Database>(
+        new DbContextOptionsBuilder<{{ .Project }}Database>().UseSqlite(connectionString).Options));
 {{- end }}
 // aspgen:services
 
 var app = builder.Build();
+// Unhandled exceptions: log the full stack trace, show the user only the
+// friendly error page. Expected validation failures still re-render the form
+// with a validation summary.
+app.UseExceptionHandler("/Home/Error");
 app.UseStaticFiles();
 app.UseRouting();
 app.MapControllers();

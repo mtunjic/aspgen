@@ -1,0 +1,41 @@
+using System.IO;
+using Serilog;
+using Serilog.Events;
+
+namespace {{ .Project }}.Desktop.Shared;
+
+// Structured logging for the desktop app. User-facing messages go through the
+// UI (snackbars, InfoBars, confirmation dialogs); AppLog is the
+// developer-facing channel -- leveled and structured, written to the debugger
+// output and a rolling file under logs/. The default level is Information; set
+// the ASPGENT_LOG_LEVEL environment variable to Verbose, Debug, Information,
+// Warning, Error, or Fatal to change it at runtime (no rebuild needed), or
+// pass Debug to Configure to surface internals while developing.
+public static class AppLog
+{
+    public static void Configure(LogEventLevel minimumLevel = LogEventLevel.Information)
+    {
+        // ASPGENT_LOG_LEVEL wins over the default/code value so operators can
+        // raise or lower verbosity on a deployed app without a rebuild.
+        var envLevel = Environment.GetEnvironmentVariable("ASPGENT_LOG_LEVEL");
+        if (Enum.TryParse(envLevel, ignoreCase: true, out LogEventLevel configured))
+        {
+            minimumLevel = configured;
+        }
+
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Is(minimumLevel)
+            .Enrich.FromLogContext()
+            .WriteTo.Debug()
+            .WriteTo.File(Path.Combine(AppContext.BaseDirectory, "logs", "{{ kebab .Project }}-.log"), rollingInterval: RollingInterval.Day, retainedFileCountLimit: 7)
+            .CreateLogger();
+        Log.Information("Logging started at {MinimumLevel}", minimumLevel);
+    }
+
+    public static void CloseAndFlush() => Log.CloseAndFlush();
+
+    public static void Debug(string messageTemplate, params object?[] propertyValues) => Log.Debug(messageTemplate, propertyValues);
+    public static void Information(string messageTemplate, params object?[] propertyValues) => Log.Information(messageTemplate, propertyValues);
+    public static void Warning(string messageTemplate, params object?[] propertyValues) => Log.Warning(messageTemplate, propertyValues);
+    public static void Error(Exception? exception, string messageTemplate, params object?[] propertyValues) => Log.Error(exception, messageTemplate, propertyValues);
+}

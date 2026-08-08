@@ -35,16 +35,16 @@ public class {{ .Aggregate }}MvcRelationTests
 {{- end }}
         using (var scope = factory.Services.CreateScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<{{ .Project }}Database>();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<{{ .Project }}Database>>();
 {{- range .RelationTest.Prereqs }}
-            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+            {{ .Var }} = (await new {{ .Target }}CrudService(dbFactory, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
 {{- end }}
 {{- range .RelationTest.Relations }}
-            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+            {{ .Var }} = (await new {{ .Target }}CrudService(dbFactory, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
 {{- end }}
 {{- range .RelationTest.ManyToMany }}
-            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
-            {{ .SecondVar }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+            {{ .Var }} = (await new {{ .Target }}CrudService(dbFactory, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+            {{ .SecondVar }} = (await new {{ .Target }}CrudService(dbFactory, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
 {{- end }}
         }
 

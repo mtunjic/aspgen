@@ -1,0 +1,9 @@
+@model {{ .Project }}.WebMvc.Models.IndexViewModelBase
+@if (Model.HasMore)
+{
+    var route = new Dictionary<string, object?> { ["page"] = Model.Page + 1 };
+    foreach (var kv in Model.RouteValues) route[kv.Key] = kv.Value;
+    <div class="text-center mt-3">
+        <a href="@Url.Action("Index", route)" class="btn btn-outline-secondary">Load more</a>
+    </div>
+}

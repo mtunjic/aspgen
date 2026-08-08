@@ -6,14 +6,23 @@ using {{ .Project }}.Persistence;
 
 namespace {{ .Project }}.Application;
 
-public sealed class {{ .Aggregate }}CrudService({{ .Project }}Database database, IValidator<{{ .Aggregate }}Request> validator)
+// Each operation gets its own DbContext from the factory. The service is
+// registered as a singleton and shared across the app (the dm-tier desktop
+// stores call it from background threads via Task.Run), so sharing one EF
+// context would race -- EF contexts are not thread-safe. A fresh context per
+// operation also means a failed save can never poison a later, unrelated save.
+public sealed class {{ .Aggregate }}CrudService(IDbContextFactory<{{ .Project }}Database> databaseFactory, IValidator<{{ .Aggregate }}Request> validator)
 {
-    public Task<List<{{ .Aggregate }}View>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        database.{{ .Aggregate }}s.Where(x => !x.Deleted).Select(x => new {{ .Aggregate }}View(x.Id,
+    public async Task<List<{{ .Aggregate }}View>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        await using var database = databaseFactory.CreateDbContext();
+        return await database.{{ .Aggregate }}s.Where(x => !x.Deleted).Select(x => new {{ .Aggregate }}View(x.Id,
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }})).ToListAsync(cancellationToken);
+    }
 
     public async Task<{{ .Aggregate }}View?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
+        await using var database = databaseFactory.CreateDbContext();
         var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
         return entity is null ? null : new {{ .Aggregate }}View(entity.Id,
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }});
@@ -22,11 +31,12 @@ public sealed class {{ .Aggregate }}CrudService({{ .Project }}Database database,
     public async Task<{{ .Aggregate }}View> CreateAsync({{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
     {
         await validator.ValidateAndThrowAsync(request, cancellationToken);
+        await using var database = databaseFactory.CreateDbContext();
         var entity = new {{ .Aggregate }}(
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
         entity.Init("system");
         database.Add(entity);
-        await database.SaveChangesAsync(cancellationToken);
+        await database.SaveChangesSafelyAsync(cancellationToken);
         return new {{ .Aggregate }}View(entity.Id,
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }});
     }
@@ -34,6 +44,7 @@ public sealed class {{ .Aggregate }}CrudService({{ .Project }}Database database,
     public async Task<CommandResponse> UpdateAsync(long id, {{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
     {
         await validator.ValidateAndThrowAsync(request, cancellationToken);
+        await using var database = databaseFactory.CreateDbContext();
         var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
         if (entity is null) return CommandResponse.Fail().AddMessage("{{ .Aggregate }} not found.");
         entity.Update(
@@ -43,14 +54,36 @@ public sealed class {{ .Aggregate }}CrudService({{ .Project }}Database database,
 
     public async Task<CommandResponse> DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
+        await using var database = databaseFactory.CreateDbContext();
         var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
         if (entity is null) return CommandResponse.Fail().AddMessage("{{ .Aggregate }} not found.");
         entity.SoftDelete();
         return await database.TrySaveChangesAsync(cancellationToken);
     }
 
+{{- range .ManyToMany }}
+    // Replaces the {{ .Target }} links of one {{ $.Aggregate }} in a single
+    // transaction: a mid-sync failure rolls everything back, so partial links
+    // can never be left behind.
+    public async Task<CommandResponse> Replace{{ .Target }}sAsync(long {{ camel $.Aggregate }}Id, long[] selected{{ .Target }}Ids, CancellationToken cancellationToken = default)
+    {
+        await using var database = databaseFactory.CreateDbContext();
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        var keep = selected{{ .Target }}Ids.ToHashSet();
+        var links = await database.{{ .JoinEntity }}s.Where(x => x.{{ $.Aggregate }}Id == {{ camel $.Aggregate }}Id).ToListAsync(cancellationToken);
+        database.{{ .JoinEntity }}s.RemoveRange(links.Where(l => !keep.Contains(l.{{ .Target }}Id)));
+        var existing = links.Select(l => l.{{ .Target }}Id).ToHashSet();
+        foreach (var id in keep.Except(existing))
+            database.{{ .JoinEntity }}s.Add(new {{ .JoinEntity }}({{ camel $.Aggregate }}Id, id));
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return CommandResponse.Ok();
+    }
+{{- end }}
+
     public async Task<({{ .Aggregate }}View[] Items, long TotalCount)> SearchAsync(string? search{{ filterParamDecls .Properties "camel" }}{{ relationFilterParamDecls .Properties "camel" }}, int page, int pageSize, CancellationToken cancellationToken = default)
     {
+        await using var database = databaseFactory.CreateDbContext();
         var query = database.{{ .Aggregate }}s.Where(x => !x.Deleted).AsQueryable();
 {{- if hasQuickSearchField .Properties }}
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => {{ quickSearchExpr .Properties "x" }});

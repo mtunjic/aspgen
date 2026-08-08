@@ -1,0 +1,31 @@
+using System.Windows;
+using System.Windows.Controls;
+
+namespace {{ .Project }}.Desktop.Shared.Controls;
+
+// Shared list-page chrome: header, search box, advanced-filter Expander,
+// card list, empty state and pagination. Derived modules only supply the
+// entity-specific filter fields (FilterFields) and the row card template
+// (RowTemplate); everything else binds to the ListViewModelBase subclass.
+public partial class ListPage : UserControl
+{
+    public static readonly DependencyProperty FilterFieldsProperty = DependencyProperty.Register(
+        nameof(FilterFields), typeof(object), typeof(ListPage));
+
+    public static readonly DependencyProperty RowTemplateProperty = DependencyProperty.Register(
+        nameof(RowTemplate), typeof(DataTemplate), typeof(ListPage));
+
+    public object? FilterFields
+    {
+        get => GetValue(FilterFieldsProperty);
+        set => SetValue(FilterFieldsProperty, value);
+    }
+
+    public DataTemplate? RowTemplate
+    {
+        get => (DataTemplate?)GetValue(RowTemplateProperty);
+        set => SetValue(RowTemplateProperty, value);
+    }
+
+    public ListPage() => InitializeComponent();
+}

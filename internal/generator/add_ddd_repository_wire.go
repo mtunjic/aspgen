@@ -25,14 +25,14 @@ func wireCrudServiceToRepository(r addRequest, m *Manifest, aggregateName, repos
 		return err
 	}
 
-	oldCtor := fmt.Sprintf("public sealed class %sCrudService(%sDatabase database, IValidator<%sRequest> validator)", aggregateName, m.Project, aggregateName)
-	newCtor := fmt.Sprintf("public sealed class %sCrudService(%sDatabase database, IValidator<%sRequest> validator, I%s repository)", aggregateName, m.Project, aggregateName, repositoryName)
+	oldCtor := fmt.Sprintf("public sealed class %sCrudService(IDbContextFactory<%sDatabase> databaseFactory, IValidator<%sRequest> validator)", aggregateName, m.Project, aggregateName)
+	newCtor := fmt.Sprintf("public sealed class %sCrudService(IDbContextFactory<%sDatabase> databaseFactory, IValidator<%sRequest> validator, I%s repository)", aggregateName, m.Project, aggregateName, repositoryName)
 	if content, err = replaceOnce(content, oldCtor, newCtor, "CrudService constructor"); err != nil {
 		return err
 	}
 
-	oldCreate := "        entity.Init(\"system\");\n        database.Add(entity);\n        await database.SaveChangesAsync(cancellationToken);"
-	newCreate := "        await repository.AddAsync(entity, cancellationToken);"
+	oldCreate := "        entity.Init(\"system\");\n        database.Add(entity);\n        await database.SaveChangesSafelyAsync(cancellationToken);"
+	newCreate := "        var result = await repository.AddAsync(entity, cancellationToken);\n        if (!result.Success) throw new InvalidOperationException(result.Message);"
 	if content, err = replaceOnce(content, oldCreate, newCreate, "CrudService CreateAsync body"); err != nil {
 		return err
 	}
@@ -56,6 +56,8 @@ func wireCrudServiceToRepository(r addRequest, m *Manifest, aggregateName, repos
 		return err
 	}
 
+	// UpdateAsync returns the repository's CommandResponse; a failed Create
+	// now throws so the UI never believes a record was saved when it was not.
 	return writePatchFile(crudPath, content, r.DryRun)
 }
 

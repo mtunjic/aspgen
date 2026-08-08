@@ -10,4 +10,9 @@
     <ProjectReference Include="..\{{ .Project }}.Persistence\{{ .Project }}.Persistence.csproj" />
     <ProjectReference Include="..\{{ .Project }}.DomainModel\{{ .Project }}.DomainModel.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+  </ItemGroup>
 </Project>

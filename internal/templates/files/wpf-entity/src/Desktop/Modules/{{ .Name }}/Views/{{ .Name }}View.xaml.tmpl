@@ -1,233 +1,99 @@
 <UserControl x:Class="{{ .Namespace }}.Views.{{ .Name }}View"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:prism="http://prismlibrary.com/"{{ if eq .Theme "wpfui" }}
+    xmlns:prism="http://prismlibrary.com/"
+    xmlns:controls="clr-namespace:{{ .Project }}.Desktop.Shared.Controls"{{ if eq .Theme "wpfui" }}
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"{{ end }}
 {{- if eq .Theme "wpfui" }}
     Background="{DynamicResource ApplicationBackgroundBrush}"
     Foreground="{DynamicResource TextFillColorPrimaryBrush}"
 {{- end }}
     prism:ViewModelLocator.AutoWireViewModel="True">
-{{- if eq .Theme "wpfui" }}
-    <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-    </UserControl.Resources>
-{{- end }}
-    <UserControl.InputBindings>
-        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewCommand}" />
-        <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding ViewDetailsCommand}" />
-    </UserControl.InputBindings>
-    <Grid Margin="8">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-
-        <!-- Page header with separator -->
-        <Border Grid.Row="0" Style="{StaticResource ListHeaderStyle}">
-            <DockPanel LastChildFill="False">
-                <StackPanel DockPanel.Dock="Left">
-{{- if eq .Theme "wpfui" }}
-                    <ui:TextBlock FontTypography="TitleLarge" Text="{{ .Name }}" />
-                    <ui:TextBlock Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontTypography="Body" Text="Manage {{ .Name }} records." />
-{{- else }}
-                    <TextBlock FontSize="24" FontWeight="SemiBold" Text="{{ .Name }}" />
-{{- end }}
-                </StackPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-{{- if eq .Theme "wpfui" }}
-                    <ui:ProgressRing Width="20" Height="20" Margin="0,0,12,0" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
-                    <ui:Button Margin="4,0,0,0" Padding="14,7" Appearance="Primary" Content="Add new {{ .Name }}" Icon="{ui:SymbolIcon Add24}" ToolTip="Create a new {{ .Name }}" Command="{Binding NewCommand}" />
-{{- else }}
-                    <Button Margin="4,0,0,0" Padding="12,6" FontWeight="SemiBold" Content="Add new {{ .Name }}" Command="{Binding NewCommand}" />
-{{- end }}
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <!-- Search & filter card -->
-        <Border Grid.Row="1" Margin="0,0,0,14" Style="{StaticResource CardStyle}">
-            <StackPanel>
-{{- if eq .Theme "wpfui" }}
-                <ui:TextBlock Style="{StaticResource SectionHeaderStyle}" Text="SEARCH &amp; FILTER" />
-{{- else }}
-                <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="SEARCH &amp; FILTER" />
-{{- end }}
-                <DockPanel>
-{{- if eq .Theme "wpfui" }}
-                    <ui:Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="12,6" Content="Search" Icon="{ui:SymbolIcon Search24}" Command="{Binding SearchCommand}" />
-                    <ui:TextBox ClearButtonEnabled="True" PlaceholderText="Search {{ .Name }} records..." Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
-{{- else }}
-                    <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="12,6" Content="Search" Command="{Binding SearchCommand}" />
-                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
-{{- end }}
-                </DockPanel>
-                <Expander Margin="0,10,0,0" Header="Advanced filters" IsExpanded="{Binding IsAdvancedFilterExpanded, Mode=TwoWay}">
-                    <StackPanel Margin="0,10,0,0">
-                        <WrapPanel>
+    <controls:ListPage>
+        <controls:ListPage.FilterFields>
+            <WrapPanel>
 {{- range .Properties }}
 {{- if .RelationTarget }}
-                            <StackPanel Margin="0,0,12,8">
-                                <TextBlock Text="{{ .DisplayName }}" />
-                                <ComboBox Width="140" Margin="0,4,0,0" ItemsSource="{Binding {{ .RelationTarget }}Items}" DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}" />
-                            </StackPanel>
+                <StackPanel Margin="0,0,12,8">
+                    <TextBlock Text="{{ .DisplayName }}" />
+                    <ComboBox Width="140" Margin="0,4,0,0" ItemsSource="{Binding {{ .RelationTarget }}Items}" DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}" />
+                </StackPanel>
 {{- else if eq (filterKind .CSharpType) "string" }}
-                            <StackPanel Margin="0,0,12,8">
-                                <TextBlock Text="{{ .DisplayName }} contains" />
-                                <TextBox Width="160" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Contains, UpdateSourceTrigger=PropertyChanged}" />
-                            </StackPanel>
+                <StackPanel Margin="0,0,12,8">
+                    <TextBlock Text="{{ .DisplayName }} contains" />
+                    <TextBox Width="160" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Contains, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
 {{- else if eq (filterKind .CSharpType) "numeric" }}
-                            <StackPanel Margin="0,0,12,8">
-                                <TextBlock Text="{{ .DisplayName }} min" />
-                                <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Min, UpdateSourceTrigger=PropertyChanged}" />
-                            </StackPanel>
-                            <StackPanel Margin="0,0,12,8">
-                                <TextBlock Text="{{ .DisplayName }} max" />
-                                <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Max, UpdateSourceTrigger=PropertyChanged}" />
-                            </StackPanel>
+                <StackPanel Margin="0,0,12,8">
+                    <TextBlock Text="{{ .DisplayName }} min" />
+                    <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Min, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Margin="0,0,12,8">
+                    <TextBlock Text="{{ .DisplayName }} max" />
+                    <TextBox Width="90" Margin="0,4,0,0" Text="{Binding Filter.{{ .Name }}Max, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
 {{- else if eq (filterKind .CSharpType) "date" }}
-                            <StackPanel Margin="0,0,12,8">
-                                <TextBlock Text="{{ .DisplayName }} from" />
-                                <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Min, Mode=TwoWay}" />
-                            </StackPanel>
-                            <StackPanel Margin="0,0,12,8">
-                                <TextBlock Text="{{ .DisplayName }} to" />
-                                <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Max, Mode=TwoWay}" />
-                            </StackPanel>
+                <StackPanel Margin="0,0,12,8">
+                    <TextBlock Text="{{ .DisplayName }} from" />
+                    <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Min, Mode=TwoWay}" />
+                </StackPanel>
+                <StackPanel Margin="0,0,12,8">
+                    <TextBlock Text="{{ .DisplayName }} to" />
+                    <DatePicker Width="130" Margin="0,4,0,0" SelectedDate="{Binding Filter.{{ .Name }}Max, Mode=TwoWay}" />
+                </StackPanel>
 {{- else if eq (filterKind .CSharpType) "bool" }}
-                            <StackPanel Margin="0,0,12,8">
-                                <TextBlock Text="{{ .DisplayName }}" />
-                                <ComboBox Width="90" Margin="0,4,0,0" SelectedValuePath="Content" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}">
-                                    <ComboBoxItem Content="{x:Null}" />
-                                    <ComboBoxItem Content="True" />
-                                    <ComboBoxItem Content="False" />
-                                </ComboBox>
-                            </StackPanel>
+                <StackPanel Margin="0,0,12,8">
+                    <TextBlock Text="{{ .DisplayName }}" />
+                    <ComboBox Width="90" Margin="0,4,0,0" SelectedValuePath="Content" SelectedValue="{Binding Filter.{{ .Name }}, Mode=TwoWay}">
+                        <ComboBoxItem Content="{x:Null}" />
+                        <ComboBoxItem Content="True" />
+                        <ComboBoxItem Content="False" />
+                    </ComboBox>
+                </StackPanel>
 {{- end }}
 {{- end }}
 {{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
-                            <StackPanel Margin="0,0,12,8">
-                                <TextBlock Text="{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains" />
-                                <TextBox Width="160" Margin="0,4,0,0" Text="{Binding Filter.{{ relationNestedFilterField . }}, UpdateSourceTrigger=PropertyChanged}" />
-                            </StackPanel>
+                <StackPanel Margin="0,0,12,8">
+                    <TextBlock Text="{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains" />
+                    <TextBox Width="160" Margin="0,4,0,0" Text="{Binding Filter.{{ relationNestedFilterField . }}, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
 {{- end }}{{- end }}
-                        </WrapPanel>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
-{{- if eq .Theme "wpfui" }}
-                            <ui:Button Content="Apply" Command="{Binding SearchCommand}" />
-                            <ui:Button Margin="8,0,0,0" Content="Clear" Command="{Binding ClearFiltersCommand}" />
+            </WrapPanel>
+        </controls:ListPage.FilterFields>
+        <controls:ListPage.RowTemplate>
+            <DataTemplate>
+                <Border BorderThickness="1"{{ if eq .Theme "wpfui" }} BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"{{ else }} BorderBrush="#E2E8F0" Background="White"{{ end }} CornerRadius="10" Padding="14,10"{{ if eq .Theme "wpfui" }} Background="{DynamicResource ControlFillColorDefaultBrush}"{{ end }}>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <WrapPanel Grid.Column="0" VerticalAlignment="Center">
+{{- range .Properties }}
+                            <StackPanel Margin="0,0,20,0" Orientation="Horizontal">
+                                <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}: " />
+{{- if .RelationTarget }}
+                                <ComboBox IsHitTestVisible="False" Focusable="False" BorderThickness="0" Background="Transparent" Padding="0"
+                                          ItemsSource="{Binding DataContext.{{ .RelationTarget }}Items, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                          DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding {{ .Name }}, Mode=OneWay}" />
 {{- else }}
-                            <Button Content="Apply" Command="{Binding SearchCommand}" />
-                            <Button Margin="8,0,0,0" Content="Clear" Command="{Binding ClearFiltersCommand}" />
+                                <TextBlock Text="{Binding {{ .Name }}}" />
+{{- end }}
+                            </StackPanel>
+{{- end }}
+                        </WrapPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+{{- if eq .Theme "wpfui" }}
+                            <ui:Button Padding="8,4" Content="Edit" Icon="{ui:SymbolIcon Edit24}" ToolTip="Edit this {{ .Name }}" Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                            <ui:Button Margin="4,0,0,0" Padding="8,4" Appearance="Danger" Content="Delete" Icon="{ui:SymbolIcon Delete24}" ToolTip="Delete this {{ .Name }}" Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+{{- else }}
+                            <Button Padding="8,4" Content="Edit" Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                            <Button Margin="4,0,0,0" Padding="8,4" Content="Delete" Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
 {{- end }}
                         </StackPanel>
-                    </StackPanel>
-                </Expander>
-            </StackPanel>
-        </Border>
-
-{{- if eq .Theme "wpfui" }}
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <ui:ListView Margin="0,0,0,8" ItemsSource="{Binding Items}" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
-                <ui:ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="Padding" Value="0" />
-                        <Setter Property="Margin" Value="0,2" />
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                    </Style>
-                </ui:ListView.ItemContainerStyle>
-                <ui:ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Border BorderThickness="1" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" CornerRadius="10" Padding="14,10" Background="{DynamicResource ControlFillColorDefaultBrush}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <WrapPanel Grid.Column="0" VerticalAlignment="Center">
-{{- range .Properties }}
-                                    <StackPanel Margin="0,0,20,0" Orientation="Horizontal">
-                                        <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}: " />
-{{- if .RelationTarget }}
-                                        <ComboBox IsHitTestVisible="False" Focusable="False" BorderThickness="0" Background="Transparent" Padding="0"
-                                                  ItemsSource="{Binding DataContext.{{ .RelationTarget }}Items, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                  DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding {{ .Name }}, Mode=OneWay}" />
-{{- else }}
-                                        <TextBlock Text="{Binding {{ .Name }}}" />
-{{- end }}
-                                    </StackPanel>
-{{- end }}
-                                </WrapPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ui:Button Padding="8,4" Content="Edit" Icon="{ui:SymbolIcon Edit24}" ToolTip="Edit this {{ .Name }}" Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
-                                    <ui:Button Margin="4,0,0,0" Padding="8,4" Appearance="Danger" Content="Delete" Icon="{ui:SymbolIcon Delete24}" ToolTip="Delete this {{ .Name }}" Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ui:ListView.ItemTemplate>
-            </ui:ListView>
-        </ScrollViewer>
-{{- else }}
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <ListView Margin="0,0,0,8" ItemsSource="{Binding Items}" SelectionMode="Single" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="Padding" Value="0" />
-                        <Setter Property="Margin" Value="0,2" />
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                    </Style>
-                </ListView.ItemContainerStyle>
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Border BorderThickness="1" BorderBrush="#E2E8F0" CornerRadius="10" Padding="14,10" Background="White">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <WrapPanel Grid.Column="0" VerticalAlignment="Center">
-{{- range .Properties }}
-                                    <StackPanel Margin="0,0,20,0" Orientation="Horizontal">
-                                        <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}: " />
-{{- if .RelationTarget }}
-                                        <ComboBox IsHitTestVisible="False" Focusable="False" BorderThickness="0" Background="Transparent" Padding="0"
-                                                  ItemsSource="{Binding DataContext.{{ .RelationTarget }}Items, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                  DisplayMemberPath="{{ .RelationDisplayProperty }}" SelectedValuePath="Id" SelectedValue="{Binding {{ .Name }}, Mode=OneWay}" />
-{{- else }}
-                                        <TextBlock Text="{Binding {{ .Name }}}" />
-{{- end }}
-                                    </StackPanel>
-{{- end }}
-                                </WrapPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Padding="8,4" Content="Edit" Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
-                                    <Button Margin="4,0,0,0" Padding="8,4" Content="Delete" Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-        </ScrollViewer>
-{{- end }}
-{{- if eq .Theme "wpfui" }}
-        <ui:InfoBar Grid.Row="2" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" IsOpen="{Binding IsEmpty}" IsClosable="False" Severity="Informational" Title="No {{ .Name }} records" Message="Create a new {{ .Name }} to get started." />
-{{- end }}
-{{- if eq .Theme "wpfui" }}
-        <DockPanel Grid.Row="3" Margin="0,10,0,0" HorizontalAlignment="Center">
-            <ui:Button Margin="0,0,8,0" Content="Prev" Icon="{ui:SymbolIcon ArrowLeft24}" Command="{Binding PrevPageCommand}" />
-            <ui:TextBlock VerticalAlignment="Center" Text="{Binding PageLabel}" />
-            <ui:Button Margin="8,0,0,0" Content="Next" Icon="{ui:SymbolIcon ArrowRight24}" Command="{Binding NextPageCommand}" />
-        </DockPanel>
-{{- else }}
-        <DockPanel Grid.Row="3" Margin="0,10,0,0" HorizontalAlignment="Center">
-            <Button Margin="0,0,8,0" Padding="12,6" Content="Prev" Command="{Binding PrevPageCommand}" />
-            <TextBlock VerticalAlignment="Center" Text="{Binding PageLabel}" />
-            <Button Margin="8,0,0,0" Padding="12,6" Content="Next" Command="{Binding NextPageCommand}" />
-        </DockPanel>
-{{- end }}
-    </Grid>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </controls:ListPage.RowTemplate>
+    </controls:ListPage>
 </UserControl>

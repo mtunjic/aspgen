@@ -1,9 +1,6 @@
 using Prism.Mvvm;
-using Prism.Navigation;
-using Prism.Navigation.Regions;
 using {{ .Namespace }}.Models;
 using {{ .Namespace }}.Services;
-using {{ .Project }}.Desktop.Shared;
 {{- range injectableTargets .Relations .ManyToMany }}
 using {{ $.Project }}.Desktop.Modules.{{ . }}.Services;
 using {{ $.Project }}.Desktop.Modules.{{ . }}.Models;
@@ -12,39 +9,35 @@ using {{ $.Project }}.Desktop.Modules.{{ . }}.Models;
 using {{ $.Project }}.Desktop.Modules.{{ .JoinEntity }}.Services;
 using {{ $.Project }}.Desktop.Modules.{{ .JoinEntity }}.Models;
 {{- end }}
+using {{ .Project }}.Desktop.Shared;
 
 namespace {{ .Namespace }}.ViewModels;
 
-public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
+// Read-only details view for a single {{ .Name }} record. The shared base
+// loads the record by navigation id and wires the back navigation; this
+// subclass only resolves related display objects and many-to-many names.
+public sealed class {{ .Name }}DetailsViewModel : DetailsViewModelBase<I{{ .Name }}Store, {{ .Name }}Row>
 {
-    private readonly I{{ .Name }}Store store;
-    private readonly IAppNavigationService navigation;
 {{- range injectableTargets .Relations .ManyToMany }}
     private readonly I{{ . }}Store {{ camel . }}Store;
 {{- end }}
 {{- range .ManyToMany }}
     private readonly I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store;
 {{- end }}
-    private {{ .Name }}Row? item;
 
     public {{ .Name }}DetailsViewModel(I{{ .Name }}Store store, IAppNavigationService navigation{{ range injectableTargets .Relations .ManyToMany }}, I{{ . }}Store {{ camel . }}Store{{ end }}{{ range .ManyToMany }}, I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store{{ end }})
+        : base(store, navigation)
     {
-        this.store = store;
-        this.navigation = navigation;
 {{- range injectableTargets .Relations .ManyToMany }}
         this.{{ camel . }}Store = {{ camel . }}Store;
 {{- end }}
 {{- range .ManyToMany }}
         this.{{ camel .JoinEntity }}Store = {{ camel .JoinEntity }}Store;
 {{- end }}
-        BackCommand = new Prism.Commands.DelegateCommand(() => navigation.GoTo("{{ .Name }}List"));
     }
 
-    public {{ .Name }}Row? Item
-    {
-        get => item;
-        private set => SetProperty(ref item, value);
-    }
+    public override string EntityName => "{{ .Name }}";
+    protected override string ListViewName => "{{ .Name }}List";
 {{- range .Relations }}
     public {{ .Target }}Row? {{ .Target }} => Item is null ? null : {{ camel .Target }}Store.GetAll().FirstOrDefault(x => x.Id == Item.{{ .Target }}Id);
 {{- end }}
@@ -52,18 +45,8 @@ public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
     public string {{ .Name }}Display { get; private set; } = string.Empty;
 {{- end }}
 
-    public Prism.Commands.DelegateCommand BackCommand { get; }
-
-    public bool IsNavigationTarget(NavigationContext navigationContext) => true;
-
-    public void OnNavigatedFrom(NavigationContext navigationContext)
+    protected override void OnItemLoaded(long id)
     {
-    }
-
-    public void OnNavigatedTo(NavigationContext navigationContext)
-    {
-        var id = navigationContext.Parameters.GetValue<long>("id");
-        Item = store.GetAll().FirstOrDefault(x => x.Id == id);
 {{- range .Relations }}
         RaisePropertyChanged(nameof({{ .Target }}));
 {{- end }}

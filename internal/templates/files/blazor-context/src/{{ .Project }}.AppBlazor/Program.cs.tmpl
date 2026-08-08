@@ -1,3 +1,4 @@
+using Serilog;
 using {{ .Project }}.AppBlazor;
 
 // The Blazor host is a separate process from the WebApi: bind it to its own
@@ -7,6 +8,10 @@ using {{ .Project }}.AppBlazor;
 var blazorUrl = Environment.GetEnvironmentVariable("ASPGENT_BLAZOR_URL") ?? "http://localhost:5001";
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args });
 builder.WebHost.UseUrls(blazorUrl);
+// Structured logging with levels; the Serilog section of appsettings.json
+// controls verbosity (console + rolling file sink under logs/). User-facing
+// messages stay in the UI; full detail only ever goes to the log.
+builder.Host.UseSerilog((context, configuration) => configuration.ReadFrom.Configuration(context.Configuration));
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 var apiUrl = Environment.GetEnvironmentVariable("ASPGENT_API_URL") ?? "http://localhost:5000";
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiUrl) });

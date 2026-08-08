@@ -455,3 +455,36 @@ func kebab(s string) string {
 	}
 	return b.String()
 }
+
+// seedArgs renders the comma-separated positional seed literals for an
+// aggregate's Request record in generated tests (relation-less aggregates only,
+// so every argument is a scalar seed).
+func seedArgs(properties []Property) string {
+	args := make([]string, 0, len(properties))
+	for _, p := range properties {
+		args = append(args, testSeedLiteral(p))
+	}
+	return strings.Join(args, ", ")
+}
+
+// searchNullArgs renders a leading-comma list of `null` matching the filter
+// parameters (scalar + nested relation) of a generated SearchAsync call, for
+// tests that search with no filters.
+func searchNullArgs(properties []Property) string {
+	var parts []string
+	for _, p := range properties {
+		names, _ := filterFieldNamesAndType(p)
+		for range names {
+			parts = append(parts, "null")
+		}
+	}
+	for _, p := range properties {
+		if relationNestedFilterField(p) != "" {
+			parts = append(parts, "null")
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return ", " + strings.Join(parts, ", ")
+}

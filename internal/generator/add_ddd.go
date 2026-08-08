@@ -133,6 +133,19 @@ func aggregateTemplateGroup(arch string) string {
 	return "renoir-aggregate"
 }
 
+// renderAggregateCrudServiceTest renders the CrudService round-trip smoke test
+// (tests-crud group) for relation-less dm/cqrs aggregates. Aggregates with
+// relations are already exercised end-to-end by their generated relation
+// tests; the smoke test adds build-time coverage of the plain CRUD service
+// path (factory, validation, save/soft-delete) that the dm-tier desktop and
+// MVC frontends call in-process.
+func renderAggregateCrudServiceTest(r addRequest, m *Manifest, d data) error {
+	if len(d.Relations) > 0 || len(d.ManyToMany) > 0 {
+		return nil
+	}
+	return renderTree(r.Project, "tests-crud", d, templateDir(r.Args), r.DryRun, r.Force)
+}
+
 // requireDDDContext validates that contextName exists and is capable of
 // dm-tier (or higher) constructs (aggregates/value-objects/domain-services/
 // repositories/events).
@@ -161,6 +174,9 @@ func renderAggregateCrud(r addRequest, m *Manifest, d data, arch string) error {
 	switch arch {
 	case "cqrs":
 		if err := renderTree(r.Project, "dm-crud", d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+			return err
+		}
+		if err := renderAggregateCrudServiceTest(r, m, d); err != nil {
 			return err
 		}
 		applicationDir := m.Project + ".Application"
@@ -200,6 +216,9 @@ func renderAggregateCrud(r addRequest, m *Manifest, d data, arch string) error {
 		// module if -ui mvc/wpf is already attached (dm's two in-process UI
 		// options - no WebApi host to call over HTTP).
 		if err := renderTree(r.Project, "dm-crud", d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+			return err
+		}
+		if err := renderAggregateCrudServiceTest(r, m, d); err != nil {
 			return err
 		}
 		if err := renderContextMvcCrudIfAttached(r, m, d); err != nil {

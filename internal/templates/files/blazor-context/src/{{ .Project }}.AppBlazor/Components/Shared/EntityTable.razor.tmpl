@@ -1,0 +1,45 @@
+@typeparam TItem
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    @foreach (var column in Columns)
+                    {
+                        <th>@column.Label</th>
+                    }
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Items)
+                {
+                    <tr style="cursor:pointer" @onclick="() => OnRowClick.InvokeAsync(item)">
+                        @foreach (var column in Columns)
+                        {
+                            <td>@column.Display(item)</td>
+                        }
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary" @onclick="() => OnEdit.InvokeAsync(item)" @onclick:stopPropagation="true">Edit</a>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => OnDelete.InvokeAsync(item)" @onclick:stopPropagation="true">Delete</button>
+                        </td>
+                    </tr>
+                }
+                @if (!Items.Any())
+                {
+                    <tr><td colspan="99" class="text-center text-muted py-4">@EmptyMessage</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<TItem> Items { get; set; } = [];
+    [Parameter] public IReadOnlyList<EntityColumn<TItem>> Columns { get; set; } = [];
+    [Parameter] public string EmptyMessage { get; set; } = "No records found.";
+    [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
+    [Parameter] public EventCallback<TItem> OnEdit { get; set; }
+    [Parameter] public EventCallback<TItem> OnDelete { get; set; }
+}

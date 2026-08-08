@@ -1,0 +1,66 @@
+using Prism.Commands;
+using Prism.Mvvm;
+using Prism.Navigation;
+using Prism.Navigation.Regions;
+
+namespace {{ .Project }}.Desktop.Shared;
+
+// Shared read-only details-view plumbing for every generated module: loading
+// the record by navigation id and back-to-list navigation. Derived view
+// models only supply the entity-specific relation display and many-to-many
+// name resolution in OnItemLoaded.
+public abstract class DetailsViewModelBase<TStore, TRow> : BindableBase, INavigationAware
+    where TStore : IEntityDataStore<TRow>
+    where TRow : class, IEntityRow
+{
+    protected readonly IAppNavigationService Navigation;
+    private readonly TStore store;
+    private TRow? item;
+
+    protected DetailsViewModelBase(TStore store, IAppNavigationService navigation)
+    {
+        this.store = store;
+        Navigation = navigation;
+        BackCommand = new DelegateCommand(() => Navigation.GoTo(ListViewName));
+    }
+
+    public abstract string EntityName { get; }
+    protected abstract string ListViewName { get; }
+
+    public TRow? Item
+    {
+        get => item;
+        private set
+        {
+            if (SetProperty(ref item, value))
+            {
+                RaisePropertyChanged(nameof(IsNotFound));
+            }
+        }
+    }
+
+    // True when the navigated record no longer exists (deleted elsewhere, or
+    // a stale id) -- the details view shows an empty state instead of blanks.
+    public bool IsNotFound => item is null;
+    public bool IsFound => item is not null;
+
+    public DelegateCommand BackCommand { get; }
+
+    public bool IsNavigationTarget(NavigationContext navigationContext) => true;
+
+    public void OnNavigatedFrom(NavigationContext navigationContext)
+    {
+    }
+
+    public void OnNavigatedTo(NavigationContext navigationContext)
+    {
+        var id = navigationContext.Parameters.GetValue<long>("id");
+        Item = store.GetAll().FirstOrDefault(x => x.Id == id);
+        OnItemLoaded(id);
+    }
+
+    // Hook for derived view models to resolve relation display objects and
+    // many-to-many names after the record loads, raising PropertyChanged on
+    // whatever they surface.
+    protected abstract void OnItemLoaded(long id);
+}

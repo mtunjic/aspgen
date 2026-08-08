@@ -34,6 +34,15 @@ aspgen add entity Book title:string author:string pages:int published:date avail
 
 The generated WPF client uses the API when the project is `fullstack`. Set `ASPGENT_API_URL` before starting the desktop app to override the default `http://localhost:5000`.
 
+## Logging
+
+Structured logs (Serilog) go to the console and a rolling file under
+`logs\{{ kebab .Project }}-.log`. Levels are configured in the `Serilog`
+section of `src\WebApi\appsettings.json` — bump `MinimumLevel` to `Debug` to
+surface internals while developing, and clamp to `Warning`/`Error` in
+production. Unhandled requests return a generic `ProblemDetails` response;
+the full exception detail is only written to the log.
+
 Example:
 
 ```text

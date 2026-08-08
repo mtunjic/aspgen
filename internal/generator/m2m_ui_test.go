@@ -62,7 +62,7 @@ func TestWpfViewModelManyToManyRendering(t *testing.T) {
 		"private readonly ICustomerStore customerStore;",
 		"private readonly ITagStore tagStore;",
 		"public PostViewModel(IPostStore store, IAppNavigationService navigation, ICustomerStore customerStore, ITagStore tagStore",
-		"protected override string EntityName => \"Post\";",
+		"public override string EntityName => \"Post\";",
 		`protected override string EditViewName => "PostEdit";`,
 		`protected override string DetailsViewName => "PostDetails";`,
 		"public ObservableCollection<CustomerRow> CustomerItems { get; } = [];",
@@ -107,8 +107,8 @@ func TestWpfEditViewModelManyToManyRendering(t *testing.T) {
 		"public PostEditViewModel(IPostStore store, IAppNavigationService navigation, ICustomerStore customerStore, ITagStore tagStore, IPostTagStore postTagStore)",
 		"public ObservableCollection<TagOption> TagOptions { get; } = [];",
 		"new PostTagSearchCriteria(null, EditingId, null, 1, 1000)",
-		"new PostTagRow(0, saved.Id, id)",
-		"postTagStore.Delete(link.Id);",
+		// dm-tier sync is one transactional service call
+		"Store.ReplaceTags(saved.Id, selectedTag);",
 		"protected override void SyncRelated(PostRow saved)",
 		"protected override bool TryBuild(out PostRow value)",
 		"public sealed class TagOption : BindableBase",
@@ -128,7 +128,11 @@ func TestRenderWpfEditBase(t *testing.T) {
 		"protected abstract void SyncRelated(TRow saved);",
 		"public DelegateCommand SaveCommand { get; }",
 		"public DelegateCommand CancelCommand { get; }",
-		`ValidationMessage = $"Could not save {EntityName}. You must add its related record(s) first.";`,
+		// honest error split: FK violations hint at a missing relation,
+		// everything else is reported generically (details only in the log)
+		"private static bool IsForeignKeyFailure(Exception ex)",
+		`? $"Could not save {EntityName}. You must add its related record(s) first."`,
+		`: $"Could not save {EntityName}. Something went wrong; the details have been logged.";`,
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("EditViewModelBase missing %q\n--- rendered ---\n%s", expected, out)
@@ -187,25 +191,117 @@ func TestWpfViewManyToManyRendering(t *testing.T) {
 	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Views/{{ .Name }}View.xaml.tmpl"
 	out := renderTemplate(t, path, d)
 	for _, expected := range []string{
-		// the list uses a WPF-UI ListView (plain ListView for non-wpfui)
-		`<ui:ListView Margin="0,0,0,8" ItemsSource="{Binding Items}"`,
+		// the list view is now a thin composition of the shared ListPage:
+		// only the entity-specific filter fields + row card template remain.
+		"<controls:ListPage>",
+		"<controls:ListPage.FilterFields>",
+		"<controls:ListPage.RowTemplate>",
+		// search + advanced filters chrome moved into the shared control
 		`Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"`,
 		`Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"`,
-		// search + advanced filters kept on the first page
-		"SearchText",
-		"Advanced filters",
-		// pagination
-		`Command="{Binding PrevPageCommand}"`,
-		`Command="{Binding NextPageCommand}"`,
+		`ItemsSource="{Binding CustomerItems}"`,
+		`SelectedValue="{Binding Filter.CustomerId, Mode=TwoWay}"`,
+		`Text="{Binding Filter.TitleContains, UpdateSourceTrigger=PropertyChanged}"`,
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostView.xaml (list) rendering is missing %q\n--- rendered ---\n%s", expected, out)
 		}
 	}
-	// The old DataGrid and the inline edit form must be gone.
-	for _, forbidden := range []string{"DataGrid", "ItemsSource=\"{Binding TagOptions}\"", "Form.Title", "ValidationMessage"} {
+	// The old DataGrid, the inline edit form, and the chrome that now lives
+	// in ListPage must all be gone from the module view.
+	for _, forbidden := range []string{"DataGrid", "ItemsSource=\"{Binding TagOptions}\"", "Form.Title", "ValidationMessage", "Advanced filters", "SearchText", "ui:ListView"} {
 		if strings.Contains(out, forbidden) {
 			t.Errorf("PostView.xaml (list) must not contain %q\n--- rendered ---\n%s", forbidden, out)
+		}
+	}
+}
+
+func TestRenderWpfListPage(t *testing.T) {
+	for _, theme := range []string{"wpfui", ""} {
+		d := m2mData()
+		d.Theme = theme
+		out := renderTemplate(t, "files/wpf/src/Desktop/Shared/Controls/ListPage.xaml.tmpl", d)
+		for _, expected := range []string{
+			// shared list chrome binds straight to the ListViewModelBase
+			`ItemsSource="{Binding Items}"`,
+			`SelectedItem="{Binding SelectedItem, Mode=TwoWay}"`,
+			"SearchText",
+			"Advanced filters",
+			`Command="{Binding PrevPageCommand}"`,
+			`Command="{Binding NextPageCommand}"`,
+			`Command="{Binding NewCommand}"`,
+			// aggregate-specific slots are fed by the module
+			"FilterFields",
+			"RowTemplate",
+			`Text="{Binding PageLabel}"`,
+		} {
+			if !strings.Contains(out, expected) {
+				t.Errorf("ListPage.xaml (%q) is missing %q\n--- rendered ---\n%s", theme, expected, out)
+			}
+		}
+	}
+}
+
+func TestRenderWpfEditPage(t *testing.T) {
+	for _, theme := range []string{"wpfui", ""} {
+		d := m2mData()
+		d.Theme = theme
+		out := renderTemplate(t, "files/wpf/src/Desktop/Shared/Controls/EditPage.xaml.tmpl", d)
+		for _, expected := range []string{
+			`Text="{Binding Title}"`,
+			`Command="{Binding SaveCommand}"`,
+			`Command="{Binding CancelCommand}"`,
+			"ValidationMessage",
+			"FormContent",
+		} {
+			if !strings.Contains(out, expected) {
+				t.Errorf("EditPage.xaml (%q) is missing %q\n--- rendered ---\n%s", theme, expected, out)
+			}
+		}
+		// wpfui renders the validation as an InfoBar gated on HasValidationError;
+		// the default theme renders a plain inline TextBlock.
+		if theme == "wpfui" && !strings.Contains(out, "HasValidationError") {
+			t.Errorf("EditPage.xaml (wpfui) is missing HasValidationError\n%s", out)
+		}
+	}
+}
+
+func TestRenderWpfDetailsPage(t *testing.T) {
+	for _, theme := range []string{"wpfui", ""} {
+		d := m2mData()
+		d.Theme = theme
+		out := renderTemplate(t, "files/wpf/src/Desktop/Shared/Controls/DetailsPage.xaml.tmpl", d)
+		for _, expected := range []string{
+			`Text="{Binding EntityName, StringFormat={}{0} details}"`,
+			`Command="{Binding BackCommand}"`,
+			"FieldsContent",
+			// not-found empty state: hide the card, show "{Entity} not found"
+			`Visibility="{Binding IsFound, Converter={StaticResource BoolToVisibility}}"`,
+			`StringFormat={}{0} not found}`,
+		} {
+			if !strings.Contains(out, expected) {
+				t.Errorf("DetailsPage.xaml (%q) is missing %q\n--- rendered ---\n%s", theme, expected, out)
+			}
+		}
+		if theme == "wpfui" && !strings.Contains(out, "IsOpen=\"{Binding IsNotFound}\"") {
+			t.Errorf("DetailsPage.xaml (wpfui) is missing the InfoBar empty state\n%s", out)
+		}
+	}
+}
+
+func TestRenderWpfDetailsViewModelBase(t *testing.T) {
+	out := renderTemplate(t, "files/wpf/src/Desktop/Shared/DetailsViewModelBase.cs.tmpl", m2mData())
+	for _, expected := range []string{
+		"public abstract class DetailsViewModelBase<TStore, TRow> : BindableBase, INavigationAware",
+		"protected abstract void OnItemLoaded(long id);",
+		"public DelegateCommand BackCommand { get; }",
+		"Navigation.GoTo(ListViewName)",
+		"public abstract string EntityName { get; }",
+		"public bool IsNotFound => item is null;",
+		"public bool IsFound => item is not null;",
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("DetailsViewModelBase is missing %q\n--- rendered ---\n%s", expected, out)
 		}
 	}
 }
@@ -222,9 +318,10 @@ func TestWpfEditViewManyToManyRendering(t *testing.T) {
 		`ItemsControl ItemsSource="{Binding TagOptions}"`,
 		`IsChecked="{Binding IsSelected, Mode=TwoWay}"`,
 		`Content="{Binding Display}"`,
-		`Command="{Binding SaveCommand}"`,
-		`Command="{Binding CancelCommand}"`,
-		`Text="{Binding ValidationMessage}"`,
+		// the form is hosted by the shared EditPage (Save/Cancel/validation
+		// live there, not in the module view)
+		"<controls:EditPage>",
+		"<controls:EditPage.FormContent>",
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostEditView.xaml rendering is missing %q\n--- rendered ---\n%s", expected, out)
@@ -250,24 +347,77 @@ func TestBlazorCrudManyToManyRendering(t *testing.T) {
 	out := renderTemplate(t, path, m2mData())
 	for _, expected := range []string{
 		`@page "/blog/posts"`,
-		`href="/blog/posts/edit"`,
-		"Advanced filters",
+		`@inherits CrudPageBase<PostView>`,
+		`CreatePath="/blog/posts/edit"`,
 		"filterTitleContains",
 		"filterCustomerId",
 		"filterCustomerNameContains",
 		"ViewDetails",
 		"DeleteAsync",
-		`Navigation.NavigateTo($"/blog/posts/{id}")`,
+		// the page composes the shared components, not raw chrome
+		"<SearchFilterBar",
+		"<EntityTable",
+		"<PaginationBar",
+		// failed loads/deletes are surfaced to the user, not just logged
+		"errorMessage is not null",
+		`<div class="alert alert-danger" role="alert">@errorMessage</div>`,
+		`Navigation.NavigateTo($"{ListPath}/{item.Id}")`,
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostCrud.razor (list) rendering is missing %q\n--- rendered ---\n%s", expected, out)
 		}
 	}
-	// The inline edit form + m2m logic moved to the dedicated Edit page.
-	for _, forbidden := range []string{"EditForm", "TagOptions", "SyncTagsAsync", "form."} {
+	// The shared chrome + logic live in the Components/Shared layer, not here.
+	for _, forbidden := range []string{"EditForm", "TagOptions", "SyncTagsAsync", "form.", "Advanced filters", "LoadPageAsync", "protected const int PageSize"} {
 		if strings.Contains(out, forbidden) {
 			t.Errorf("PostCrud.razor (list) must not contain %q\n--- rendered ---\n%s", forbidden, out)
 		}
+	}
+}
+
+func TestRenderBlazorSharedCrudComponents(t *testing.T) {
+	d := m2mData()
+	for _, tc := range []struct {
+		path string
+		want []string
+	}{
+		{
+			path: "files/blazor-context/src/{{ .Project }}.AppBlazor/Components/Shared/SearchFilterBar.razor.tmpl",
+			want: []string{"Advanced filters", `@onclick="ApplyAsync"`, `@onclick="ClearAsync"`, `field.Kind`, "relation", "number", "date", "bool"},
+		},
+		{
+			path: "files/blazor-context/src/{{ .Project }}.AppBlazor/Components/Shared/EntityTable.razor.tmpl",
+			want: []string{"@typeparam TItem", "table table-hover align-middle mb-0", `OnEdit.InvokeAsync`, `OnDelete.InvokeAsync`, "No records found.", `colspan="99"`},
+		},
+		{
+			path: "files/blazor-context/src/{{ .Project }}.AppBlazor/Components/Shared/PaginationBar.razor.tmpl",
+			want: []string{"Load more", "HasMore", "OnLoadMore"},
+		},
+		{
+			path: "files/blazor-context/src/{{ .Project }}.AppBlazor/Components/Shared/CrudHeader.razor.tmpl",
+			want: []string{"breadcrumb", "CreatePath", "+ Create new"},
+		},
+		{
+			path: "files/blazor-context/src/{{ .Project }}.AppBlazor/Components/Shared/CrudPageBase.cs.tmpl",
+			want: []string{"public abstract class CrudPageBase<TItem> : ComponentBase", "protected abstract Task<(List<TItem> Items, long TotalCount)> FetchPageAsync(int page)", "protected async Task SearchAsync()", "protected async Task LoadMoreAsync()", "protected async Task DeleteAsync(long id)", "protected const int PageSize = 25", "protected bool hasMore"},
+		},
+		{
+			path: "files/blazor-context/src/{{ .Project }}.AppBlazor/Components/Shared/FilterField.cs.tmpl",
+			want: []string{"public sealed class FilterField", "public Func<object?> GetValue", "public Action<object?> SetValue", "public sealed record FilterOption(long Id, string Display)"},
+		},
+		{
+			path: "files/blazor-context/src/{{ .Project }}.AppBlazor/Components/Shared/EntityColumn.cs.tmpl",
+			want: []string{"public sealed class EntityColumn<TItem>", "public Func<TItem, object?> Display"},
+		},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			out := renderTemplate(t, tc.path, d)
+			for _, expected := range tc.want {
+				if !strings.Contains(out, expected) {
+					t.Errorf("rendering is missing %q\n--- rendered ---\n%s", expected, out)
+				}
+			}
+		})
 	}
 }
 
@@ -289,6 +439,13 @@ func TestBlazorEditManyToManyRendering(t *testing.T) {
 		"private sealed class TagOption",
 		"private sealed class PostEditor",
 		`<EditForm Model="form" OnValidSubmit="SaveAsync" FormName="PostEdit">`,
+		// failed saves are surfaced to the user, not silently dropped
+		"private string? errorMessage;",
+		"errorMessage = \"Could not save Post. Please check the form and try again.\";",
+		// a failed/not-found record load surfaces a friendly message instead of
+		// a silent empty form
+		"errorMessage = \"This Post could not be found. It may have been deleted.\";",
+		"errorMessage = \"Could not load this Post. Please try again.\";",
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostEdit.razor rendering is missing %q\n--- rendered ---\n%s", expected, out)
@@ -305,6 +462,11 @@ func TestBlazorDetailsManyToManyRendering(t *testing.T) {
 		`@string.Join(", ", TagOptions.Where(x => selectedTagIds.Contains(x.Id)).Select(x => x.Name))`,
 		"private HashSet<long> selectedTagIds = [];",
 		`$"/api/blog/post-tag/search?postId={Id}&pageSize=1000"`,
+		// a failed/not-found load surfaces a friendly state, not an infinite
+		// "Loading..." or a raw error page
+		"private bool loadFailed;",
+		`<div class="alert alert-danger" role="alert">This Post could not be found. It may have been deleted, or the service is unavailable.</div>`,
+		"catch (Exception)",
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostDetails.razor rendering is missing %q\n--- rendered ---\n%s", expected, out)
@@ -322,9 +484,9 @@ func TestMvcControllerManyToManyRendering(t *testing.T) {
 		"await SyncTagsAsync(created.Id, selectedTagIds ?? [], cancellationToken);",
 		"await SyncTagsAsync(id, selectedTagIds ?? [], cancellationToken);",
 		"ViewBag.TagSelectedIds",
-		"private async Task SyncTagsAsync(long PostId, long[] selectedTagIds, CancellationToken cancellationToken)",
-		"postTagService.SearchAsync(null, PostId, null, 1, 1000, cancellationToken)",
-		"new PostTagRequest(PostId, id)",
+		// the join rows are replaced in ONE transactional service call
+		"private Task SyncTagsAsync(long PostId, long[] selectedTagIds, CancellationToken cancellationToken) =>",
+		"service.ReplaceTagsAsync(PostId, selectedTagIds, cancellationToken);",
 		// SelectedIds must always be List<long> (the views cast to it), never
 		// a raw long[] which would throw a RuntimeBinderException.
 		"ViewBag.TagSelectedIds = new List<long>();",
@@ -543,8 +705,8 @@ func TestRenderTestsMvcRelationsTemplate(t *testing.T) {
 	out := renderTemplate(t, path, d)
 	for _, expected := range []string{
 		"public class PostMvcRelationTests",
-		`new CustomerCrudService(db, new CustomerValidator()).CreateAsync(new CustomerRequest("Name sample 1"))`,
-		`new TagCrudService(db, new TagValidator()).CreateAsync(new TagRequest("Name sample 1"))`,
+		`new CustomerCrudService(dbFactory, new CustomerValidator()).CreateAsync(new CustomerRequest("Name sample 1"))`,
+		`new TagCrudService(dbFactory, new TagValidator()).CreateAsync(new TagRequest("Name sample 1"))`,
 		`new KeyValuePair<string, string>("Title", "Title sample"),`,
 		`new KeyValuePair<string, string>("CustomerId", customer.ToString()),`,
 		`new KeyValuePair<string, string>("selectedTagIds", tag1.ToString()),`,
@@ -670,6 +832,89 @@ func TestBlazorNavHref(t *testing.T) {
 	}
 }
 
+func TestQuickAddDefaultNullableFk(t *testing.T) {
+	// A nullable FK must default to null, never 0: saving with 0 violates the
+	// (optional) foreign-key constraint and, on the shared desktop DbContext,
+	// poisons every later save.
+	cases := map[string]string{
+		"long?  fk":   quickAddDefault(Property{Name: "CustomerId", CSharpType: "long?", RelationTarget: "Customer"}),
+		"long   fk":   quickAddDefault(Property{Name: "RegionId", CSharpType: "long", RelationTarget: "Region"}),
+		"int?":        quickAddDefault(Property{Name: "Age", CSharpType: "int?"}),
+		"decimal?":    quickAddDefault(Property{Name: "Price", CSharpType: "decimal?"}),
+		"guid?":       quickAddDefault(Property{Name: "Ref", CSharpType: "Guid?"}),
+		"bool":        quickAddDefault(Property{Name: "Active", CSharpType: "bool"}),
+		"string?":     quickAddDefault(Property{Name: "Notes", CSharpType: "string?"}),
+		"date (none)": quickAddDefault(Property{Name: "When", CSharpType: "DateOnly"}),
+	}
+	want := map[string]string{
+		"long?  fk": "null",
+		"long   fk": "0",
+		"int?":      "null",
+		"decimal?":  "null",
+		"guid?":     "null",
+		"bool":      "false",
+		"string?":   "null",
+		"date (none)": "",
+	}
+	for name, got := range cases {
+		if got != want[name] {
+			t.Errorf("quickAddDefault(%s) = %q, want %q", name, got, want[name])
+		}
+	}
+}
+
+func TestBuildRelationQuickAddsNullableFk(t *testing.T) {
+	// Post has an OPTIONAL customer:Customer? -- the quick-add must create it
+	// with CustomerId = null so the optional FK saves cleanly.
+	entities := []EntityMeta{
+		{Name: "Customer", Properties: []Property{{Name: "Name", CSharpType: "string"}}},
+		{Name: "Post", Properties: []Property{
+			{Name: "Title", CSharpType: "string"},
+			{Name: "Body", CSharpType: "string?"},
+			{Name: "CustomerId", CSharpType: "long?", RelationTarget: "Customer"},
+		}},
+	}
+	quickAdds, _ := buildRelationQuickAdds(
+		[]Relation{{Name: "Post", Target: "Post", DisplayProperty: "Title"}},
+		entities)
+	if got := quickAdds["Post"]; got != "new PostRow(0, name, null, null)" {
+		t.Fatalf("Post quick-add (optional customer FK) = %q, want null FK default", got)
+	}
+}
+
+func TestRenderDatabaseSaveSafety(t *testing.T) {
+	for _, path := range []string{
+		"files/dm/src/{{ .Project }}.Persistence/{{ .Project }}Database.cs.tmpl",
+		"files/cqrs/src/{{ .Project }}.Persistence/{{ .Project }}Database.cs.tmpl",
+	} {
+		out := renderTemplate(t, path, m2mData())
+		for _, expected := range []string{
+			// a failed save resets the change tracker so one bad row can't
+			// poison later saves on the shared singleton desktop DbContext
+			"await SaveChangesSafelyAsync(cancellationToken);",
+			"public async Task<int> SaveChangesSafelyAsync(CancellationToken cancellationToken = default)",
+			"ChangeTracker.Clear();",
+		} {
+			if !strings.Contains(out, expected) {
+				t.Errorf("%s missing %q\n--- rendered ---\n%s", path, expected, out)
+			}
+		}
+	}
+}
+
+func TestRenderCrudServiceUsesSafeSave(t *testing.T) {
+	out := renderTemplate(t, "files/dm-crud/src/{{ .Project }}.Application/{{ .Aggregate }}CrudService.cs.tmpl", m2mData())
+	if !strings.Contains(out, "await database.SaveChangesSafelyAsync(cancellationToken);") {
+		t.Errorf("CrudService.CreateAsync must use the safe save that clears the tracker on failure\n--- rendered ---\n%s", out)
+	}
+	// The transactional m2m replace method legitimately uses the raw
+	// SaveChangesAsync INSIDE its transaction (the transaction is the safety
+	// net there); every other save path must stay on the safe helper.
+	if !strings.Contains(out, "await database.SaveChangesAsync(cancellationToken);\n        await transaction.CommitAsync(cancellationToken);") {
+		t.Errorf("CrudService.Replace* must save inside its transaction\n--- rendered ---\n%s", out)
+	}
+}
+
 func TestBuildRelationQuickAdds(t *testing.T) {
 	entities := []EntityMeta{
 		{Name: "Customer", Properties: []Property{{Name: "Name", CSharpType: "string"}}},
@@ -714,10 +959,12 @@ func TestRenderWpfEditViewQuickAdd(t *testing.T) {
 	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Views/{{ .Name }}EditView.xaml.tmpl"
 	out := renderTemplate(t, path, d)
 	for _, expected := range []string{
-		// clicking the dropdown flips it into editable mode; "+" commits
+		// clicking the dropdown flips it into editable mode; "+" commits.
+		// The combo must NOT carry an x:Name (named elements inside a
+		// UserControl's property content trip MC3093) -- the code-behind
+		// finds it as the "+" button's sibling in the shared DockPanel.
 		`Content="+"`,
 		`Click="OnAddCustomerClick"`,
-		`x:Name="customerCombo"`,
 		`PreviewMouseLeftButtonDown="BeginCustomerQuickAdd"`,
 		`DropDownOpened="OnCustomerDropDownOpened"`,
 		`IsEditable="{Binding AddCustomerMode, Mode=TwoWay}"`,
@@ -725,6 +972,9 @@ func TestRenderWpfEditViewQuickAdd(t *testing.T) {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostEditView.xaml quick-add missing %q\n--- rendered ---\n%s", expected, out)
 		}
+	}
+	if strings.Contains(out, `x:Name="customerCombo"`) {
+		t.Errorf("PostEditView.xaml must not name the quick-add combo (MC3093 namescope conflict)\n%s", out)
 	}
 	if strings.Contains(out, "NewCustomerName") {
 		t.Errorf("PostEditView.xaml must not rely on a Text binding for the quick-add\n%s", out)
@@ -743,9 +993,11 @@ func TestRenderWpfEditViewCodeBehindQuickAdd(t *testing.T) {
 		// list stays closed while typing after entering edit mode
 		"private void OnCustomerDropDownOpened(object sender, System.EventArgs e)",
 		"((ComboBox)sender).IsDropDownOpen = false;",
-		// "+" reads the typed text straight from the combo
+		// "+" reads the typed text from the combo found via the sender's
+		// DockPanel sibling (no x:Name, no binding)
 		"private void OnAddCustomerClick(object sender, RoutedEventArgs e)",
-		"viewModel.AddCustomer(customerCombo.Text)",
+		"sender is FrameworkElement { Parent: DockPanel panel }",
+		"viewModel.AddCustomer(combo.Text)",
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostEditView.xaml.cs quick-add handler missing %q\n--- rendered ---\n%s", expected, out)
@@ -761,7 +1013,8 @@ func TestRenderWpfEditViewModelQuickAddCatch(t *testing.T) {
 	out := renderTemplate(t, path, d)
 	for _, expected := range []string{
 		"public bool AddCustomer(string name)",
-		"catch (Exception)",
+		"catch (Exception ex)",
+		`AppLog.Error(ex, "Quick-add of {Target} failed for {Entity}", "Customer", "Post");`,
 		`ValidationMessage = "Could not add Customer. You must add its related record(s) first.";`,
 	} {
 		if !strings.Contains(out, expected) {
@@ -795,6 +1048,8 @@ func TestBlazorEditQuickAdd(t *testing.T) {
 		"private async Task AddCustomerAsync()",
 		`await Http.PostAsJsonAsync("/api/blog/customer", new CustomerRequest(newCustomerName))`,
 		"form.CustomerId = created.Id;",
+		// a failed quick-add is surfaced to the user, not silently dropped
+		"errorMessage = \"Could not add Customer. Please try again.\";",
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostEdit.razor quick-add missing %q\n--- rendered ---\n%s", expected, out)
@@ -876,6 +1131,50 @@ func TestRenderTestsIntegrationRelationsTemplate(t *testing.T) {
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostRelationApiTests rendering is missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+}
+
+func TestRenderTransactionalM2mSync(t *testing.T) {
+	d := m2mData() // dm backend, tags:Tag[] join PostTag
+
+	// The declaring aggregate's CrudService owns an atomic replace method.
+	crud := renderTemplate(t, "files/dm-crud/src/{{ .Project }}.Application/{{ .Aggregate }}CrudService.cs.tmpl", d)
+	for _, expected := range []string{
+		"public async Task<CommandResponse> ReplaceTagsAsync(long postId, long[] selectedTagIds, CancellationToken cancellationToken = default)",
+		"await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);",
+		"database.PostTags.Where(x => x.PostId == postId)",
+		"database.PostTags.RemoveRange(links.Where(l => !keep.Contains(l.TagId)));",
+		"database.PostTags.Add(new PostTag(postId, id));",
+		"await database.SaveChangesAsync(cancellationToken);",
+		"await transaction.CommitAsync(cancellationToken);",
+	} {
+		if !strings.Contains(crud, expected) {
+			t.Errorf("CrudService transactional m2m sync missing %q\n--- rendered ---\n%s", expected, crud)
+		}
+	}
+
+	// dm WPF: the store exposes the sync and delegates to the service.
+	istore := renderTemplate(t, "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Services/I{{ .Name }}Store.cs.tmpl", d)
+	if !strings.Contains(istore, "void ReplaceTags(long postId, long[] selectedTagIds);") {
+		t.Errorf("dm IStore missing ReplaceTags\n%s", istore)
+	}
+	store := renderTemplate(t, "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Services/{{ .Name }}Store.cs.tmpl", d)
+	if !strings.Contains(store, "service.ReplaceTagsAsync(postId, selectedTagIds)") {
+		t.Errorf("dm Store missing service.ReplaceTagsAsync\n%s", store)
+	}
+
+	// HTTP-backed (cqrs/es) WPF keeps the per-call loop and no store method.
+	http := m2mData()
+	http.Backend = "cqrs"
+	httpIStore := renderTemplate(t, "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Services/I{{ .Name }}Store.cs.tmpl", http)
+	if strings.Contains(httpIStore, "ReplaceTags") {
+		t.Errorf("HTTP IStore must not declare ReplaceTags\n%s", httpIStore)
+	}
+	httpVM := renderTemplate(t, "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/ViewModels/{{ .Name }}EditViewModel.cs.tmpl", http)
+	for _, expected := range []string{"new PostTagRow(0, saved.Id, id)", "postTagStore.Delete(link.Id);"} {
+		if !strings.Contains(httpVM, expected) {
+			t.Errorf("HTTP EditViewModel must keep the per-call m2m sync (missing %q)\n%s", expected, httpVM)
 		}
 	}
 }

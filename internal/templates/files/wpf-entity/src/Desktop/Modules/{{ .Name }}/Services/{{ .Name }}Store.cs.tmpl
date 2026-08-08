@@ -102,6 +102,11 @@ public sealed class {{ .Name }}Store({{ .Name }}CrudService service) : I{{ .Name
     }
 
     public void Delete(long id) => Task.Run(() => service.DeleteAsync(id)).GetAwaiter().GetResult();
+{{- range .ManyToMany }}
+
+    public void Replace{{ .Target }}s(long {{ camel $.Name }}Id, long[] selected{{ .Target }}Ids) =>
+        Task.Run(() => service.Replace{{ .Target }}sAsync({{ camel $.Name }}Id, selected{{ .Target }}Ids)).GetAwaiter().GetResult();
+{{- end }}
 }
 {{- else if eq .Backend "ddd-local" }}
 using Microsoft.EntityFrameworkCore;

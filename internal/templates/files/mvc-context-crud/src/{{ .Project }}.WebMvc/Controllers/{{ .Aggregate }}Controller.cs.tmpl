@@ -15,10 +15,7 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
     {
         if (page < 1) page = 1;
         var (items, totalCount) = await service.SearchAsync(search{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }}, page, PageSize, cancellationToken);
-        var model = new {{ .Aggregate }}IndexViewModel(items, totalCount, page, PageSize, search{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }});
-{{- range .Relations }}
-        model.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
-{{- end }}
+        var model = new {{ .Aggregate }}IndexViewModel(items, totalCount, page, PageSize, search{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }}{{ range .Relations }}, await {{ camel .Target }}Service.GetAllAsync(cancellationToken){{ end }});
         return View(model);
     }
 
@@ -139,16 +136,9 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
     }
 
 {{- range .ManyToMany }}
-    private async Task Sync{{ .Target }}sAsync(long {{ $.Aggregate }}Id, long[] selected{{ .Target }}Ids, CancellationToken cancellationToken)
-    {
-        var keep = selected{{ .Target }}Ids.ToHashSet();
-        var links = (await {{ camel .JoinEntity }}Service.SearchAsync(null, {{ $.Aggregate }}Id, null, 1, 1000, cancellationToken)).Items;
-        foreach (var link in links)
-            if (!keep.Contains(link.{{ .Target }}Id))
-                await {{ camel .JoinEntity }}Service.DeleteAsync(link.Id, cancellationToken);
-        var existing = links.Select(x => x.{{ .Target }}Id).ToHashSet();
-        foreach (var id in keep.Except(existing))
-            await {{ camel .JoinEntity }}Service.CreateAsync(new {{ .JoinEntity }}Request({{ $.Aggregate }}Id, id), cancellationToken);
-    }
+    // The join rows are replaced in ONE transactional service call, so a
+    // mid-sync failure can never leave partial links behind.
+    private Task Sync{{ .Target }}sAsync(long {{ $.Aggregate }}Id, long[] selected{{ .Target }}Ids, CancellationToken cancellationToken) =>
+        service.Replace{{ .Target }}sAsync({{ $.Aggregate }}Id, selected{{ .Target }}Ids, cancellationToken);
 {{- end }}
 }

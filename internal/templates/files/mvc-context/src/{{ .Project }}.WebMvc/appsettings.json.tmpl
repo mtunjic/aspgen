@@ -1,0 +1,22 @@
+{
+  "ConnectionStrings": {
+{{- if eq .Database "postgres" }}
+    "DefaultConnection": "Host=localhost;Database={{ kebab .Project }};Username=postgres;Password=postgres"
+{{- else }}
+    "DefaultConnection": "Data Source={{ kebab .Project }}.db"
+{{- end }}
+  },
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft.AspNetCore": "Warning",
+        "Microsoft.EntityFrameworkCore": "Warning"
+      }
+    },
+    "WriteTo": [
+      { "Name": "Console" },
+      { "Name": "File", "Args": { "path": "logs/{{ kebab .Project }}-ui.log", "rollingInterval": "Day", "retainedFileCountLimit": 7 } }
+    ]
+  }
+}

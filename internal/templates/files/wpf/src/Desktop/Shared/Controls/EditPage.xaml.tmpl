@@ -1,0 +1,54 @@
+<UserControl x:Class="{{ .Project }}.Desktop.Shared.Controls.EditPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"{{ if eq .Theme "wpfui" }}
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"{{ end }}>
+    <UserControl.InputBindings>
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
+        <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
+    </UserControl.InputBindings>
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header band with accent background + separator -->
+        <Border Grid.Row="0" Style="{StaticResource HeaderBandStyle}">
+{{- if eq .Theme "wpfui" }}
+            <ui:TextBlock FontTypography="TitleLarge" Text="{Binding Title}" />
+{{- else }}
+            <TextBlock FontSize="24" FontWeight="SemiBold" Text="{Binding Title}" />
+{{- end }}
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <ContentPresenter Content="{Binding FormContent, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+{{- if eq .Theme "wpfui" }}
+                <ui:InfoBar Margin="0,0,0,12" IsOpen="{Binding HasValidationError}" IsClosable="False" Severity="Error" Title="Validation" Message="{Binding ValidationMessage}" />
+{{- else }}
+                <TextBlock Margin="0,0,0,12" Foreground="Firebrick" Text="{Binding ValidationMessage}" />
+{{- end }}
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Action footer -->
+        <Border Grid.Row="2" Margin="0,12,0,0" Padding="0,12,0,0" BorderThickness="0,1,0,0"
+{{- if eq .Theme "wpfui" }}
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+{{- else }}
+                BorderBrush="#E2E8F0">
+{{- end }}
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+{{- if eq .Theme "wpfui" }}
+                <ui:Button Padding="14,7" Appearance="Primary" Content="Save" Icon="{ui:SymbolIcon Save24}" ToolTip="Save changes" Command="{Binding SaveCommand}" />
+                <ui:Button Margin="8,0,0,0" Padding="12,6" Content="Cancel" Icon="{ui:SymbolIcon Dismiss24}" ToolTip="Cancel editing" Command="{Binding CancelCommand}" />
+{{- else }}
+                <Button Padding="12,6" FontWeight="SemiBold" Content="Save" Command="{Binding SaveCommand}" />
+                <Button Margin="8,0,0,0" Padding="12,6" Content="Cancel" Command="{Binding CancelCommand}" />
+{{- end }}
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

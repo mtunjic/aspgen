@@ -4,4 +4,11 @@ namespace {{ .Namespace }}.Services;
 
 public interface I{{ .Name }}Store : global::{{ .Project }}.Desktop.Shared.IListStore<{{ .Name }}Row, {{ .Name }}SearchCriteria, {{ .Name }}PageResult>
 {
+{{- if eq .Backend "dm" }}
+{{- range .ManyToMany }}
+    // Atomically replaces the {{ .Target }} links of one {{ $.Name }} (the
+    // dm-tier store delegates to the service's transactional method).
+    void Replace{{ .Target }}s(long {{ camel $.Name }}Id, long[] selected{{ .Target }}Ids);
+{{- end }}
+{{- end }}
 }

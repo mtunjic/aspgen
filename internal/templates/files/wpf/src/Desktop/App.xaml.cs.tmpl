@@ -3,6 +3,7 @@ using Prism.DryIoc;
 using Prism.Ioc;
 using Prism.Modularity;
 using Prism.Navigation.Regions;
+using {{ .Project }}.Desktop.Shared;
 {{- if eq .Theme "wpfui" }}
 using Wpf.Ui;
 {{- end }}
@@ -26,6 +27,17 @@ public partial class App : PrismApplication
 
     protected override void OnInitialized()
     {
+        // User-facing messages live in the UI (snackbars/InfoBars); AppLog is
+        // the developer channel (Debug + rolling file under logs/). An
+        // unhandled UI exception is logged in full and shown to the user as a
+        // friendly dialog -- never a raw stack trace.
+        AppLog.Configure();
+        DispatcherUnhandledException += (_, e) =>
+        {
+            AppLog.Error(e.Exception, "Unhandled UI exception");
+            e.Handled = true;
+            MessageBox.Show("An unexpected error occurred. Details have been written to the log.", "Unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
+        };
         Container.Resolve<IRegionManager>().RequestNavigate("MainRegion", "DashboardView");
         base.OnInitialized();
     }
@@ -48,6 +60,7 @@ public partial class App : PrismApplication
         {
             disposableContainer.Dispose();
         }
+        AppLog.CloseAndFlush();
         base.OnExit(e);
     }
 }

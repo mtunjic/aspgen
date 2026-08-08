@@ -9,4 +9,8 @@ public sealed class HomeController : Controller
         // aspgen:redirect
         return View();
     }
+
+    // Friendly error page for unhandled exceptions; the full detail is only
+    // in the structured log (see Program.cs UseExceptionHandler).
+    public IActionResult Error() => View();
 }

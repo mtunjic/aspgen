@@ -4,16 +4,25 @@ using {{ .Project }}.DomainModel.{{ .Context }};
 
 namespace {{ .Project }}.Persistence.Repositories;
 
-public sealed class {{ .Name }}({{ .Project }}Database database) : I{{ .Name }}
+// Each operation gets its own DbContext from the factory (the repository is a
+// singleton, and a shared EF context would race across background threads).
+public sealed class {{ .Name }}(IDbContextFactory<{{ .Project }}Database> databaseFactory) : I{{ .Name }}
 {
-    public Task<{{ .Aggregate }}?> GetByIdAsync(long id, CancellationToken cancellationToken = default) =>
-        database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
+    public async Task<{{ .Aggregate }}?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
+    {
+        await using var database = databaseFactory.CreateDbContext();
+        return await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
+    }
 
-    public async Task<IReadOnlyList<{{ .Aggregate }}>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        await database.{{ .Aggregate }}s.Where(x => !x.Deleted).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<{{ .Aggregate }}>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        await using var database = databaseFactory.CreateDbContext();
+        return await database.{{ .Aggregate }}s.Where(x => !x.Deleted).ToListAsync(cancellationToken);
+    }
 
     public async Task<CommandResponse> AddAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default)
     {
+        await using var database = databaseFactory.CreateDbContext();
         aggregate.Init("system");
         database.Add(aggregate);
         return await database.TrySaveChangesAsync(cancellationToken);
@@ -21,12 +30,14 @@ public sealed class {{ .Name }}({{ .Project }}Database database) : I{{ .Name }}
 
     public async Task<CommandResponse> SaveAsync({{ .Aggregate }} aggregate, CancellationToken cancellationToken = default)
     {
+        await using var database = databaseFactory.CreateDbContext();
         aggregate.Mark("system");
         return await database.TrySaveChangesAsync(cancellationToken);
     }
 
     public async Task<CommandResponse> DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
+        await using var database = databaseFactory.CreateDbContext();
         var aggregate = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
         if (aggregate is null) return CommandResponse.Fail().AddMessage("{{ .Aggregate }} not found.");
         aggregate.SoftDelete();

@@ -1,0 +1,70 @@
+using Microsoft.AspNetCore.Components;
+
+namespace {{ .Project }}.AppBlazor.Components.Shared;
+
+// Shared search/filter/pagination/delete plumbing for every CRUD page.
+// Pages only supply the API route, the back-to-list route, and a
+// FetchPageAsync that builds the aggregate-specific query string.
+public abstract class CrudPageBase<TItem> : ComponentBase
+{
+    [Inject] protected HttpClient Http { get; set; } = null!;
+    [Inject] protected NavigationManager Navigation { get; set; } = null!;
+    [Inject] protected ILogger<CrudPageBase<TItem>> Logger { get; set; } = null!;
+
+    protected const int PageSize = 25;
+    protected List<TItem> items = [];
+    protected int page = 1;
+    protected long totalCount;
+    // Honest, user-facing error; full detail is only ever in the log.
+    protected string? errorMessage;
+
+    protected bool hasMore => (long)page * PageSize < totalCount;
+
+    protected abstract string ApiPath { get; }
+    protected abstract string ListPath { get; }
+
+    // Returns the page of rows (with the total count) the current filters
+    // select; the page builds the query string from its typed filter fields.
+    protected abstract Task<(List<TItem> Items, long TotalCount)> FetchPageAsync(int page);
+
+    protected async Task SearchAsync()
+    {
+        page = 1;
+        await LoadPageAsync(append: false);
+    }
+
+    protected async Task LoadMoreAsync()
+    {
+        page++;
+        await LoadPageAsync(append: true);
+    }
+
+    protected async Task DeleteAsync(long id)
+    {
+        var response = await Http.DeleteAsync($"{ApiPath}/{id}");
+        if (!response.IsSuccessStatusCode)
+        {
+            Logger.LogWarning("Delete failed with {Status} for {ApiPath}/{Id}", (int)response.StatusCode, ApiPath, id);
+            errorMessage = "Could not delete the record. Please try again.";
+            return;
+        }
+        await SearchAsync();
+    }
+
+    private async Task LoadPageAsync(bool append)
+    {
+        try
+        {
+            var (fetched, total) = await FetchPageAsync(page);
+            if (append) items.AddRange(fetched); else items = fetched.ToList();
+            totalCount = total;
+            errorMessage = null;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load page {Page} of {ApiPath}", page, ApiPath);
+            errorMessage = "Could not load the records. Please try again.";
+        }
+    }
+}

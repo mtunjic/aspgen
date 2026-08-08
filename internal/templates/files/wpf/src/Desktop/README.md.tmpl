@@ -36,3 +36,18 @@ CRUD keyboard shortcuts are available in each module: `Ctrl+N` (new), `Ctrl+S` (
 
 Global shell shortcuts are also available: `Alt+Home` returns to the dashboard and `Ctrl+,` opens Settings.
 {{- end }}
+
+## Logging
+
+Structured logs are written to the debugger output and a rolling file under
+`logs\{{ kebab .Project }}-.log`. The default level is `Information`; override
+it at runtime with the `ASPGENT_LOG_LEVEL` environment variable
+(`Verbose`/`Debug`/`Information`/`Warning`/`Error`/`Fatal`), e.g.:
+
+```powershell
+$env:ASPGENT_LOG_LEVEL = "Debug"
+dotnet run --project .\src\Desktop\{{ .Project }}.Desktop.csproj
+```
+
+User-facing messages (snackbars, InfoBars, confirmation dialogs) never leak
+stack traces — full exception detail only ever goes to the log.

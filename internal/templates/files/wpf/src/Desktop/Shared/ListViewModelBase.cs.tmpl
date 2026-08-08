@@ -71,7 +71,7 @@ public abstract class ListViewModelBase<TStore, TRow, TCriteria, TPage> : Bindab
         Search();
     }
 
-    protected abstract string EntityName { get; }
+    public abstract string EntityName { get; }
     protected abstract string EditViewName { get; }
     protected abstract string DetailsViewName { get; }
     protected abstract void LoadRelated();
@@ -166,6 +166,12 @@ public abstract class ListViewModelBase<TStore, TRow, TCriteria, TPage> : Bindab
             TotalCount = result.TotalCount;
             RaisePropertyChanged(nameof(IsEmpty));
         }
+        catch (Exception ex)
+        {
+            // Full detail goes to the structured log; the user sees an empty
+            // list rather than a crash.
+            AppLog.Error(ex, "Search failed for {Entity}", EntityName);
+        }
         finally
         {
             IsBusy = false;
@@ -247,6 +253,10 @@ public abstract class ListViewModelBase<TStore, TRow, TCriteria, TPage> : Bindab
 {{- if eq .Theme "wpfui" }}
             snackbarService.Show("Deleted", EntityName + " deleted successfully.", ControlAppearance.Success, new SymbolIcon { Symbol = SymbolRegular.Delete24 }, TimeSpan.FromSeconds(4));
 {{- end }}
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error(ex, "Delete failed for {Entity} #{Id}", EntityName, item.Id);
         }
         finally
         {

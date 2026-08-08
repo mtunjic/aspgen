@@ -1,0 +1,84 @@
+@if (Filters.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">Search &amp; filter</div>
+        <div class="card-body">
+            <div class="d-flex gap-2">
+                <input class="form-control" placeholder="@SearchPlaceholder" value="@SearchText"
+                       @oninput="@(e => SearchTextChanged.InvokeAsync(e.Value?.ToString()))" />
+                <button class="btn btn-outline-primary" @onclick="ApplyAsync">Search</button>
+            </div>
+            <details class="mt-3">
+                <summary class="text-secondary small">Advanced filters</summary>
+                <div class="row g-2 mt-1">
+                    @foreach (var field in Filters)
+                    {
+                        <div class="col-auto">
+                            <label class="form-label small">@field.Label</label>
+                            @switch (field.Kind)
+                            {
+                                case "string":
+                                    <input class="form-control form-control-sm" value="@field.GetValue()?.ToString()" @onchange="@(e => SetValue(field, e.Value?.ToString()))" />
+                                    break;
+                                case "number":
+                                    <input type="number" class="form-control form-control-sm" value="@field.GetValue()?.ToString()" @onchange="@(e => SetValue(field, e.Value?.ToString()))" />
+                                    break;
+                                case "date":
+                                    <input type="date" class="form-control form-control-sm" value="@DateValue(field.GetValue())" @onchange="@(e => SetValue(field, e.Value?.ToString()))" />
+                                    break;
+                                case "bool":
+                                    <select class="form-select form-select-sm" value="@BoolValue(field.GetValue())" @onchange="@(e => SetValue(field, e.Value?.ToString()))">
+                                        <option value="">Any</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                    break;
+                                case "relation":
+                                    <select class="form-select form-select-sm" value="@field.GetValue()?.ToString()" @onchange="@(e => SetValue(field, e.Value?.ToString()))">
+                                        <option value="">Any</option>
+                                        @foreach (var option in field.Options ?? [])
+                                        {
+                                            <option value="@option.Id">@option.Display</option>
+                                        }
+                                    </select>
+                                    break;
+                            }
+                        </div>
+                    }
+                    <div class="col-auto align-self-end">
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ClearAsync">Clear</button>
+                        <button class="btn btn-primary btn-sm" @onclick="ApplyAsync">Apply</button>
+                    </div>
+                </div>
+            </details>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public List<FilterField> Filters { get; set; } = [];
+    [Parameter] public string? SearchText { get; set; }
+    [Parameter] public string SearchPlaceholder { get; set; } = "Search...";
+    [Parameter] public EventCallback<string?> SearchTextChanged { get; set; }
+    [Parameter] public EventCallback Apply { get; set; }
+    [Parameter] public EventCallback Clear { get; set; }
+
+    private void SetValue(FilterField field, object? value)
+    {
+        field.SetValue.Invoke(value);
+        StateHasChanged();
+    }
+
+    private async Task ApplyAsync() => await Apply.InvokeAsync();
+    private async Task ClearAsync() => await Clear.InvokeAsync();
+
+    private static string? DateValue(object? value) => value switch
+    {
+        DateOnly d => d.ToString("yyyy-MM-dd"),
+        DateTime dt => dt.ToString("yyyy-MM-dd"),
+        _ => null
+    };
+
+    private static string? BoolValue(object? value) =>
+        value is bool b ? (b ? "true" : "false") : "";
+}

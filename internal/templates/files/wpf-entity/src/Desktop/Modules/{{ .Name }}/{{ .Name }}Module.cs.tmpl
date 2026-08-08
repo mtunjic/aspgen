@@ -11,6 +11,7 @@ using {{ .Project }}.Infrastructure.Seeding;
 {{- if eq .Backend "dm" }}
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using {{ .Project }}.Application;
 using {{ .Project }}.Persistence;
 {{- end }}
@@ -48,7 +49,7 @@ public sealed class {{ .Name }}Module : IModule
         });
 {{- end }}
 {{- if eq .Backend "dm" }}
-        containerRegistry.RegisterSingleton<{{ .Project }}Database>(() =>
+        containerRegistry.RegisterSingleton<IDbContextFactory<{{ .Project }}Database>>(() =>
         {
             // Must match the exact "Data Source={{.Project}}.db" fallback connection
             // string cqrs/es's own Infrastructure/DependencyInjection.cs.tmpl uses for
@@ -59,9 +60,13 @@ public sealed class {{ .Name }}Module : IModule
             var options = new DbContextOptionsBuilder<{{ .Project }}Database>()
                 .UseSqlite("Data Source={{ .Project }}.db")
                 .Options;
-            var db = new {{ .Project }}Database(options);
+            // Each CrudService call creates its own pooled DbContext, so the
+            // singleton services are safe to call from background threads and a
+            // failed save can never poison a later, unrelated one.
+            var factory = new PooledDbContextFactory<{{ .Project }}Database>(options);
+            using var db = factory.CreateDbContext();
             db.Database.EnsureCreated();
-            return db;
+            return factory;
         });
         containerRegistry.Register<IValidator<{{ .Name }}Request>, {{ .Name }}Validator>();
         containerRegistry.RegisterSingleton<{{ .Name }}CrudService>();

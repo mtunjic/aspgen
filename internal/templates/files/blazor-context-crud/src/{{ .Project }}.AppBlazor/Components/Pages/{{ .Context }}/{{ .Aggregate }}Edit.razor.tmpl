@@ -20,6 +20,11 @@
 
 <h1 class="h3 mb-4">@(editingId == 0 ? "Create {{ .Aggregate }}" : "Edit {{ .Aggregate }}")</h1>
 
+@if (errorMessage is not null)
+{
+    <div class="alert alert-danger" role="alert">@errorMessage</div>
+}
+
 <div class="card">
     <div class="card-body">
         <EditForm Model="form" OnValidSubmit="SaveAsync" FormName="{{ .Aggregate }}Edit">
@@ -82,6 +87,7 @@
     private const string ApiPath = "/api/{{ kebab .Context }}/{{ kebab .Aggregate }}";
     [Parameter] public long Id { get; set; }
     private long editingId;
+    private string? errorMessage;
     private {{ .Aggregate }}Editor form = new();
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
@@ -106,9 +112,14 @@
 {{- end }}
         if (editingId != 0)
         {
-            var item = await Http.GetFromJsonAsync<{{ .Aggregate }}View>($"{ApiPath}/{editingId}");
-            if (item is not null)
+            try
             {
+                var item = await Http.GetFromJsonAsync<{{ .Aggregate }}View>($"{ApiPath}/{editingId}");
+                if (item is null)
+                {
+                    errorMessage = "This {{ .Aggregate }} could not be found. It may have been deleted.";
+                    return;
+                }
 {{- range .Properties }}
 {{- if eq .CSharpType "Guid" }}
                 form.{{ .Name }}Text = item.{{ .Name }}.ToString();
@@ -121,6 +132,12 @@
                 foreach (var option in {{ .Target }}Options) option.Selected = linked{{ .Target }}.Contains(option.Id);
 {{- end }}
             }
+            catch (Exception)
+            {
+                // A 404/5xx throws; surface a friendly message instead of a
+                // silent empty form or a raw error page.
+                errorMessage = "Could not load this {{ .Aggregate }}. Please try again.";
+            }
         }
     }
 
@@ -128,18 +145,27 @@
 
     private async Task SaveAsync()
     {
+        errorMessage = null;
         var request = new {{ .Aggregate }}Request(
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }});
         if (editingId == 0)
         {
             var response = await Http.PostAsJsonAsync(ApiPath, request);
-            if (!response.IsSuccessStatusCode) return;
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = "Could not save {{ .Aggregate }}. Please check the form and try again.";
+                return;
+            }
             editingId = (await response.Content.ReadFromJsonAsync<{{ .Aggregate }}View>())?.Id ?? 0;
         }
         else
         {
             var response = await Http.PutAsJsonAsync($"{ApiPath}/{editingId}", request);
-            if (!response.IsSuccessStatusCode) return;
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = "Could not save {{ .Aggregate }}. Please check the form and try again.";
+                return;
+            }
         }
 {{- range .ManyToMany }}
         await Sync{{ .Target }}sAsync(editingId);
@@ -164,8 +190,13 @@
     private async Task Add{{ .Target }}Async()
     {
         if (string.IsNullOrWhiteSpace(new{{ .Target }}Name)) return;
+        errorMessage = null;
         var response = await Http.PostAsJsonAsync("/api/{{ kebab $.Context }}/{{ kebab .Target }}", {{ index $.RelationBlazorQuickAdds .Target }});
-        if (!response.IsSuccessStatusCode) return;
+        if (!response.IsSuccessStatusCode)
+        {
+            errorMessage = "Could not add {{ .Target }}. Please try again.";
+            return;
+        }
         var created = await response.Content.ReadFromJsonAsync<{{ .Target }}View>();
         if (created is null) return;
         {{ .Target }}Items.Add(created);

@@ -1,7 +1,15 @@
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 using {{ .Project }}.WebApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
+// Structured logging with levels. The Serilog section of appsettings.json
+// controls verbosity (console + rolling file sink under logs/). Debug/Trace
+// expose internals for developers; production configs should clamp to
+// Warning/Error. User-facing errors are always returned as friendly
+// ProblemDetails -- full detail only ever goes to the log.
+builder.Host.UseSerilog((context, configuration) => configuration.ReadFrom.Configuration(context.Configuration));
 builder.Services.AddDbContext<AppDbContext>(options =>
 {{- if eq .Database "postgres" }}
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -16,6 +24,26 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Host.ConfigureHostOptions(options => options.ShutdownTimeout = TimeSpan.FromSeconds(20));
 
 var app = builder.Build();
+// One structured log line per request (method, path, status, elapsed time).
+app.UseSerilogRequestLogging();
+// Unhandled exceptions: log the full stack trace, tell the user only that
+// something went wrong. Expected failures still surface as normal responses.
+app.UseExceptionHandler(exceptionHandlerApp =>
+{
+    exceptionHandlerApp.Run(async context =>
+    {
+        var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        context.RequestServices.GetRequiredService<ILogger<Program>>()
+            .LogError(exception, "Unhandled exception processing {Method} {Path}", context.Request.Method, context.Request.Path);
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/problem+json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            title = "An unexpected error occurred. Please try again later.",
+            status = StatusCodes.Status500InternalServerError
+        });
+    });
+});
 app.Lifetime.ApplicationStopping.Register(() => app.Logger.LogInformation("{{ .Project }} is stopping; draining in-flight requests..."));
 app.Lifetime.ApplicationStopped.Register(() => app.Logger.LogInformation("{{ .Project }} stopped."));
 

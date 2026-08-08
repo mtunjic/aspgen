@@ -17,6 +17,7 @@
     <ProjectReference Include="..\..\src\WebApi\WebApi.csproj" />
 {{- else }}
     <ProjectReference Include="..\..\src\{{ .Project }}.Persistence\{{ .Project }}.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\{{ .Project }}.Application\{{ .Project }}.Application.csproj" />
 {{- end }}
   </ItemGroup>
 </Project>

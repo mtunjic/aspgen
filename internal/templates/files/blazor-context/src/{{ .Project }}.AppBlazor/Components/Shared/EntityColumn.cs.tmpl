@@ -1,0 +1,10 @@
+namespace {{ .Project }}.AppBlazor.Components.Shared;
+
+// A single table-column descriptor: how to render one column of TItem. The
+// page supplies a typed lambda (scalar value, formatted value, or a
+// relation-target display lookup), so the EntityTable stays fully generic.
+public sealed class EntityColumn<TItem>
+{
+    public string Label { get; init; } = "";
+    public Func<TItem, object?> Display { get; init; } = _ => "";
+}

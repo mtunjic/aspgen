@@ -52,16 +52,26 @@ func assertM2mWpfModule(t *testing.T, project, aggregate string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The list view is a ListView (not a DataGrid) with per-row edit/delete,
-	// and no inline edit form / many-to-many picker.
-	for _, expected := range []string{"ListView", `DataContext.EditCommand`, `DataContext.DeleteCommand`, "Advanced filters"} {
+	// The list view is a thin composition of the shared ListPage: only the
+	// entity-specific filter fields + row card template remain here; the
+	// ListView/advanced-filters chrome lives once in the shared control.
+	for _, expected := range []string{"<controls:ListPage>", "<controls:ListPage.FilterFields>", "<controls:ListPage.RowTemplate>", `DataContext.EditCommand`, `DataContext.DeleteCommand`} {
 		if !strings.Contains(string(view), expected) {
 			t.Fatalf("%sView.xaml list rendering missing %q: %s", aggregate, expected, view)
 		}
 	}
-	for _, forbidden := range []string{"DataGrid", "TagOptions"} {
+	for _, forbidden := range []string{"DataGrid", "TagOptions", "ui:ListView", "Advanced filters"} {
 		if strings.Contains(string(view), forbidden) {
 			t.Fatalf("%sView.xaml must not contain %q: %s", aggregate, forbidden, view)
+		}
+	}
+	listPage, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Shared", "Controls", "ListPage.xaml"))
+	if err != nil {
+		t.Fatalf("shared ListPage.xaml was not generated: %v", err)
+	}
+	for _, expected := range []string{"ListView", "Advanced filters", `ItemsSource="{Binding Items}"`} {
+		if !strings.Contains(string(listPage), expected) {
+			t.Fatalf("ListPage.xaml missing %q: %s", expected, listPage)
 		}
 	}
 	vm, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "ViewModels", aggregate+"ViewModel.cs"))
@@ -77,9 +87,18 @@ func assertM2mWpfModule(t *testing.T, project, aggregate string) {
 	if err != nil {
 		t.Fatalf("%sEditView.xaml was not generated: %v", aggregate, err)
 	}
-	for _, expected := range []string{"ItemsSource=\"{Binding TagOptions}\"", "IsChecked=\"{Binding IsSelected, Mode=TwoWay}\"", "Command=\"{Binding SaveCommand}\"", "Command=\"{Binding CancelCommand}\""} {
+	for _, expected := range []string{"ItemsSource=\"{Binding TagOptions}\"", "IsChecked=\"{Binding IsSelected, Mode=TwoWay}\"", "<controls:EditPage>", "<controls:EditPage.FormContent>"} {
 		if !strings.Contains(string(editView), expected) {
 			t.Fatalf("%sEditView.xaml multi-select missing %q: %s", aggregate, expected, editView)
+		}
+	}
+	editPage, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Shared", "Controls", "EditPage.xaml"))
+	if err != nil {
+		t.Fatalf("shared EditPage.xaml was not generated: %v", err)
+	}
+	for _, expected := range []string{`Command="{Binding SaveCommand}"`, `Command="{Binding CancelCommand}"`, "ValidationMessage"} {
+		if !strings.Contains(string(editPage), expected) {
+			t.Fatalf("EditPage.xaml missing %q: %s", expected, editPage)
 		}
 	}
 	editVM, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "ViewModels", aggregate+"EditViewModel.cs"))
@@ -91,7 +110,9 @@ func assertM2mWpfModule(t *testing.T, project, aggregate string) {
 		"IPostTagStore postTagStore",
 		"ObservableCollection<TagOption> TagOptions { get; }",
 		"new PostTagSearchCriteria(null, EditingId, null, 1, 1000)",
-		"new PostTagRow(0, saved.Id, id)",
+		// the many-to-many sync is one transactional service call, not a
+		// per-link delete/save loop
+		"Store.ReplaceTags(saved.Id, selectedTag);",
 		"EditViewModelBase<IPostStore, PostRow, PostEditor>",
 		"public sealed class TagOption : BindableBase",
 	} {
@@ -132,10 +153,9 @@ func TestManyToManyBlazorUI(t *testing.T) {
 	}
 	pageText := string(page)
 	for _, expected := range []string{
-		// the list page is now form-free: search + filters + a table
+		// the list page is now a thin composition of the shared components
 		`@page "/blog/posts"`,
-		`href="/blog/posts/edit"`,
-		"Advanced filters",
+		`CreatePath="/blog/posts/edit"`,
 		"filterTitleContains",
 		"ViewDetails",
 		"DeleteAsync",
@@ -146,6 +166,14 @@ func TestManyToManyBlazorUI(t *testing.T) {
 	}
 	if strings.Contains(pageText, "EditForm") {
 		t.Fatalf("PostCrud.razor must not contain the inline edit form: %s", page)
+	}
+	// the shared search/filter chrome lives in the AppBlazor Components/Shared layer
+	searchBar, err := os.ReadFile(filepath.Join(project, "src", "BlazorM2MDemo.AppBlazor", "Components", "Shared", "SearchFilterBar.razor"))
+	if err != nil {
+		t.Fatalf("shared SearchFilterBar.razor was not generated: %v", err)
+	}
+	if !strings.Contains(string(searchBar), "Advanced filters") {
+		t.Fatalf("SearchFilterBar.razor missing advanced filters chrome: %s", searchBar)
 	}
 	// the create/edit form moved to its own page
 	editPage, err := os.ReadFile(filepath.Join(project, "src", "BlazorM2MDemo.AppBlazor", "Components", "Pages", "Blog", "PostEdit.razor"))
@@ -199,8 +227,8 @@ func TestManyToManyMvcUI(t *testing.T) {
 		"PostTagCrudService postTagService",
 		"long[]? selectedTagIds",
 		"await SyncTagsAsync(created.Id, selectedTagIds ?? [], cancellationToken);",
-		"private async Task SyncTagsAsync(long PostId, long[] selectedTagIds, CancellationToken cancellationToken)",
-		"new PostTagRequest(PostId, id)",
+		// the join rows are replaced in ONE transactional service call
+		"service.ReplaceTagsAsync(PostId, selectedTagIds, cancellationToken)",
 		"ViewBag.TagSelectedIds",
 	} {
 		if !strings.Contains(controllerText, expected) {
@@ -267,6 +295,15 @@ func TestRelationUnitTestGenerated(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(project, "tests", "RelTestDemo.UnitTests", "PlainNoteRelationTests.cs")); !os.IsNotExist(err) {
 		t.Fatalf("relation-less aggregate should not get a relation test: %v", err)
+	}
+	// ...but it SHOULD get the plain CRUD-service smoke test (the round-trip
+	// the desktop/MVC frontends call), while the relation aggregate must NOT
+	// (its relations are already covered by the relation tests).
+	if _, err := os.Stat(filepath.Join(project, "tests", "RelTestDemo.UnitTests", "PlainNoteCrudServiceTests.cs")); err != nil {
+		t.Fatalf("relation-less aggregate should get a CRUD smoke test: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(project, "tests", "RelTestDemo.UnitTests", "PostCrudServiceTests.cs")); !os.IsNotExist(err) {
+		t.Fatalf("relation aggregate should not get a plain CRUD smoke test: %v", err)
 	}
 }
 
@@ -671,10 +708,10 @@ func TestContextArchWpfUI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(dmModule), "containerRegistry.RegisterSingleton<DmWpfDemoDatabase>") ||
+	if !strings.Contains(string(dmModule), "containerRegistry.RegisterSingleton<IDbContextFactory<DmWpfDemoDatabase>>") ||
 		!strings.Contains(string(dmModule), "containerRegistry.Register<IValidator<WidgetRequest>, WidgetValidator>();") ||
 		!strings.Contains(string(dmModule), "containerRegistry.RegisterSingleton<WidgetCrudService>();") {
-		t.Fatalf("expected dm-tier WidgetModule.cs to register the DbContext/validator/CrudService in DryIoc: %s", dmModule)
+		t.Fatalf("expected dm-tier WidgetModule.cs to register the DbContext factory/validator/CrudService in DryIoc: %s", dmModule)
 	}
 
 	// retrofit case with a relation: aggregates added first, -ui wpf attached afterwards.
@@ -774,7 +811,7 @@ func TestContextArchBlazorUI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(page), `private const string ApiPath = "/api/billing/product";`) {
+	if !strings.Contains(string(page), `protected override string ApiPath => "/api/billing/product";`) {
 		t.Fatalf("expected a context-qualified API path in ProductCrud.razor: %s", page)
 	}
 
@@ -806,7 +843,7 @@ func TestContextArchBlazorUI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(retrofitPage), `private const string ApiPath = "/api/sales/order";`) {
+	if !strings.Contains(string(retrofitPage), `protected override string ApiPath => "/api/sales/order";`) {
 		t.Fatalf("expected a context-qualified API path in retrofitted OrderCrud.razor: %s", retrofitPage)
 	}
 }

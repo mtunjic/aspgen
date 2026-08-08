@@ -1,0 +1,53 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Xunit;
+using {{ .Project }}.Application;
+using {{ .Project }}.Persistence;
+
+namespace {{ .Project }}.UnitTests;
+
+// Exercises the generated CRUD service end-to-end through its real
+// IDbContextFactory: create -> read -> search -> update -> soft delete. This
+// is the exact in-process data path the dm-tier desktop and MVC frontends
+// call, so it catches factory, validation, and save-path regressions at build
+// time (e.g. a required foreign key defaulting to 0, or a failed save
+// poisoning a later one).
+public class {{ .Aggregate }}CrudServiceTests
+{
+    [Fact]
+    public async Task CrudRoundTrip()
+    {
+        // A shared-cache in-memory SQLite database keeps every factory-created
+        // context on one connection.
+        var connectionString = $"DataSource=file:crud-{Guid.NewGuid():N}?mode=memory&cache=shared";
+        var options = new DbContextOptionsBuilder<{{ .Project }}Database>()
+            .UseSqlite(connectionString)
+            .Options;
+        var factory = new PooledDbContextFactory<{{ .Project }}Database>(options);
+        await using (var database = factory.CreateDbContext())
+        {
+            database.Database.EnsureCreated();
+        }
+
+        var service = new {{ .Aggregate }}CrudService(factory, new {{ .Aggregate }}Validator());
+        var request = new {{ .Aggregate }}Request({{ seedArgs .Properties }});
+
+        var created = await service.CreateAsync(request);
+        Assert.True(created.Id > 0, "create should assign a persisted id");
+
+        var fetched = await service.GetByIdAsync(created.Id);
+        Assert.NotNull(fetched);
+
+        var (items, totalCount) = await service.SearchAsync(null{{ searchNullArgs .Properties }}, 1, 25);
+        Assert.Equal(1, totalCount);
+        Assert.Single(items);
+
+        var updated = await service.UpdateAsync(created.Id, request);
+        Assert.True(updated.Success, "update should succeed");
+
+        await service.DeleteAsync(created.Id);
+        var (after, remaining) = await service.SearchAsync(null{{ searchNullArgs .Properties }}, 1, 25);
+        Assert.Equal(0, remaining);
+        Assert.DoesNotContain(after, x => x.Id == created.Id);
+    }
+}

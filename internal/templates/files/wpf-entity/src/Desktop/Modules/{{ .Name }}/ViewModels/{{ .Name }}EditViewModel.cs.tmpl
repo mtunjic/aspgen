@@ -54,7 +54,7 @@ public sealed class {{ .Name }}EditViewModel : EditViewModelBase<I{{ .Name }}Sto
     }
 {{- end }}{{- end }}
 
-    protected override string EntityName => "{{ .Name }}";
+    public override string EntityName => "{{ .Name }}";
     protected override string ListViewName => "{{ .Name }}List";
     protected override {{ .Name }}Editor CreateForm() => new();
     protected override void ResetForm({{ .Name }}Row? item) => Form.Reset(item);
@@ -79,6 +79,12 @@ public sealed class {{ .Name }}EditViewModel : EditViewModelBase<I{{ .Name }}Sto
     protected override void SyncRelated({{ .Name }}Row saved)
     {
 {{- range .ManyToMany }}
+{{- if eq $.Backend "dm" }}
+        var selected{{ .Target }} = {{ .Target }}Options.Where(o => o.IsSelected).Select(o => o.Id).ToArray();
+        // One transactional service call -- a mid-sync failure rolls back, so
+        // partial links are never left behind.
+        Store.Replace{{ .Target }}s(saved.Id, selected{{ .Target }});
+{{- else }}
         var selected{{ .Target }} = {{ .Target }}Options.Where(o => o.IsSelected).Select(o => o.Id).ToHashSet();
         var current{{ .Target }} = {{ camel .JoinEntity }}Store.Search(new {{ .JoinEntity }}SearchCriteria(null, saved.Id, null, 1, 1000)).Items;
         foreach (var link in current{{ .Target }})
@@ -87,6 +93,7 @@ public sealed class {{ .Name }}EditViewModel : EditViewModelBase<I{{ .Name }}Sto
         var keep{{ .Target }} = current{{ .Target }}.Select(x => x.{{ .Target }}Id).ToHashSet();
         foreach (var id in selected{{ .Target }}.Except(keep{{ .Target }}))
             {{ camel .JoinEntity }}Store.Save(0, new {{ .JoinEntity }}Row(0, saved.Id, id));
+{{- end }}
 {{- end }}
     }
 
@@ -154,8 +161,9 @@ public sealed class {{ .Name }}EditViewModel : EditViewModelBase<I{{ .Name }}Sto
             Form.{{ .FKProperty }} = created.Id;
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            AppLog.Error(ex, "Quick-add of {Target} failed for {Entity}", "{{ .Target }}", "{{ $.Name }}");
 {{- if index $.RelationQuickAddMissing .Target }}
             ValidationMessage = "Could not add {{ .Target }}. You must add {{ index $.RelationQuickAddMissing .Target }} first.";
 {{- else }}

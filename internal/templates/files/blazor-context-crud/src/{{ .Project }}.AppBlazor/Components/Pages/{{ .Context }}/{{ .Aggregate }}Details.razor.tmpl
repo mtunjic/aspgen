@@ -18,7 +18,12 @@
 
 <h1 class="h3 mb-4">{{ .Aggregate }} details</h1>
 
-@if (item is null)
+@if (loadFailed)
+{
+    <div class="alert alert-danger" role="alert">This {{ .Aggregate }} could not be found. It may have been deleted, or the service is unavailable.</div>
+    <button class="btn btn-primary" @onclick="Back">Back to list</button>
+}
+else if (item is null)
 {
     <p><em>Loading...</em></p>
 }
@@ -51,6 +56,7 @@ else
 @code {
     [Parameter] public long Id { get; set; }
     private {{ .Aggregate }}View? item;
+    private bool loadFailed;
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
 {{- end }}
@@ -61,7 +67,22 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        item = await Http.GetFromJsonAsync<{{ .Aggregate }}View>($"/api/{{ kebab .Context }}/{{ kebab .Aggregate }}/{Id}");
+        try
+        {
+            item = await Http.GetFromJsonAsync<{{ .Aggregate }}View>($"/api/{{ kebab .Context }}/{{ kebab .Aggregate }}/{Id}");
+        }
+        catch (Exception)
+        {
+            // A 404/5xx throws; surface a friendly "not found" state instead
+            // of an infinite "Loading..." or a raw error page.
+            loadFailed = true;
+            return;
+        }
+        if (item is null)
+        {
+            loadFailed = true;
+            return;
+        }
 {{- range .Relations }}
         {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
 {{- end }}

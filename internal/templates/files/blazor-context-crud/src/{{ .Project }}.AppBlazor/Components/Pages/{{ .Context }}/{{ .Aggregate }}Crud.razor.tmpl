@@ -2,146 +2,36 @@
 @page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s"
 @using {{ .Project }}.Application
 @using {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }}
-@inject HttpClient Http
-@inject NavigationManager Navigation
+@using {{ .Project }}.AppBlazor.Components.Shared
+@inherits CrudPageBase<{{ .Aggregate }}View>
 
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="/">Home</a></li>
-        <li class="breadcrumb-item active" aria-current="page">{{ .Aggregate }}s</li>
-    </ol>
-</nav>
+<CrudHeader Title="{{ .Aggregate }}s" CreatePath="/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit" />
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">{{ .Aggregate }}s</h1>
-    <a class="btn btn-primary" href="/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit">+ Create new</a>
-</div>
+<SearchFilterBar Filters="@filters" SearchText="@searchText" SearchTextChanged="@((string? v) => OnSearchTextChanged(v))"
+                 Apply="@(() => SearchAsync())" Clear="@(() => ClearFiltersAsync())" SearchPlaceholder="Search {{ .Aggregate }}s..." />
 
-<div class="card mb-4">
-    <div class="card-header">Search &amp; filter</div>
-    <div class="card-body">
-        <div class="d-flex gap-2">
-            <input @bind="searchText" @bind:event="oninput" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
-            <button class="btn btn-outline-primary" @onclick="SearchAsync">Search</button>
-        </div>
-        <details class="mt-3">
-            <summary class="text-secondary small">Advanced filters</summary>
-            <div class="row g-2 mt-1">
-{{- range .Properties }}
-{{- if .RelationTarget }}
-                <div class="col-auto">
-                    <label class="form-label small">{{ .DisplayName }}</label>
-                    <select @bind="filter{{ .Name }}" class="form-select form-select-sm">
-                        <option value="">Any</option>
-                        @foreach (var option in {{ .RelationTarget }}Items)
-                        {
-                            <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
-                        }
-                    </select>
-                </div>
-{{- else if eq (filterKind .CSharpType) "string" }}
-                <div class="col-auto">
-                    <label class="form-label small">{{ .DisplayName }} contains</label>
-                    <input @bind="filter{{ .Name }}Contains" @bind:event="oninput" class="form-control form-control-sm" />
-                </div>
-{{- else if eq (filterKind .CSharpType) "numeric" }}
-                <div class="col-auto">
-                    <label class="form-label small">{{ .DisplayName }} min</label>
-                    <input type="number" @bind="filter{{ .Name }}Min" class="form-control form-control-sm" />
-                </div>
-                <div class="col-auto">
-                    <label class="form-label small">{{ .DisplayName }} max</label>
-                    <input type="number" @bind="filter{{ .Name }}Max" class="form-control form-control-sm" />
-                </div>
-{{- else if eq (filterKind .CSharpType) "date" }}
-                <div class="col-auto">
-                    <label class="form-label small">{{ .DisplayName }} from</label>
-                    <input type="date" @bind="filter{{ .Name }}Min" class="form-control form-control-sm" />
-                </div>
-                <div class="col-auto">
-                    <label class="form-label small">{{ .DisplayName }} to</label>
-                    <input type="date" @bind="filter{{ .Name }}Max" class="form-control form-control-sm" />
-                </div>
-{{- else if eq (filterKind .CSharpType) "bool" }}
-                <div class="col-auto">
-                    <label class="form-label small">{{ .DisplayName }}</label>
-                    <select @bind="filter{{ .Name }}" class="form-select form-select-sm">
-                        <option value="">Any</option>
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
-                    </select>
-                </div>
-{{- end }}
-{{- end }}
-{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
-                <div class="col-auto">
-                    <label class="form-label small">{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains</label>
-                    <input @bind="filter{{ relationNestedFilterField . }}" @bind:event="oninput" class="form-control form-control-sm" />
-                </div>
-{{- end }}{{- end }}
-                <div class="col-auto align-self-end">
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFiltersAsync">Clear</button>
-                    <button class="btn btn-primary btn-sm" @onclick="SearchAsync">Apply</button>
-                </div>
-            </div>
-        </details>
-    </div>
-</div>
-
-<div class="card">
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead>
-                <tr>
-{{- range .Properties }}
-                    <th>{{ .DisplayName }}</th>
-{{- end }}
-                    <th class="text-end">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var item in items)
-            {
-                <tr style="cursor:pointer" @onclick="() => ViewDetails(item.Id)">
-{{- range .Properties }}
-{{- if .RelationTarget }}
-                    <td>@({{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</td>
-{{- else }}
-                    <td>@item.{{ .Name }}</td>
-{{- end }}
-{{- end }}
-                    <td class="text-end text-nowrap">
-                        <a class="btn btn-sm btn-outline-primary" href="/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit/@item.Id" @onclick:stopPropagation="true">Edit</a>
-                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(item.Id)" @onclick:stopPropagation="true">Delete</button>
-                    </td>
-                </tr>
-            }
-            @if (!items.Any())
-            {
-                <tr><td colspan="99" class="text-center text-muted py-4">No {{ .Aggregate }}s found.</td></tr>
-            }
-            </tbody>
-        </table>
-    </div>
-</div>
-@if (hasMore)
+@if (errorMessage is not null)
 {
-    <div class="text-center mt-3">
-        <button class="btn btn-outline-secondary" @onclick="LoadMoreAsync">Load more</button>
-    </div>
+    <div class="alert alert-danger" role="alert">@errorMessage</div>
 }
 
+<EntityTable Items="@items" Columns="@columns" EmptyMessage="No {{ .Aggregate }}s found."
+             OnRowClick="@(({{ .Aggregate }}View item) => ViewDetails(item))"
+             OnEdit="@(({{ .Aggregate }}View item) => EditItem(item))"
+             OnDelete="@(({{ .Aggregate }}View item) => DeleteItem(item))" />
+
+<PaginationBar HasMore="@hasMore" Count="@totalCount" OnLoadMore="@(() => LoadMoreAsync())" />
+
 @code {
-    private const string ApiPath = "/api/{{ kebab .Context }}/{{ kebab .Aggregate }}";
-    private List<{{ .Aggregate }}View> items = [];
+    protected override string ApiPath => "/api/{{ kebab .Context }}/{{ kebab .Aggregate }}";
+    protected override string ListPath => "/{{ kebab .Context }}/{{ kebab .Aggregate }}s";
+
+    private string? searchText;
+    private List<FilterField> filters = [];
+    private List<EntityColumn<{{ .Aggregate }}View>> columns = [];
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
 {{- end }}
-    private string? searchText;
-    private int page = 1;
-    private long totalCount;
-    private const int PageSize = 25;
-    private bool hasMore => (long)page * PageSize < totalCount;
 {{- range .Properties }}
 {{- if .RelationTarget }}
     private long? filter{{ .Name }};
@@ -166,22 +56,60 @@
 {{- range .Relations }}
         {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
 {{- end }}
+        BuildColumns();
+        BuildFilters();
         await SearchAsync();
     }
 
-    private async Task SearchAsync()
+    private void BuildColumns()
     {
-        page = 1;
-        await LoadPageAsync(append: false);
+        columns = new List<EntityColumn<{{ .Aggregate }}View>>
+        {
+{{- range .Properties }}
+{{- if .RelationTarget }}
+            new() { Label = "{{ .DisplayName }}", Display = x => {{ .RelationTarget }}Items.FirstOrDefault(r => r.Id == x.{{ .Name }})?.{{ .RelationDisplayProperty }} },
+{{- else }}
+            new() { Label = "{{ .DisplayName }}", Display = x => x.{{ .Name }} },
+{{- end }}
+{{- end }}
+        };
     }
 
-    private async Task LoadMoreAsync()
+    private void BuildFilters()
     {
-        page++;
-        await LoadPageAsync(append: true);
+        filters = new List<FilterField>
+        {
+{{- range .Properties }}
+{{- if .RelationTarget }}
+            new() { Label = "{{ .DisplayName }}", Kind = "relation",
+                    Options = {{ .RelationTarget }}Items.Select(x => new FilterOption(x.Id, x.{{ .RelationDisplayProperty }})).ToList(),
+                    GetValue = () => filter{{ .Name }}, SetValue = v => filter{{ .Name }} = ParseLong(v) },
+{{- else if eq (filterKind .CSharpType) "string" }}
+            new() { Label = "{{ .DisplayName }} contains", Kind = "string",
+                    GetValue = () => filter{{ .Name }}Contains, SetValue = v => filter{{ .Name }}Contains = v as string },
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+            new() { Label = "{{ .DisplayName }} min", Kind = "number",
+                    GetValue = () => filter{{ .Name }}Min, SetValue = v => filter{{ .Name }}Min = ParseNumber<{{ trimSuffix .CSharpType "?" }}>(v) },
+            new() { Label = "{{ .DisplayName }} max", Kind = "number",
+                    GetValue = () => filter{{ .Name }}Max, SetValue = v => filter{{ .Name }}Max = ParseNumber<{{ trimSuffix .CSharpType "?" }}>(v) },
+{{- else if eq (filterKind .CSharpType) "date" }}
+            new() { Label = "{{ .DisplayName }} from", Kind = "date",
+                    GetValue = () => filter{{ .Name }}Min, SetValue = v => filter{{ .Name }}Min = {{ if eq (trimSuffix .CSharpType "?") "DateTime" }}ParseDateTime(v){{ else }}ParseDate(v){{ end }} },
+            new() { Label = "{{ .DisplayName }} to", Kind = "date",
+                    GetValue = () => filter{{ .Name }}Max, SetValue = v => filter{{ .Name }}Max = {{ if eq (trimSuffix .CSharpType "?") "DateTime" }}ParseDateTime(v){{ else }}ParseDate(v){{ end }} },
+{{- else if eq (filterKind .CSharpType) "bool" }}
+            new() { Label = "{{ .DisplayName }}", Kind = "bool",
+                    GetValue = () => filter{{ .Name }}, SetValue = v => filter{{ .Name }} = ParseBool(v) },
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+            new() { Label = "{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains", Kind = "string",
+                    GetValue = () => filter{{ relationNestedFilterField . }}, SetValue = v => filter{{ relationNestedFilterField . }} = v as string },
+{{- end }}{{- end }}
+        };
     }
 
-    private async Task LoadPageAsync(bool append)
+    protected override async Task<(List<{{ .Aggregate }}View> Items, long TotalCount)> FetchPageAsync(int page)
     {
         var query = new List<string>();
         if (!string.IsNullOrWhiteSpace(searchText)) query.Add($"search={Uri.EscapeDataString(searchText)}");
@@ -206,10 +134,10 @@
         query.Add($"page={page}");
         query.Add($"pageSize={PageSize}");
         var result = await Http.GetFromJsonAsync<{{ .Aggregate }}PagedResponse>($"{ApiPath}/search?{string.Join("&", query)}");
-        if (result is null) return;
-        if (append) items.AddRange(result.Items); else items = result.Items.ToList();
-        totalCount = result.TotalCount;
+        return result is null ? ([], 0) : (result.Items.ToList(), result.TotalCount);
     }
+
+    private void OnSearchTextChanged(string? value) => searchText = value;
 
     private async Task ClearFiltersAsync()
     {
@@ -235,12 +163,20 @@
         await SearchAsync();
     }
 
-    private void ViewDetails(long id) => Navigation.NavigateTo($"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{id}");
+    private void ViewDetails({{ .Aggregate }}View item) => Navigation.NavigateTo($"{ListPath}/{item.Id}");
+    private void EditItem({{ .Aggregate }}View item) => Navigation.NavigateTo($"{ListPath}/edit/{item.Id}");
+    private void DeleteItem({{ .Aggregate }}View item) => _ = DeleteAsync(item.Id);
 
-    private async Task DeleteAsync(long id)
+    private static long? ParseLong(object? v) => long.TryParse(v as string, out var id) ? id : null;
+    private static bool? ParseBool(object? v)
     {
-        var response = await Http.DeleteAsync($"{ApiPath}/{id}");
-        if (!response.IsSuccessStatusCode) return;
-        await SearchAsync();
+        var text = v as string;
+        if (text == "true") return true;
+        if (text == "false") return false;
+        return null;
     }
+    private static DateOnly? ParseDate(object? v) => DateOnly.TryParse(v as string, out var d) ? d : null;
+    private static DateTime? ParseDateTime(object? v) => DateTime.TryParse(v as string, out var dt) ? dt : null;
+    private static T? ParseNumber<T>(object? v) where T : struct, IParsable<T> =>
+        v is not null && T.TryParse(v as string, null, out var result) ? result : null;
 }

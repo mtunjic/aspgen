@@ -1,0 +1,22 @@
+using System.Windows;
+using System.Windows.Controls;
+
+namespace {{ .Project }}.Desktop.Shared.Controls;
+
+// Shared create/edit-page chrome: header band, scrollable form area,
+// validation message and Save/Cancel footer. Derived modules only supply the
+// entity-specific form sections (DETAILS fields + many-to-many pickers) via
+// FormContent; everything else binds to the EditViewModelBase subclass.
+public partial class EditPage : UserControl
+{
+    public static readonly DependencyProperty FormContentProperty = DependencyProperty.Register(
+        nameof(FormContent), typeof(object), typeof(EditPage));
+
+    public object? FormContent
+    {
+        get => GetValue(FormContentProperty);
+        set => SetValue(FormContentProperty, value);
+    }
+
+    public EditPage() => InitializeComponent();
+}

@@ -376,14 +376,22 @@ func quickAddFeasible(target EntityMeta, displayProperty string) bool {
 
 // quickAddDefault renders a default C# literal for a target property used by
 // the inline quick-add, or "" when the property can't be defaulted safely
-// (required strings, dates, and unknown types are excluded).
+// (required strings, dates, and unknown types are excluded). Nullable value
+// types default to null -- a nullable FK must never become 0, which would
+// violate its (optional) foreign-key constraint the moment it is saved.
 func quickAddDefault(p Property) string {
 	switch strings.TrimSuffix(p.CSharpType, "?") {
 	case "bool":
 		return "false"
 	case "int", "long", "decimal", "float":
+		if strings.HasSuffix(p.CSharpType, "?") {
+			return "null"
+		}
 		return "0"
 	case "Guid":
+		if strings.HasSuffix(p.CSharpType, "?") {
+			return "null"
+		}
 		return "Guid.Empty"
 	case "string":
 		if strings.HasSuffix(p.CSharpType, "?") {

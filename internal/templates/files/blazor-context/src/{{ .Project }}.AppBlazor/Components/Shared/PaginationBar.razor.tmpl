@@ -1,0 +1,16 @@
+@if (HasMore)
+{
+    <div class="text-center mt-3">
+        <button class="btn btn-outline-secondary" @onclick="OnLoadMore">Load more</button>
+    </div>
+}
+@if (Count.HasValue)
+{
+    <p class="text-center text-muted mt-2 mb-0">@Count.Value records</p>
+}
+
+@code {
+    [Parameter] public bool HasMore { get; set; }
+    [Parameter] public long? Count { get; set; }
+    [Parameter] public EventCallback OnLoadMore { get; set; }
+}

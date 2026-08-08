@@ -2,17 +2,133 @@ using {{ .Project }}.Application;
 
 namespace {{ .Project }}.WebMvc.Models;
 
-public sealed class {{ .Aggregate }}IndexViewModel({{ .Aggregate }}View[] items, long totalCount, int page, int pageSize, string? search{{ filterParamDecls .Properties "camel" }}{{ relationFilterParamDecls .Properties "camel" }})
+// Thin list-page view model: supplies the typed items, filter/column
+// descriptors and active-filter state; the shared partials render it.
+public sealed class {{ .Aggregate }}IndexViewModel : IndexViewModelBase
 {
-    public {{ .Aggregate }}View[] Items { get; } = items;
-    public long TotalCount { get; } = totalCount;
-    public int Page { get; } = page;
-    public int PageSize { get; } = pageSize;
-    public string? Search { get; } = search;
-    public bool HasMore => (long)Page * PageSize < TotalCount;
-    // True when any filter (search, advanced, or nested relation) is active,
-    // used to keep the advanced-filter panel open after applying filters.
-    public bool HasActiveFilters => !string.IsNullOrWhiteSpace(Search)
+    public {{ .Aggregate }}IndexViewModel(
+        {{ .Aggregate }}View[] items, long totalCount, int page, int pageSize, string? search
+{{- range .Properties }}
+{{- if .RelationTarget }}, long? {{ camel .Name }}
+{{- else if eq (filterKind .CSharpType) "string" }}, string? {{ camel .Name }}Contains
+{{- else if eq (filterKind .CSharpType) "numeric" }}, {{ trimSuffix .CSharpType "?" }}? {{ camel .Name }}Min, {{ trimSuffix .CSharpType "?" }}? {{ camel .Name }}Max
+{{- else if eq (filterKind .CSharpType) "date" }}, {{ trimSuffix .CSharpType "?" }}? {{ camel .Name }}Min, {{ trimSuffix .CSharpType "?" }}? {{ camel .Name }}Max
+{{- else if eq (filterKind .CSharpType) "bool" }}, bool? {{ camel .Name }}
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}, string? {{ camel (relationNestedFilterField .) }}{{- end }}{{- end }}
+{{- range .Relations }}, List<{{ .Target }}View> {{ camel .Target }}Items{{ end }})
+    {
+        Items = items;
+        TotalCount = totalCount;
+        Page = page;
+        PageSize = pageSize;
+        Search = search;
+        SearchPlaceholder = "Search {{ .Aggregate }}s...";
+        EmptyMessage = "No {{ .Aggregate }}s found.";
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        {{ .Name }} = {{ camel .Name }};
+{{- else if eq (filterKind .CSharpType) "string" }}
+        {{ .Name }}Contains = {{ camel .Name }}Contains;
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        {{ .Name }}Min = {{ camel .Name }}Min;
+        {{ .Name }}Max = {{ camel .Name }}Max;
+{{- else if eq (filterKind .CSharpType) "date" }}
+        {{ .Name }}Min = {{ camel .Name }}Min;
+        {{ .Name }}Max = {{ camel .Name }}Max;
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        {{ .Name }} = {{ camel .Name }};
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+        {{ relationNestedFilterField . }} = {{ camel (relationNestedFilterField .) }};
+{{- end }}{{- end }}
+        FilterFields =
+        [
+{{- range .Properties }}
+{{- if .RelationTarget }}
+            new() { Name = "{{ camel .Name }}", Label = "{{ .DisplayName }}", Kind = "relation",
+                    CurrentValue = {{ camel .Name }}?.ToString(),
+                    Options = {{ camel .RelationTarget }}Items.Select(x => new SelectOption(x.Id, x.{{ .RelationDisplayProperty }})).ToList() },
+{{- else if eq (filterKind .CSharpType) "string" }}
+            new() { Name = "{{ camel .Name }}Contains", Label = "{{ .DisplayName }} contains", Kind = "string", CurrentValue = {{ camel .Name }}Contains },
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+            new() { Name = "{{ camel .Name }}Min", Label = "{{ .DisplayName }} min", Kind = "number", CurrentValue = {{ camel .Name }}Min?.ToString() },
+            new() { Name = "{{ camel .Name }}Max", Label = "{{ .DisplayName }} max", Kind = "number", CurrentValue = {{ camel .Name }}Max?.ToString() },
+{{- else if eq (filterKind .CSharpType) "date" }}
+            new() { Name = "{{ camel .Name }}Min", Label = "{{ .DisplayName }} from", Kind = "date", CurrentValue = {{ camel .Name }}Min?.ToString("yyyy-MM-dd") },
+            new() { Name = "{{ camel .Name }}Max", Label = "{{ .DisplayName }} to", Kind = "date", CurrentValue = {{ camel .Name }}Max?.ToString("yyyy-MM-dd") },
+{{- else if eq (filterKind .CSharpType) "bool" }}
+            new() { Name = "{{ camel .Name }}", Label = "{{ .DisplayName }}", Kind = "bool", CurrentValue = {{ camel .Name }}?.ToString() },
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+            new() { Name = "{{ camel (relationNestedFilterField .) }}", Label = "{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains", Kind = "string", CurrentValue = {{ camel (relationNestedFilterField .) }} },
+{{- end }}{{- end }}
+        ];
+        Columns =
+        [
+{{- range .Properties }}
+{{- if .RelationTarget }}
+            new() { Label = "{{ .DisplayName }}", FkProperty = "{{ .Name }}",
+                    RelationLookup = {{ camel .RelationTarget }}Items.ToDictionary(x => x.Id, x => x.{{ .RelationDisplayProperty }}) },
+{{- else if eq (filterKind .CSharpType) "date" }}
+            new() { Label = "{{ .DisplayName }}", PropertyName = "{{ .Name }}", Format = "d" },
+{{- else }}
+            new() { Label = "{{ .DisplayName }}", PropertyName = "{{ .Name }}" },
+{{- end }}
+{{- end }}
+        ];
+        RouteValues =
+        [
+            new("search", Search),
+{{- range .Properties }}
+{{- if .RelationTarget }}
+            new("{{ camel .Name }}", {{ camel .Name }}?.ToString()),
+{{- else if eq (filterKind .CSharpType) "string" }}
+            new("{{ camel .Name }}Contains", {{ camel .Name }}Contains),
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+            new("{{ camel .Name }}Min", {{ camel .Name }}Min?.ToString()),
+            new("{{ camel .Name }}Max", {{ camel .Name }}Max?.ToString()),
+{{- else if eq (filterKind .CSharpType) "date" }}
+            new("{{ camel .Name }}Min", {{ camel .Name }}Min?.ToString("yyyy-MM-dd")),
+            new("{{ camel .Name }}Max", {{ camel .Name }}Max?.ToString("yyyy-MM-dd")),
+{{- else if eq (filterKind .CSharpType) "bool" }}
+            new("{{ camel .Name }}", {{ camel .Name }}?.ToString()),
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+            new("{{ camel (relationNestedFilterField .) }}", {{ camel (relationNestedFilterField .) }}),
+{{- end }}{{- end }}
+        ];
+    }
+
+    public override IReadOnlyList<object> Items { get; }
+    public override IReadOnlyList<FilterFieldDescriptor> FilterFields { get; }
+    public override IReadOnlyList<ColumnDescriptor> Columns { get; }
+    public override IReadOnlyList<KeyValuePair<string, string?>> RouteValues { get; }
+
+{{- range .Properties }}
+{{- if .RelationTarget }}
+    public long? {{ .Name }} { get; }
+{{- else if eq (filterKind .CSharpType) "string" }}
+    public string? {{ .Name }}Contains { get; }
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Min { get; }
+    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Max { get; }
+{{- else if eq (filterKind .CSharpType) "date" }}
+    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Min { get; }
+    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Max { get; }
+{{- else if eq (filterKind .CSharpType) "bool" }}
+    public bool? {{ .Name }} { get; }
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+    public string? {{ relationNestedFilterField . }} { get; }
+{{- end }}{{- end }}
+
+    public override bool HasActiveFilters => !string.IsNullOrWhiteSpace(Search)
 {{- range .Properties }}
 {{- if .RelationTarget }}
         || {{ .Name }}.HasValue
@@ -29,23 +145,4 @@ public sealed class {{ .Aggregate }}IndexViewModel({{ .Aggregate }}View[] items,
 {{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
         || !string.IsNullOrWhiteSpace({{ relationNestedFilterField . }})
 {{- end }}{{- end }};
-{{- range .Properties }}
-{{- if .RelationTarget }}
-    public long? {{ .Name }} { get; } = {{ camel .Name }};
-    public List<{{ .RelationTarget }}View> {{ .RelationTarget }}Items { get; set; } = [];
-{{- else if eq (filterKind .CSharpType) "string" }}
-    public string? {{ .Name }}Contains { get; } = {{ camel .Name }}Contains;
-{{- else if eq (filterKind .CSharpType) "numeric" }}
-    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Min { get; } = {{ camel .Name }}Min;
-    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Max { get; } = {{ camel .Name }}Max;
-{{- else if eq (filterKind .CSharpType) "date" }}
-    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Min { get; } = {{ camel .Name }}Min;
-    public {{ trimSuffix .CSharpType "?" }}? {{ .Name }}Max { get; } = {{ camel .Name }}Max;
-{{- else if eq (filterKind .CSharpType) "bool" }}
-    public bool? {{ .Name }} { get; } = {{ camel .Name }};
-{{- end }}
-{{- end }}
-{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
-    public string? {{ relationNestedFilterField . }} { get; } = {{ camel (relationNestedFilterField .) }};
-{{- end }}{{- end }}
 }

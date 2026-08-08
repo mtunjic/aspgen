@@ -23,12 +23,32 @@ public partial class {{ .Project }}Database(DbContextOptions<{{ .Project }}Datab
     {
         try
         {
-            await SaveChangesAsync(cancellationToken);
+            await SaveChangesSafelyAsync(cancellationToken);
             return CommandResponse.Ok();
         }
         catch (Exception ex)
         {
             return CommandResponse.Fail().AddMessage("The operation failed.").AddExtra(ex.Message);
+        }
+    }
+
+    // SaveChangesAsync wrapper that resets the change tracker when the save
+    // fails. A failed save leaves the offending entities tracked (Added or
+    // Modified); on a shared, long-lived DbContext (the dm-tier desktop
+    // modules register ONE singleton database for the whole app) every later
+    // SaveChangesAsync would retry the same broken rows and fail with a
+    // confusing foreign-key error. Reset so one bad row can't poison
+    // unrelated saves.
+    public async Task<int> SaveChangesSafelyAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            ChangeTracker.Clear();
+            throw;
         }
     }
 }
