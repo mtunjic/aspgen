@@ -1057,6 +1057,28 @@ func TestBlazorEditQuickAdd(t *testing.T) {
 	}
 }
 
+func TestRenderWpfAppSegoeFluentIcons(t *testing.T) {
+	d := m2mData()
+	d.Theme = "wpfui"
+	out := renderTemplate(t, "files/wpf/src/Desktop/App.xaml.tmpl", d)
+	// WPF UI's Fluent System Icons font lacks some Windows 11 icons; the
+	// documented fix is a SegoeFluentIcons FontFamily resource pointing at the
+	// system font so the missing glyphs render.
+	for _, expected := range []string{
+		`<FontFamily x:Key="SegoeFluentIcons">Segoe Fluent Icons</FontFamily>`,
+		"pack://application:,,,/;component/Fonts/#Segoe Fluent Icons",
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("wpfui App.xaml must register the Segoe Fluent Icons font (missing %q)\n%s", expected, out)
+		}
+	}
+	d.Theme = ""
+	out = renderTemplate(t, "files/wpf/src/Desktop/App.xaml.tmpl", d)
+	if strings.Contains(out, "SegoeFluentIcons") {
+		t.Errorf("non-wpfui App.xaml must not register the Fluent icon font\n%s", out)
+	}
+}
+
 func TestRenderWpfAppStyles(t *testing.T) {
 	d := m2mData()
 	d.Theme = "wpfui"

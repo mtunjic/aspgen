@@ -12,6 +12,17 @@
 {{- end }}
                 <ResourceDictionary Source="Themes/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
+{{- if eq .Theme "wpfui" }}
+            <!-- WPF UI renders icon glyphs from the Fluent System Icons font,
+                 which does not cover every Windows 11 icon. Registering the
+                 Segoe Fluent Icons FontFamily lets missing glyphs render from
+                 the Windows 11 system font (installed by default). To bundle a
+                 copy for Windows 10 / offline use, replace the family name
+                 below with
+                 pack://application:,,,/;component/Fonts/#Segoe Fluent Icons
+                 and add the font file under Fonts/ in this project. -->
+            <FontFamily x:Key="SegoeFluentIcons">Segoe Fluent Icons</FontFamily>
+{{- end }}
         </ResourceDictionary>
     </Application.Resources>
 </prism:PrismApplication>
