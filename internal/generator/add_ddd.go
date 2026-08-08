@@ -101,8 +101,12 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 	// es aggregates are event-sourced (no plain ctor, and their id assignment
 	// is not yet reliable enough for a multi-create test), so they get no
 	// relation tests; ar-tier entities have a different project shape.
+	// Skipped entirely for --no-tests projects (no test project to render into).
 	if len(relations) > 0 || len(manyToMany) > 0 {
 		d.RelationTest = buildRelationTest(m, contextName, r.Name, props, relations, manyToMany)
+		if !projectHasTests(m) {
+			return nil
+		}
 		if ctx.Arch == "dm" || ctx.Arch == "cqrs" {
 			if err := renderTree(r.Project, "tests-relations", *d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 				return err
@@ -141,6 +145,9 @@ func aggregateTemplateGroup(arch string) string {
 // MVC frontends call in-process.
 func renderAggregateCrudServiceTest(r addRequest, m *Manifest, d data) error {
 	if len(d.Relations) > 0 || len(d.ManyToMany) > 0 {
+		return nil
+	}
+	if !projectHasTests(m) {
 		return nil
 	}
 	return renderTree(r.Project, "tests-crud", d, templateDir(r.Args), r.DryRun, r.Force)

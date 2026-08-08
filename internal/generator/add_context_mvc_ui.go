@@ -23,9 +23,12 @@ func attachContextMvcUI(project string, m *Manifest, override string, dryRun, fo
 	// The WebMvc is a real ASP.NET Core host, so dm-tier MVC projects get an
 	// IntegrationTests project (WebApplicationFactory) alongside the usual
 	// UnitTests. Its relation test files are added per-aggregate at `add`
-	// time; this renders the project shell itself.
-	if err := renderTree(project, "tests-mvc", hostData, override, dryRun, force); err != nil {
-		return err
+	// time; this renders the project shell itself. Skipped for --no-tests
+	// projects (no test project to render into).
+	if projectHasTests(m) {
+		if err := renderTree(project, "tests-mvc", hostData, override, dryRun, force); err != nil {
+			return err
+		}
 	}
 	for _, entity := range m.Entities {
 		if err := renderContextMvcCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), reconstructManyToMany(entity, m.Entities), override, dryRun, force); err != nil {

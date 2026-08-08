@@ -253,6 +253,35 @@ func TestManyToManyMvcUI(t *testing.T) {
 	}
 }
 
+func TestNoTestsAddAggregateSkipsTestRendering(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "NoTestsDemo")
+	if err := Run([]string{"new", "NoTestsDemo", "--context", "Blog", "--arch", "dm", "--no-tests", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	// Adding an aggregate to a --no-tests project must succeed and must NOT
+	// write test files into a test project that does not exist (which used to
+	// fail the csproj-registration walk with "no owning .csproj found").
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatalf("add aggregate on a --no-tests project must succeed: %v", err)
+	}
+	if err := Run([]string{"add", "aggregate", "Customer", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Note", "text:string", "customer:Customer", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	// No test files anywhere (neither the plain CRUD smoke tests nor the
+	// relation tests), and the project must still have built.
+	for _, orphan := range []string{"PostCrudServiceTests.cs", "CustomerCrudServiceTests.cs", "NoteRelationTests.cs"} {
+		if _, err := os.Stat(filepath.Join(project, "tests", "NoTestsDemo.UnitTests", orphan)); !os.IsNotExist(err) {
+			t.Fatalf("--no-tests project must not generate %s: %v", orphan, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(project, "tests")); !os.IsNotExist(err) {
+		t.Fatalf("--no-tests project must not create a tests directory at all: %v", err)
+	}
+}
+
 func TestRelationUnitTestGenerated(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "RelTestDemo")
 	if err := Run([]string{"new", "RelTestDemo", "--context", "Blog", "--arch", "dm", "--output", project}); err != nil {

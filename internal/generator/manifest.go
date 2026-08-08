@@ -266,6 +266,21 @@ func componentDatabase(components []string) string {
 	return "sqlite"
 }
 
+// projectHasTests reports whether the project was generated WITH its test
+// projects. `new --no-tests` simply omits the "tests:unit" component, so its
+// absence is the signal: `add`-time test rendering (relation tests, the
+// CRUD smoke tests, the MVC integration-test shell) must be skipped for
+// --no-tests projects or it would write files into a test project that does
+// not exist (and fail the csproj registration walk).
+func projectHasTests(m *Manifest) bool {
+	for _, component := range m.Components {
+		if component == "tests:unit" {
+			return true
+		}
+	}
+	return false
+}
+
 // rejectAggregateReservedProperties rejects property names that would clash
 // with a base class member. "Id" is reserved for every tier; es-tier
 // aggregates additionally reserve "Version"/"Deleted", which are members of
