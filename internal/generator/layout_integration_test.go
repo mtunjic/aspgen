@@ -52,9 +52,16 @@ func assertM2mWpfModule(t *testing.T, project, aggregate string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"ItemsSource=\"{Binding TagOptions}\"", "IsChecked=\"{Binding IsSelected, Mode=TwoWay}\"", "Content=\"{Binding Display}\""} {
+	// The list view is a ListView (not a DataGrid) with per-row edit/delete,
+	// and no inline edit form / many-to-many picker.
+	for _, expected := range []string{"ListView", `DataContext.EditCommand`, `DataContext.DeleteCommand`, "Advanced filters"} {
 		if !strings.Contains(string(view), expected) {
-			t.Fatalf("%sView.xaml multi-select missing %q: %s", aggregate, expected, view)
+			t.Fatalf("%sView.xaml list rendering missing %q: %s", aggregate, expected, view)
+		}
+	}
+	for _, forbidden := range []string{"DataGrid", "TagOptions"} {
+		if strings.Contains(string(view), forbidden) {
+			t.Fatalf("%sView.xaml must not contain %q: %s", aggregate, forbidden, view)
 		}
 	}
 	vm, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "ViewModels", aggregate+"ViewModel.cs"))
@@ -62,15 +69,34 @@ func assertM2mWpfModule(t *testing.T, project, aggregate string) {
 		t.Fatal(err)
 	}
 	vmText := string(vm)
+	if !strings.Contains(vmText, `EditViewName => "PostEdit"`) || !strings.Contains(vmText, "ListViewModelBase<IPostStore, PostRow, PostSearchCriteria, PostPageResult>") {
+		t.Fatalf("%sViewModel.cs list wiring missing edit navigation: %s", aggregate, vmText)
+	}
+	// The many-to-many picker + sync now live in the dedicated edit view.
+	editView, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "Views", aggregate+"EditView.xaml"))
+	if err != nil {
+		t.Fatalf("%sEditView.xaml was not generated: %v", aggregate, err)
+	}
+	for _, expected := range []string{"ItemsSource=\"{Binding TagOptions}\"", "IsChecked=\"{Binding IsSelected, Mode=TwoWay}\"", "Command=\"{Binding SaveCommand}\"", "Command=\"{Binding CancelCommand}\""} {
+		if !strings.Contains(string(editView), expected) {
+			t.Fatalf("%sEditView.xaml multi-select missing %q: %s", aggregate, expected, editView)
+		}
+	}
+	editVM, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "ViewModels", aggregate+"EditViewModel.cs"))
+	if err != nil {
+		t.Fatalf("%sEditViewModel.cs was not generated: %v", aggregate, err)
+	}
+	editVMText := string(editVM)
 	for _, expected := range []string{
 		"IPostTagStore postTagStore",
 		"ObservableCollection<TagOption> TagOptions { get; }",
-		"new PostTagSearchCriteria(null, SelectedItem.Id, null, 1, 1000)",
+		"new PostTagSearchCriteria(null, EditingId, null, 1, 1000)",
 		"new PostTagRow(0, saved.Id, id)",
+		"EditViewModelBase<IPostStore, PostRow, PostEditor>",
 		"public sealed class TagOption : BindableBase",
 	} {
-		if !strings.Contains(vmText, expected) {
-			t.Fatalf("%sViewModel.cs missing %q", aggregate, expected)
+		if !strings.Contains(editVMText, expected) {
+			t.Fatalf("%sEditViewModel.cs missing %q", aggregate, expected)
 		}
 	}
 	detailsVM, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "ViewModels", aggregate+"DetailsViewModel.cs"))
@@ -106,16 +132,40 @@ func TestManyToManyBlazorUI(t *testing.T) {
 	}
 	pageText := string(page)
 	for _, expected := range []string{
+		// the list page is now form-free: search + filters + a table
+		`@page "/blog/posts"`,
+		`href="/blog/posts/edit"`,
+		"Advanced filters",
+		"filterTitleContains",
+		"ViewDetails",
+		"DeleteAsync",
+	} {
+		if !strings.Contains(pageText, expected) {
+			t.Fatalf("PostCrud.razor missing %q: %s", expected, page)
+		}
+	}
+	if strings.Contains(pageText, "EditForm") {
+		t.Fatalf("PostCrud.razor must not contain the inline edit form: %s", page)
+	}
+	// the create/edit form moved to its own page
+	editPage, err := os.ReadFile(filepath.Join(project, "src", "BlazorM2MDemo.AppBlazor", "Components", "Pages", "Blog", "PostEdit.razor"))
+	if err != nil {
+		t.Fatalf("PostEdit.razor was not generated: %v", err)
+	}
+	editText := string(editPage)
+	for _, expected := range []string{
+		`@page "/blog/posts/edit"`,
+		`@page "/blog/posts/edit/{Id:long}"`,
 		"type=\"checkbox\" class=\"form-check-input\" @bind=\"option.Selected\"",
 		"private List<TagOption> TagOptions = [];",
-		"await SyncTagsAsync(savedId);",
+		"await SyncTagsAsync(editingId);",
 		"private async Task SyncTagsAsync(long PostId)",
 		"new PostTagRequest(PostId, id)",
 		"private sealed class TagOption",
 		"new PostTagPagedResponse([], 0, 1, 1000)",
 	} {
-		if !strings.Contains(pageText, expected) {
-			t.Fatalf("PostCrud.razor missing %q: %s", expected, page)
+		if !strings.Contains(editText, expected) {
+			t.Fatalf("PostEdit.razor missing %q: %s", expected, editPage)
 		}
 	}
 	details, err := os.ReadFile(filepath.Join(project, "src", "BlazorM2MDemo.AppBlazor", "Components", "Pages", "Blog", "PostDetails.razor"))

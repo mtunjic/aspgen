@@ -13,46 +13,51 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <DockPanel Margin="0,0,0,12">
+        <!-- Header with separator -->
+        <Border Grid.Row="0" Style="{StaticResource ListHeaderStyle}">
+            <DockPanel LastChildFill="False">
 {{- if eq .Theme "wpfui" }}
-            <ui:TextBlock DockPanel.Dock="Left" FontTypography="TitleLarge" Text="{{ .Name }} details" />
-            <ui:Button DockPanel.Dock="Right" Padding="12,6" Content="Back" Icon="{ui:SymbolIcon ArrowLeft24}" Command="{Binding BackCommand}" />
+                <ui:TextBlock DockPanel.Dock="Left" FontTypography="TitleLarge" Text="{{ .Name }} details" />
+                <ui:Button DockPanel.Dock="Right" Padding="12,6" Content="Back" Icon="{ui:SymbolIcon ArrowLeft24}" Command="{Binding BackCommand}" />
 {{- else }}
-            <TextBlock DockPanel.Dock="Left" FontSize="24" FontWeight="SemiBold" Text="{{ .Name }} details" />
-            <Button DockPanel.Dock="Right" Padding="12,6" Content="Back" Command="{Binding BackCommand}" />
+                <TextBlock DockPanel.Dock="Left" FontSize="24" FontWeight="SemiBold" Text="{{ .Name }} details" />
+                <Button DockPanel.Dock="Right" Padding="12,6" Content="Back" Command="{Binding BackCommand}" />
 {{- end }}
-        </DockPanel>
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel>
+            </DockPanel>
+        </Border>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Border MaxWidth="680" HorizontalAlignment="Left" Style="{StaticResource CardStyle}">
+                <StackPanel>
 {{- range .Properties }}
-                <StackPanel Margin="0,8,0,0">
+                    <StackPanel Margin="0,8,0,0">
 {{- if eq $.Theme "wpfui" }}
-                    <ui:TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{{ .DisplayName }}" />
+                        <ui:TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{{ .DisplayName }}" />
 {{- else }}
-                    <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}" />
+                        <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}" />
 {{- end }}
 {{- if .RelationTarget }}
-                    <TextBlock Text="{Binding {{ .RelationTarget }}.{{ .RelationDisplayProperty }}}" />
+                        <TextBlock Text="{Binding {{ .RelationTarget }}.{{ .RelationDisplayProperty }}}" />
 {{- else if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") }}
-                    <TextBlock Text="{Binding Item.{{ .Name }}, StringFormat=d}" />
+                        <TextBlock Text="{Binding Item.{{ .Name }}, StringFormat=d}" />
 {{- else if or (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
-                    <TextBlock Text="{Binding Item.{{ .Name }}, StringFormat=g}" />
+                        <TextBlock Text="{Binding Item.{{ .Name }}, StringFormat=g}" />
 {{- else }}
-                    <TextBlock Text="{Binding Item.{{ .Name }}}" />
+                        <TextBlock Text="{Binding Item.{{ .Name }}}" />
 {{- end }}
-                </StackPanel>
+                    </StackPanel>
 {{- end }}
 {{- range .ManyToMany }}
-                <StackPanel Margin="0,8,0,0">
+                    <StackPanel Margin="0,8,0,0">
 {{- if eq $.Theme "wpfui" }}
-                    <ui:TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{{ .DisplayName }}" />
+                        <ui:TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{{ .DisplayName }}" />
 {{- else }}
-                    <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}" />
+                        <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}" />
 {{- end }}
-                    <TextBlock Text="{Binding {{ .Name }}Display}" />
+                        <TextBlock Text="{Binding {{ .Name }}Display}" />
+                    </StackPanel>
+{{- end }}
                 </StackPanel>
-{{- end }}
-            </StackPanel>
+            </Border>
         </ScrollViewer>
     </Grid>
 </UserControl>

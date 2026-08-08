@@ -293,24 +293,42 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 	}
 	viewText := string(view)
 	for _, expected := range []string{
-		"ui:DataGrid",
+		"ui:ListView",
 		"ui:Button",
 		"ui:TextBlock",
 		"ui:TextBox",
-		"ui:NumberBox",
 		"ControlStrokeColorDefaultBrush",
 		"TextFillColorSecondaryBrush",
+		"DataContext.EditCommand",
+		"DataContext.DeleteCommand",
+	} {
+		if !strings.Contains(viewText, expected) {
+			t.Fatalf("WPF-UI entity list control was not generated: missing %q", expected)
+		}
+	}
+	if strings.Contains(viewText, "ui:DataGrid") {
+		t.Fatal("WPF-UI list must use ui:ListView, not ui:DataGrid")
+	}
+	editView, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/Views/EventEditView.xaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	editViewText := string(editView)
+	for _, expected := range []string{
+		"ui:NumberBox",
 		"ui:CalendarDatePicker",
 		`Date="{Binding Form.EventDate`,
 		"ui:TimePicker",
 		`SelectedTime="{Binding Form.StartsAtTime`,
 		"ui:ToggleSwitch",
+		`Command="{Binding SaveCommand}"`,
+		`Command="{Binding CancelCommand}"`,
 	} {
-		if !strings.Contains(viewText, expected) {
-			t.Fatalf("WPF-UI entity control was not generated: missing %q", expected)
+		if !strings.Contains(editViewText, expected) {
+			t.Fatalf("WPF-UI entity edit control was not generated: missing %q", expected)
 		}
 	}
-	if strings.Contains(viewText, `SelectedDate="{Binding Form.EventDate`) {
+	if strings.Contains(editViewText, `SelectedDate="{Binding Form.EventDate`) {
 		t.Fatal("WPF-UI CalendarDatePicker must bind Date rather than SelectedDate")
 	}
 	menu, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/Views/EventMenuView.xaml"))
@@ -321,7 +339,7 @@ func TestWpfUIThemeGeneration(t *testing.T) {
 		t.Fatal("WPF-UI module menu icon was not generated")
 	}
 	module, err := os.ReadFile(filepath.Join(project, "src/Desktop/Modules/Event/EventModule.cs"))
-	if err != nil || !strings.Contains(string(module), `navigation.Register("Event", "EventView"`) {
+	if err != nil || !strings.Contains(string(module), `navigation.Register("Event", "EventList"`) {
 		t.Fatalf("WPF-UI module was not registered with NavigationView: %v", err)
 	}
 }

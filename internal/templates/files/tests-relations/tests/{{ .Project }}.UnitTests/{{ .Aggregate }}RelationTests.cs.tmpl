@@ -23,6 +23,14 @@ public class {{ .Aggregate }}RelationTests
     public void CreatesRelatedDataAndQueriesItBack()
     {
         using var db = NewDb();
+{{- range .RelationTest.Prereqs }}
+        var {{ .Var }} = new {{ .Target }}({{ range $i, $a := .CtorArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }});
+        {{ .Var }}.Init("system");
+        db.{{ .Target }}s.Add({{ .Var }});
+{{- end }}
+{{- if .RelationTest.Prereqs }}
+        db.SaveChanges();
+{{- end }}
 {{- range .RelationTest.Relations }}
         var {{ .Var }} = new {{ .Target }}({{ range $i, $a := .CtorArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }});
         {{ .Var }}.Init("system");

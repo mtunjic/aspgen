@@ -1,11 +1,7 @@
-@using Microsoft.AspNetCore.Components.Forms
 @using System.Net.Http.Json
 @page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s"
 @using {{ .Project }}.Application
 @using {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }}
-{{- range .ManyToMany }}
-@using {{ $.Project }}.Application.Features.{{ $.Context }}.{{ .JoinEntity }}
-{{- end }}
 @inject HttpClient Http
 @inject NavigationManager Navigation
 
@@ -18,45 +14,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">{{ .Aggregate }}s</h1>
-</div>
-
-<div class="card mb-4">
-    <div class="card-header">@(editingId == 0 ? "Create {{ .Aggregate }}" : "Edit {{ .Aggregate }}")</div>
-    <div class="card-body">
-        <EditForm Model="form" OnValidSubmit="SaveAsync">
-            <DataAnnotationsValidator />
-{{- range .Properties }}
-    <div class="mb-3">
-        <label>{{ .DisplayName }}</label>
-{{- if .RelationTarget }}
-        <InputSelect @bind-Value="form.{{ .Name }}" class="form-control">
-            @foreach (var option in {{ .RelationTarget }}Items)
-            {
-                <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
-            }
-        </InputSelect>
-{{- else if eq .CSharpType "Guid" }}
-        <InputText @bind-Value="form.{{ .Name }}Text" class="form-control" />
-{{- else }}
-        <{{ .UIControl }} @bind-Value="form.{{ .Name }}" class="form-control" />
-{{- end }}
-    </div>
-{{- end }}
-{{- range .ManyToMany }}
-    <div class="mb-3">
-        <label>{{ .DisplayName }}</label>
-        @foreach (var option in {{ .Target }}Options)
-        {
-            <div class="form-check">
-                <input type="checkbox" class="form-check-input" @bind="option.Selected" />
-                <label class="form-check-label">@option.Display</label>
-            </div>
-        }
-    </div>
-{{- end }}
-    <button class="btn btn-primary" type="submit">Save</button>
-        </EditForm>
-    </div>
+    <a class="btn btn-primary" href="/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit">+ Create new</a>
 </div>
 
 <div class="card mb-4">
@@ -71,61 +29,61 @@
             <div class="row g-2 mt-1">
 {{- range .Properties }}
 {{- if .RelationTarget }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }}</label>
-            <select @bind="filter{{ .Name }}" class="form-control">
-                <option value="">Any</option>
-                @foreach (var option in {{ .RelationTarget }}Items)
-                {
-                    <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
-                }
-            </select>
-        </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }}</label>
+                    <select @bind="filter{{ .Name }}" class="form-select form-select-sm">
+                        <option value="">Any</option>
+                        @foreach (var option in {{ .RelationTarget }}Items)
+                        {
+                            <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
+                        }
+                    </select>
+                </div>
 {{- else if eq (filterKind .CSharpType) "string" }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }} contains</label>
-            <input @bind="filter{{ .Name }}Contains" @bind:event="oninput" class="form-control" />
-        </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} contains</label>
+                    <input @bind="filter{{ .Name }}Contains" @bind:event="oninput" class="form-control form-control-sm" />
+                </div>
 {{- else if eq (filterKind .CSharpType) "numeric" }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }} min</label>
-            <input type="number" @bind="filter{{ .Name }}Min" class="form-control" />
-        </div>
-        <div class="col-auto">
-            <label>{{ .DisplayName }} max</label>
-            <input type="number" @bind="filter{{ .Name }}Max" class="form-control" />
-        </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} min</label>
+                    <input type="number" @bind="filter{{ .Name }}Min" class="form-control form-control-sm" />
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} max</label>
+                    <input type="number" @bind="filter{{ .Name }}Max" class="form-control form-control-sm" />
+                </div>
 {{- else if eq (filterKind .CSharpType) "date" }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }} from</label>
-            <input type="date" @bind="filter{{ .Name }}Min" class="form-control" />
-        </div>
-        <div class="col-auto">
-            <label>{{ .DisplayName }} to</label>
-            <input type="date" @bind="filter{{ .Name }}Max" class="form-control" />
-        </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} from</label>
+                    <input type="date" @bind="filter{{ .Name }}Min" class="form-control form-control-sm" />
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} to</label>
+                    <input type="date" @bind="filter{{ .Name }}Max" class="form-control form-control-sm" />
+                </div>
 {{- else if eq (filterKind .CSharpType) "bool" }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }}</label>
-            <select @bind="filter{{ .Name }}" class="form-control">
-                <option value="">Any</option>
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-            </select>
-        </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }}</label>
+                    <select @bind="filter{{ .Name }}" class="form-select form-select-sm">
+                        <option value="">Any</option>
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
 {{- end }}
 {{- end }}
 {{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
-        <div class="col-auto">
-            <label>{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains</label>
-            <input @bind="filter{{ relationNestedFilterField . }}" @bind:event="oninput" class="form-control" />
-        </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains</label>
+                    <input @bind="filter{{ relationNestedFilterField . }}" @bind:event="oninput" class="form-control form-control-sm" />
+                </div>
 {{- end }}{{- end }}
-        <div class="col-auto align-self-end">
-            <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">Clear</button>
-            <button class="btn btn-primary" @onclick="SearchAsync">Apply</button>
-        </div>
-    </div>
+                <div class="col-auto align-self-end">
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFiltersAsync">Clear</button>
+                    <button class="btn btn-primary btn-sm" @onclick="SearchAsync">Apply</button>
+                </div>
+            </div>
         </details>
     </div>
 </div>
@@ -153,7 +111,7 @@
 {{- end }}
 {{- end }}
                     <td class="text-end text-nowrap">
-                        <button class="btn btn-sm btn-outline-primary" @onclick="() => EditAsync(item.Id)" @onclick:stopPropagation="true">Edit</button>
+                        <a class="btn btn-sm btn-outline-primary" href="/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit/@item.Id" @onclick:stopPropagation="true">Edit</a>
                         <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(item.Id)" @onclick:stopPropagation="true">Delete</button>
                     </td>
                 </tr>
@@ -179,11 +137,6 @@
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
 {{- end }}
-{{- range .ManyToMany }}
-    private List<{{ .Target }}Option> {{ .Target }}Options = [];
-{{- end }}
-    private {{ .Aggregate }}Editor form = new();
-    private long editingId;
     private string? searchText;
     private int page = 1;
     private long totalCount;
@@ -212,10 +165,6 @@
     {
 {{- range .Relations }}
         {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
-{{- end }}
-{{- range .ManyToMany }}
-        var {{ camel .Target }}Source = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
-        {{ .Target }}Options = {{ camel .Target }}Source.Select(x => new {{ .Target }}Option { Id = x.Id, Display = {{ if eq .DisplayProperty "Id" }}x.Id.ToString(){{ else }}x.{{ .DisplayProperty }}{{ end }} }).ToList();
 {{- end }}
         await SearchAsync();
     }
@@ -288,94 +237,10 @@
 
     private void ViewDetails(long id) => Navigation.NavigateTo($"/{{ kebab .Context }}/{{ kebab .Aggregate }}s/{id}");
 
-    private async Task SaveAsync()
-    {
-        var request = new {{ .Aggregate }}Request(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }});
-        var savedId = editingId;
-        if (editingId == 0)
-        {
-            var response = await Http.PostAsJsonAsync(ApiPath, request);
-            if (!response.IsSuccessStatusCode) return;
-            savedId = (await response.Content.ReadFromJsonAsync<{{ .Aggregate }}View>())?.Id ?? 0;
-        }
-        else
-        {
-            var response = await Http.PutAsJsonAsync($"{ApiPath}/{editingId}", request);
-            if (!response.IsSuccessStatusCode) return;
-        }
-{{- range .ManyToMany }}
-        await Sync{{ .Target }}sAsync(savedId);
-{{- end }}
-        form = new();
-        editingId = 0;
-{{- range .ManyToMany }}
-        foreach (var option in {{ .Target }}Options) option.Selected = false;
-{{- end }}
-        await SearchAsync();
-    }
-
-    private async Task EditAsync(long id)
-    {
-        var item = items.FirstOrDefault(x => x.Id == id);
-        if (item is null) return;
-        editingId = id;
-{{- range .Properties }}
-{{- if eq .CSharpType "Guid" }}
-        form.{{ .Name }}Text = item.{{ .Name }}.ToString();
-{{- else }}
-        form.{{ .Name }} = item.{{ .Name }};
-{{- end }}
-{{- end }}
-{{- range .ManyToMany }}
-        await LoadSelected{{ .Target }}Async(id);
-{{- end }}
-    }
-
-{{- range .ManyToMany }}
-    private async Task LoadSelected{{ .Target }}Async(long id)
-    {
-        var linked = (await Http.GetFromJsonAsync<{{ .JoinEntity }}PagedResponse>($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/search?{{ camel $.Aggregate }}Id={id}&pageSize=1000"))?.Items.Select(x => x.{{ .Target }}Id).ToHashSet() ?? [];
-        foreach (var option in {{ .Target }}Options) option.Selected = linked.Contains(option.Id);
-    }
-
-    private async Task Sync{{ .Target }}sAsync(long {{ $.Aggregate }}Id)
-    {
-        var selected = {{ .Target }}Options.Where(o => o.Selected).Select(o => o.Id).ToHashSet();
-        var current = await Http.GetFromJsonAsync<{{ .JoinEntity }}PagedResponse>($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/search?{{ camel $.Aggregate }}Id={ {{ $.Aggregate }}Id }&pageSize=1000") ?? new {{ .JoinEntity }}PagedResponse([], 0, 1, 1000);
-        foreach (var link in current.Items)
-            if (!selected.Contains(link.{{ .Target }}Id))
-                await Http.DeleteAsync($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/{link.Id}");
-        var existing = current.Items.Select(x => x.{{ .Target }}Id).ToHashSet();
-        foreach (var id in selected.Except(existing))
-            await Http.PostAsJsonAsync("/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}", new {{ .JoinEntity }}Request({{ $.Aggregate }}Id, id));
-    }
-{{- end }}
-
     private async Task DeleteAsync(long id)
     {
         var response = await Http.DeleteAsync($"{ApiPath}/{id}");
         if (!response.IsSuccessStatusCode) return;
         await SearchAsync();
     }
-
-    private sealed class {{ .Aggregate }}Editor
-    {
-{{- range .Properties }}
-{{- if eq .CSharpType "Guid" }}
-        public string {{ .Name }}Text { get; set; } = "";
-{{- else }}
-        public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
-{{- end }}
-{{- end }}
-    }
-
-{{- range .ManyToMany }}
-    private sealed class {{ .Target }}Option
-    {
-        public long Id { get; init; }
-        public string Display { get; init; } = "";
-        public bool Selected { get; set; }
-    }
-{{- end }}
 }

@@ -1,0 +1,25 @@
+namespace {{ .Project }}.Desktop.Shared;
+
+public interface IListPageResult<TRow>
+{
+    IReadOnlyList<TRow> Items { get; }
+    long TotalCount { get; }
+}
+
+// Read + save access used by the edit view (load the record, persist it).
+public interface IEntityDataStore<TRow>
+    where TRow : IEntityRow
+{
+    IReadOnlyList<TRow> GetAll();
+    TRow Save(long editingId, TRow value);
+}
+
+// Read/search/delete access used by the list view. TPage is the module's own
+// page-result type so the concrete store's Search signature matches exactly.
+public interface IListStore<TRow, TCriteria, TPage> : IEntityDataStore<TRow>
+    where TRow : IEntityRow
+    where TPage : IListPageResult<TRow>
+{
+    TPage Search(TCriteria criteria);
+    void Delete(long id);
+}

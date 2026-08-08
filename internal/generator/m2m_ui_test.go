@@ -57,39 +57,82 @@ const wpfViewModelPath = "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/ViewM
 func TestWpfViewModelManyToManyRendering(t *testing.T) {
 	out := renderTemplate(t, wpfViewModelPath, m2mData())
 	for _, expected := range []string{
-		// stores injected for the m2o target and the m2m target + join store
+		// the list view is now a thin subclass of the shared base
+		"ListViewModelBase<IPostStore, PostRow, PostSearchCriteria, PostPageResult>",
 		"private readonly ICustomerStore customerStore;",
 		"private readonly ITagStore tagStore;",
-		"private readonly IPostTagStore postTagStore;",
-		// ctor params in the same order
-		"public PostViewModel(IPostStore store, IRegionManager regionManager, ICustomerStore customerStore, ITagStore tagStore, IPostTagStore postTagStore",
-		// pickers + list reload on navigation (Prism reuses the view)
-		"public sealed class PostViewModel : BindableBase, INavigationAware",
-		"public void OnNavigatedTo(NavigationContext navigationContext)",
-		"LoadRelated();",
-		// option collection + hydration using the target's display property
-		"public ObservableCollection<TagOption> TagOptions { get; } = [];",
-		"TagOptions.Add(new TagOption(item.Id, item.Name));",
-		// selection restored on edit from the join entity's rows
-		"new PostTagSearchCriteria(null, SelectedItem.Id, null, 1, 1000)",
-		"option.IsSelected = linkedTag.Contains(option.Id);",
-		// save captures the created id and reconciles join rows
-		"var saved = store.Save(editingId, value);",
-		"new PostTagRow(0, saved.Id, id)",
-		"postTagStore.Delete(link.Id);",
-		// reset on New()/Cancel()
-		"foreach (var option in TagOptions) option.IsSelected = false;",
-		// generated option wrapper class
-		"public sealed class TagOption : BindableBase",
+		"public PostViewModel(IPostStore store, IAppNavigationService navigation, ICustomerStore customerStore, ITagStore tagStore",
+		"protected override string EntityName => \"Post\";",
+		`protected override string EditViewName => "PostEdit";`,
+		`protected override string DetailsViewName => "PostDetails";`,
+		"public ObservableCollection<CustomerRow> CustomerItems { get; } = [];",
+		"protected override PostSearchCriteria BuildCriteria(int page)",
 	} {
 		if !strings.Contains(out, expected) {
-			t.Errorf("PostViewModel rendering is missing %q\n--- rendered ---\n%s", expected, out)
+			t.Errorf("PostViewModel (list) rendering is missing %q\n--- rendered ---\n%s", expected, out)
 		}
 	}
-	// The initial load must move out of the constructor (it would otherwise
-	// never re-run on navigation-back, leaving pickers stale).
-	if strings.Contains(out, "LoadRelated();\n        Search();\n    }") {
-		t.Errorf("PostViewModel constructor must not perform the initial load (moved to OnNavigatedTo)\n%s", out)
+	// The list view model must NOT contain the shared plumbing (it lives in
+	// the base) nor the edit form + m2m logic.
+	for _, forbidden := range []string{"OnNavigatedTo", "TagOptions", "IPostTagStore", "Form.", "SaveCommand", "TryBuild", "DelegateCommand<PostRow> EditCommand"} {
+		if strings.Contains(out, forbidden) {
+			t.Errorf("PostViewModel (list) must not contain %q\n--- rendered ---\n%s", forbidden, out)
+		}
+	}
+}
+
+func TestRenderWpfListBase(t *testing.T) {
+	out := renderTemplate(t, "files/wpf/src/Desktop/Shared/ListViewModelBase.cs.tmpl", m2mData())
+	for _, expected := range []string{
+		"public abstract class ListViewModelBase<TStore, TRow, TCriteria, TPage> : BindableBase, INavigationAware",
+		"public void OnNavigatedTo(NavigationContext navigationContext)",
+		"LoadRelated();",
+		"protected abstract TCriteria BuildCriteria(int page);",
+		"public DelegateCommand<TRow> EditCommand { get; }",
+		"public DelegateCommand<TRow> DeleteCommand { get; }",
+		"public string PageLabel => $\"Page {Page} of {TotalPages}\";",
+		`Navigation.GoTo(EditViewName);`,
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("ListViewModelBase missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+}
+
+func TestWpfEditViewModelManyToManyRendering(t *testing.T) {
+	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/ViewModels/{{ .Name }}EditViewModel.cs.tmpl"
+	out := renderTemplate(t, path, m2mData())
+	for _, expected := range []string{
+		"EditViewModelBase<IPostStore, PostRow, PostEditor>",
+		"public PostEditViewModel(IPostStore store, IAppNavigationService navigation, ICustomerStore customerStore, ITagStore tagStore, IPostTagStore postTagStore)",
+		"public ObservableCollection<TagOption> TagOptions { get; } = [];",
+		"new PostTagSearchCriteria(null, EditingId, null, 1, 1000)",
+		"new PostTagRow(0, saved.Id, id)",
+		"postTagStore.Delete(link.Id);",
+		"protected override void SyncRelated(PostRow saved)",
+		"protected override bool TryBuild(out PostRow value)",
+		"public sealed class TagOption : BindableBase",
+		"public sealed class PostEditor : BindableBase",
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("PostEditViewModel rendering is missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+}
+
+func TestRenderWpfEditBase(t *testing.T) {
+	out := renderTemplate(t, "files/wpf/src/Desktop/Shared/EditViewModelBase.cs.tmpl", m2mData())
+	for _, expected := range []string{
+		"public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INavigationAware",
+		"protected abstract bool TryBuild(out TRow value);",
+		"protected abstract void SyncRelated(TRow saved);",
+		"public DelegateCommand SaveCommand { get; }",
+		"public DelegateCommand CancelCommand { get; }",
+		`ValidationMessage = $"Could not save {EntityName}. You must add its related record(s) first.";`,
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("EditViewModelBase missing %q\n--- rendered ---\n%s", expected, out)
+		}
 	}
 }
 
@@ -126,7 +169,7 @@ func TestWpfDetailsViewModelManyToManyRendering(t *testing.T) {
 	for _, expected := range []string{
 		"private readonly ITagStore tagStore;",
 		"private readonly IPostTagStore postTagStore;",
-		"public PostDetailsViewModel(IPostStore store, IRegionManager regionManager, ICustomerStore customerStore, ITagStore tagStore, IPostTagStore postTagStore)",
+		"public PostDetailsViewModel(IPostStore store, IAppNavigationService navigation, ICustomerStore customerStore, ITagStore tagStore, IPostTagStore postTagStore)",
 		"public string TagsDisplay { get; private set; } = string.Empty;",
 		"new PostTagSearchCriteria(null, id, null, 1, 1000)",
 		`TagsDisplay = string.Join(", ", tagStore.GetAll().Where(x => linkedTag.Contains(x.Id)).Select(x => x.Name));`,
@@ -139,16 +182,52 @@ func TestWpfDetailsViewModelManyToManyRendering(t *testing.T) {
 }
 
 func TestWpfViewManyToManyRendering(t *testing.T) {
+	d := m2mData()
+	d.Theme = "wpfui"
 	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Views/{{ .Name }}View.xaml.tmpl"
-	out := renderTemplate(t, path, m2mData())
+	out := renderTemplate(t, path, d)
 	for _, expected := range []string{
-		`<TextBlock Text="Tags" />`,
-		`ItemsControl Margin="0,4,0,0" ItemsSource="{Binding TagOptions}"`,
-		`IsChecked="{Binding IsSelected, Mode=TwoWay}"`,
-		`Content="{Binding Display}"`,
+		// the list uses a WPF-UI ListView (plain ListView for non-wpfui)
+		`<ui:ListView Margin="0,0,0,8" ItemsSource="{Binding Items}"`,
+		`Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"`,
+		`Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"`,
+		// search + advanced filters kept on the first page
+		"SearchText",
+		"Advanced filters",
+		// pagination
+		`Command="{Binding PrevPageCommand}"`,
+		`Command="{Binding NextPageCommand}"`,
 	} {
 		if !strings.Contains(out, expected) {
-			t.Errorf("PostView.xaml rendering is missing %q\n--- rendered ---\n%s", expected, out)
+			t.Errorf("PostView.xaml (list) rendering is missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+	// The old DataGrid and the inline edit form must be gone.
+	for _, forbidden := range []string{"DataGrid", "ItemsSource=\"{Binding TagOptions}\"", "Form.Title", "ValidationMessage"} {
+		if strings.Contains(out, forbidden) {
+			t.Errorf("PostView.xaml (list) must not contain %q\n--- rendered ---\n%s", forbidden, out)
+		}
+	}
+}
+
+func TestWpfEditViewManyToManyRendering(t *testing.T) {
+	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Views/{{ .Name }}EditView.xaml.tmpl"
+	out := renderTemplate(t, path, m2mData())
+	for _, expected := range []string{
+		`Text="{Binding Form.Title, UpdateSourceTrigger=PropertyChanged}"`,
+		`ItemsSource="{Binding CustomerItems}" DisplayMemberPath="Name" SelectedValuePath="Id" SelectedValue="{Binding Form.CustomerId, Mode=TwoWay}"`,
+		// fields flow 2-up in a responsive WrapPanel
+		"<WrapPanel>",
+		`Width="320" Margin="0,0,16,14"`,
+		`ItemsControl ItemsSource="{Binding TagOptions}"`,
+		`IsChecked="{Binding IsSelected, Mode=TwoWay}"`,
+		`Content="{Binding Display}"`,
+		`Command="{Binding SaveCommand}"`,
+		`Command="{Binding CancelCommand}"`,
+		`Text="{Binding ValidationMessage}"`,
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("PostEditView.xaml rendering is missing %q\n--- rendered ---\n%s", expected, out)
 		}
 	}
 }
@@ -170,22 +249,49 @@ func TestBlazorCrudManyToManyRendering(t *testing.T) {
 	path := "files/blazor-context-crud/src/{{ .Project }}.AppBlazor/Components/Pages/{{ .Context }}/{{ .Aggregate }}Crud.razor.tmpl"
 	out := renderTemplate(t, path, m2mData())
 	for _, expected := range []string{
+		`@page "/blog/posts"`,
+		`href="/blog/posts/edit"`,
+		"Advanced filters",
+		"filterTitleContains",
+		"filterCustomerId",
+		"filterCustomerNameContains",
+		"ViewDetails",
+		"DeleteAsync",
+		`Navigation.NavigateTo($"/blog/posts/{id}")`,
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("PostCrud.razor (list) rendering is missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+	// The inline edit form + m2m logic moved to the dedicated Edit page.
+	for _, forbidden := range []string{"EditForm", "TagOptions", "SyncTagsAsync", "form."} {
+		if strings.Contains(out, forbidden) {
+			t.Errorf("PostCrud.razor (list) must not contain %q\n--- rendered ---\n%s", forbidden, out)
+		}
+	}
+}
+
+func TestBlazorEditManyToManyRendering(t *testing.T) {
+	path := "files/blazor-context-crud/src/{{ .Project }}.AppBlazor/Components/Pages/{{ .Context }}/{{ .Aggregate }}Edit.razor.tmpl"
+	out := renderTemplate(t, path, m2mData())
+	for _, expected := range []string{
+		`@page "/blog/posts/edit"`,
+		`@page "/blog/posts/edit/{Id:long}"`,
 		"@using Demo.Application.Features.Blog.PostTag",
 		`<input type="checkbox" class="form-check-input" @bind="option.Selected" />`,
 		"@option.Display",
 		"private List<TagOption> TagOptions = [];",
-		"await SyncTagsAsync(savedId);",
-		"foreach (var option in TagOptions) option.Selected = false;",
-		"private async Task LoadSelectedTagAsync(long id)",
-		`$"/api/blog/post-tag/search?postId={id}&pageSize=1000"`,
+		"await SyncTagsAsync(editingId);",
 		"private async Task SyncTagsAsync(long PostId)",
 		`$"/api/blog/post-tag/search?postId={ PostId }&pageSize=1000"`,
 		"new PostTagPagedResponse([], 0, 1, 1000)",
 		"new PostTagRequest(PostId, id)",
 		"private sealed class TagOption",
+		"private sealed class PostEditor",
+		`<EditForm Model="form" OnValidSubmit="SaveAsync" FormName="PostEdit">`,
 	} {
 		if !strings.Contains(out, expected) {
-			t.Errorf("PostCrud.razor rendering is missing %q\n--- rendered ---\n%s", expected, out)
+			t.Errorf("PostEdit.razor rendering is missing %q\n--- rendered ---\n%s", expected, out)
 		}
 	}
 }
@@ -377,12 +483,22 @@ func TestTestCtorArgsForeignKeyUsesTargetId(t *testing.T) {
 }
 
 func TestTestRequestArgsSeedForeignKeys(t *testing.T) {
+	// For the API test, FK args reference the prerequisite View's id; scalar
+	// props get seed literals.
 	args := testRequestArgs([]Property{
-		{Name: "PostId", CSharpType: "long", RelationTarget: "Post"},
+		{Name: "RegionId", CSharpType: "long", RelationTarget: "Region"},
 		{Name: "Name", CSharpType: "string"},
 	})
-	if len(args) != 2 || args[0] == "" || strings.Contains(args[0], ".Id") || args[1] == "" {
-		t.Fatalf("expected FK args to be numeric seeds, got %#v", args)
+	if len(args) != 2 || args[0] != "region.Id" || args[1] == "" {
+		t.Fatalf("expected FK arg to reference the prereq View's id, got %#v", args)
+	}
+	// For the MVC test, a prereq is a raw long, so the FK arg is the var name.
+	mvcArgs := testMvcArgs([]Property{
+		{Name: "RegionId", CSharpType: "long", RelationTarget: "Region"},
+		{Name: "Name", CSharpType: "string"},
+	})
+	if len(mvcArgs) != 2 || mvcArgs[0] != "region" {
+		t.Fatalf("expected MVC FK arg to be the raw long var, got %#v", mvcArgs)
 	}
 }
 
@@ -540,6 +656,7 @@ func TestRenderBlazorAppTemplate(t *testing.T) {
 		"bootstrap@5.3.3/dist/css/bootstrap.min.css",
 		"<Routes />",
 		"_framework/blazor.web.js",
+		`<base href="/" />`,
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("App.razor rendering is missing %q\n--- rendered ---\n%s", expected, out)
@@ -550,6 +667,172 @@ func TestRenderBlazorAppTemplate(t *testing.T) {
 func TestBlazorNavHref(t *testing.T) {
 	if got := blazorNavHref("Blog", "Post"); got != "/blog/posts" {
 		t.Errorf("blazorNavHref = %q, want /blog/posts", got)
+	}
+}
+
+func TestBuildRelationQuickAdds(t *testing.T) {
+	entities := []EntityMeta{
+		{Name: "Customer", Properties: []Property{{Name: "Name", CSharpType: "string"}}},
+		{Name: "Tag", Properties: []Property{{Name: "Name", CSharpType: "string"}, {Name: "Active", CSharpType: "bool"}}},
+		{Name: "Event", Properties: []Property{{Name: "Name", CSharpType: "string"}, {Name: "StartsAt", CSharpType: "DateTime"}}},
+		{Name: "Region", Properties: []Property{{Name: "Name", CSharpType: "string"}}},
+		{Name: "Office", Properties: []Property{{Name: "Name", CSharpType: "string"}, {Name: "RegionId", CSharpType: "long", RelationTarget: "Region", RelationDisplayProperty: "Name"}}},
+	}
+	relations := []Relation{
+		{Name: "Customer", Target: "Customer", DisplayProperty: "Name"},
+		{Name: "Tag", Target: "Tag", DisplayProperty: "Name"},
+		{Name: "Event", Target: "Event", DisplayProperty: "Name"},
+		{Name: "Office", Target: "Office", DisplayProperty: "Name"},
+	}
+	quickAdds, missing := buildRelationQuickAdds(relations, entities)
+	if quickAdds["Customer"] != "new CustomerRow(0, name)" {
+		t.Errorf("Customer quick-add = %q", quickAdds["Customer"])
+	}
+	if quickAdds["Tag"] != "new TagRow(0, name, false)" {
+		t.Errorf("Tag quick-add = %q", quickAdds["Tag"])
+	}
+	// A target with a required date can't be quick-added inline.
+	if _, ok := quickAdds["Event"]; ok {
+		t.Errorf("Event must not be quick-addable (required date): %q", quickAdds["Event"])
+	}
+	// A target with an FK names the entity that must exist first.
+	if quickAdds["Office"] != "new OfficeRow(0, name, 0)" {
+		t.Errorf("Office quick-add = %q", quickAdds["Office"])
+	}
+	if missing["Office"] != "Region" {
+		t.Errorf("Office missing-entity = %q, want Region", missing["Office"])
+	}
+	if _, ok := missing["Customer"]; ok {
+		t.Errorf("Customer has no FK, must not have a missing-entity entry")
+	}
+}
+
+func TestRenderWpfEditViewQuickAdd(t *testing.T) {
+	d := m2mData() // has customer:Customer (quick-addable) relation
+	d.RelationQuickAdds = map[string]string{"Customer": "new CustomerRow(0, name)"}
+	d.RelationQuickAddMissing = map[string]string{}
+	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Views/{{ .Name }}EditView.xaml.tmpl"
+	out := renderTemplate(t, path, d)
+	for _, expected := range []string{
+		// clicking the dropdown flips it into editable mode; "+" commits
+		`Content="+"`,
+		`Click="OnAddCustomerClick"`,
+		`x:Name="customerCombo"`,
+		`PreviewMouseLeftButtonDown="BeginCustomerQuickAdd"`,
+		`DropDownOpened="OnCustomerDropDownOpened"`,
+		`IsEditable="{Binding AddCustomerMode, Mode=TwoWay}"`,
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("PostEditView.xaml quick-add missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+	if strings.Contains(out, "NewCustomerName") {
+		t.Errorf("PostEditView.xaml must not rely on a Text binding for the quick-add\n%s", out)
+	}
+}
+
+func TestRenderWpfEditViewCodeBehindQuickAdd(t *testing.T) {
+	d := m2mData() // has customer:Customer (quick-addable) relation
+	d.RelationQuickAdds = map[string]string{"Customer": "new CustomerRow(0, name)"}
+	d.RelationQuickAddMissing = map[string]string{}
+	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/Views/{{ .Name }}EditView.xaml.cs.tmpl"
+	out := renderTemplate(t, path, d)
+	for _, expected := range []string{
+		"private void BeginCustomerQuickAdd(object sender, MouseButtonEventArgs e)",
+		"viewModel.BeginCustomerQuickAdd();",
+		// list stays closed while typing after entering edit mode
+		"private void OnCustomerDropDownOpened(object sender, System.EventArgs e)",
+		"((ComboBox)sender).IsDropDownOpen = false;",
+		// "+" reads the typed text straight from the combo
+		"private void OnAddCustomerClick(object sender, RoutedEventArgs e)",
+		"viewModel.AddCustomer(customerCombo.Text)",
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("PostEditView.xaml.cs quick-add handler missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+}
+
+func TestRenderWpfEditViewModelQuickAddCatch(t *testing.T) {
+	d := m2mData() // has customer:Customer (quick-addable relation)
+	d.RelationQuickAdds = map[string]string{"Customer": "new CustomerRow(0, name)"}
+	d.RelationQuickAddMissing = map[string]string{}
+	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/ViewModels/{{ .Name }}EditViewModel.cs.tmpl"
+	out := renderTemplate(t, path, d)
+	for _, expected := range []string{
+		"public bool AddCustomer(string name)",
+		"catch (Exception)",
+		`ValidationMessage = "Could not add Customer. You must add its related record(s) first.";`,
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("PostEditViewModel quick-add catch missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+}
+
+func TestRenderWpfEditViewModelQuickAddSpecificMessage(t *testing.T) {
+	d := m2mData() // has customer:Customer (quick-addable relation)
+	d.RelationQuickAdds = map[string]string{"Office": "new OfficeRow(0, name, 0)"}
+	d.RelationQuickAddMissing = map[string]string{"Office": "Region"}
+	// The edit view only renders quick-add blocks for relations present in
+	// d.Relations; inject a relation so the block renders.
+	d.Relations = append(d.Relations, Relation{Name: "Office", Target: "Office", FKProperty: "OfficeId", DisplayProperty: "Name", Optional: false})
+	path := "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/ViewModels/{{ .Name }}EditViewModel.cs.tmpl"
+	out := renderTemplate(t, path, d)
+	if !strings.Contains(out, `ValidationMessage = "Could not add Office. You must add Region first.";`) {
+		t.Errorf("PostEditViewModel must name the missing entity in the quick-add message\n--- rendered ---\n%s", out)
+	}
+}
+
+func TestBlazorEditQuickAdd(t *testing.T) {
+	d := m2mData() // has customer:Customer (quick-addable) relation
+	d.RelationBlazorQuickAdds = map[string]string{"Customer": "new CustomerRequest(newCustomerName)"}
+	path := "files/blazor-context-crud/src/{{ .Project }}.AppBlazor/Components/Pages/{{ .Context }}/{{ .Aggregate }}Edit.razor.tmpl"
+	out := renderTemplate(t, path, d)
+	for _, expected := range []string{
+		"showAddCustomer",
+		"newCustomerName",
+		"private async Task AddCustomerAsync()",
+		`await Http.PostAsJsonAsync("/api/blog/customer", new CustomerRequest(newCustomerName))`,
+		"form.CustomerId = created.Id;",
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("PostEdit.razor quick-add missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+}
+
+func TestRenderWpfAppStyles(t *testing.T) {
+	d := m2mData()
+	d.Theme = "wpfui"
+	out := renderTemplate(t, "files/wpf/src/Desktop/Themes/AppStyles.xaml.tmpl", d)
+	for _, expected := range []string{
+		`x:Key="CardStyle"`,
+		`x:Key="CardSecondaryStyle"`,
+		`x:Key="SectionHeaderStyle"`,
+		`x:Key="ListHeaderStyle"`,
+		`x:Key="HeaderBandStyle"`,
+		"CardBackgroundFillColorDefaultBrush",
+		"ControlFillColorSecondaryBrush",
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("AppStyles.xaml missing %q\n--- rendered ---\n%s", expected, out)
+		}
+	}
+}
+
+func TestRenderWpfNavigationService(t *testing.T) {
+	out := renderTemplate(t, "files/wpf/src/Desktop/Shared/NavigationService.cs.tmpl", m2mData())
+	for _, expected := range []string{
+		"public interface IAppNavigationService",
+		"void GoTo(string viewName);",
+		"void GoTo(string viewName, long id);",
+		"public sealed class AppNavigationService : IAppNavigationService",
+		`regionManager.RequestNavigate("MainRegion", viewName, new NavigationParameters { { "id", id } });`,
+	} {
+		if !strings.Contains(out, expected) {
+			t.Errorf("NavigationService missing %q\n--- rendered ---\n%s", expected, out)
+		}
 	}
 }
 

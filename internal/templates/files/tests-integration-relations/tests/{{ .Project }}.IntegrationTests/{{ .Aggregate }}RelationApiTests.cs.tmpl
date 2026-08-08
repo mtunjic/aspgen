@@ -24,6 +24,11 @@ public class {{ .Aggregate }}RelationApiTests
             builder.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source=rel-{Guid.NewGuid():N}.db"));
         var client = factory.CreateClient();
 
+{{- range .RelationTest.Prereqs }}
+        var {{ .Var }}Response = await client.PostAsJsonAsync("/api/{{ kebab $.Context }}/{{ kebab .Target }}", new {{ .Target }}Request({{ range $i, $a := .RequestArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}));
+        {{ .Var }}Response.EnsureSuccessStatusCode();
+        var {{ .Var }} = await {{ .Var }}Response.Content.ReadFromJsonAsync<{{ .Target }}View>();
+{{- end }}
 {{- range .RelationTest.Relations }}
         var {{ .Var }}Response = await client.PostAsJsonAsync("/api/{{ kebab $.Context }}/{{ kebab .Target }}", new {{ .Target }}Request({{ range $i, $a := .RequestArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}));
         {{ .Var }}Response.EnsureSuccessStatusCode();

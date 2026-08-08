@@ -10,6 +10,9 @@ type Column struct {
 	RawType      string
 	Nullable     bool
 	IsPrimaryKey bool
+	// ForeignKey is the referenced table name when this column is a foreign
+	// key (single-column `REFERENCES tbl(col)`), or "" for plain columns.
+	ForeignKey string
 }
 
 // Table describes one table's columns, in declaration/introspection order.

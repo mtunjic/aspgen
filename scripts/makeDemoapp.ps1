@@ -73,12 +73,13 @@ Check "G unknown type (EXPECTED error)"  1 (Invoke-Aspgen ('add','aggregate','Po
 # --- verify the pickers actually landed in each generated app ---
 Write-Host "`n--- verify pickers ---"
 $ver = @(
-    @{ L="A dm+wpf dropdown+multiselect"; F="$root\A-dm-wpf\src\Desktop\Modules\Post\Views\PostView.xaml";         P=@("CustomerItems","TagOptions") },
-    @{ L="B cqrs+wpf multiselect";        F="$root\B-cqrs-wpf\src\Desktop\Modules\Post\Views\PostView.xaml";       P=@("TagOptions") },
-    @{ L="C blazor multiselect";          F="$root\C-cqrs-blazor\src\C.AppBlazor\Components\Pages\Blog\PostCrud.razor"; P=@("option.Selected","SyncTagsAsync") },
-    @{ L="D mvc multiselect";             F="$root\D-dm-mvc\src\D.WebMvc\Views\Post\Create.cshtml";                P=@("selectedTagIds") },
-    @{ L="E retrofit multiselect";        F="$root\E-retrofit-wpf\src\Desktop\Modules\Post\Views\PostView.xaml";  P=@("TagOptions") },
-    @{ L="F es+wpf multiselect";          F="$root\F-es-wpf\src\Desktop\Modules\Post\Views\PostView.xaml";        P=@("TagOptions") }
+    @{ L="A dm+wpf list dropdown";        F="$root\A-dm-wpf\src\Desktop\Modules\Post\Views\PostView.xaml";           P=@("CustomerItems") },
+    @{ L="A dm+wpf edit multiselect";     F="$root\A-dm-wpf\src\Desktop\Modules\Post\Views\PostEditView.xaml";       P=@("TagOptions") },
+    @{ L="B cqrs+wpf edit multiselect";   F="$root\B-cqrs-wpf\src\Desktop\Modules\Post\Views\PostEditView.xaml";     P=@("TagOptions") },
+    @{ L="C blazor multiselect";          F="$root\C-cqrs-blazor\src\C.AppBlazor\Components\Pages\Blog\PostEdit.razor"; P=@("option.Selected","SyncTagsAsync") },
+    @{ L="D mvc multiselect";             F="$root\D-dm-mvc\src\D.WebMvc\Views\Post\Create.cshtml";                  P=@("selectedTagIds") },
+    @{ L="E retrofit edit multiselect";   F="$root\E-retrofit-wpf\src\Desktop\Modules\Post\Views\PostEditView.xaml"; P=@("TagOptions") },
+    @{ L="F es+wpf edit multiselect";     F="$root\F-es-wpf\src\Desktop\Modules\Post\Views\PostEditView.xaml";       P=@("TagOptions") }
 )
 foreach ($v in $ver) {
     $text = Get-Content -Raw $v.F -ErrorAction SilentlyContinue

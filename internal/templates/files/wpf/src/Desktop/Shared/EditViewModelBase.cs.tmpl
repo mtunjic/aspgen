@@ -1,0 +1,114 @@
+using Prism.Commands;
+using Prism.Mvvm;
+using Prism.Navigation;
+using Prism.Navigation.Regions;
+
+namespace {{ .Project }}.Desktop.Shared;
+
+// Shared create/edit-view plumbing for every generated module: loading the
+// record by navigation id, form reset, save + related-row sync, validation
+// message and back-to-list navigation. Derived view models only supply the
+// entity-specific form fields, related-item loading and save logic.
+public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INavigationAware
+    where TStore : IEntityDataStore<TRow>
+    where TRow : class, IEntityRow
+    where TForm : class
+{
+    protected readonly IAppNavigationService Navigation;
+    private readonly TStore store;
+    protected long EditingId;
+    private bool isBusy;
+    private string validationMessage = string.Empty;
+
+    protected EditViewModelBase(TStore store, IAppNavigationService navigation)
+    {
+        this.store = store;
+        Navigation = navigation;
+        Form = CreateForm();
+        SaveCommand = new DelegateCommand(Save, () => !IsBusy);
+        CancelCommand = new DelegateCommand(Cancel, () => !IsBusy);
+    }
+
+    public bool IsNavigationTarget(NavigationContext navigationContext) => true;
+
+    public void OnNavigatedFrom(NavigationContext navigationContext)
+    {
+    }
+
+    public void OnNavigatedTo(NavigationContext navigationContext)
+    {
+        var id = navigationContext.Parameters.GetValue<long>("id");
+        EditingId = id;
+        TRow? item = id == 0 ? default : store.GetAll().FirstOrDefault(x => x.Id == id);
+        ResetForm(item);
+        LoadRelated();
+        ValidationMessage = string.Empty;
+    }
+
+    protected abstract TForm CreateForm();
+    protected abstract void ResetForm(TRow? item);
+    protected abstract void LoadRelated();
+    protected abstract bool TryBuild(out TRow value);
+    protected abstract void SyncRelated(TRow saved);
+    protected abstract string EntityName { get; }
+    protected abstract string ListViewName { get; }
+
+    public TForm Form { get; }
+    public bool IsEditing => EditingId != 0;
+    public string Title => IsEditing ? "Edit " + EntityName : "Create " + EntityName;
+    public bool IsBusy
+    {
+        get => isBusy;
+        protected set
+        {
+            if (SetProperty(ref isBusy, value))
+            {
+                SaveCommand.RaiseCanExecuteChanged();
+                CancelCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+    public string ValidationMessage
+    {
+        get => validationMessage;
+        protected set
+        {
+            if (SetProperty(ref validationMessage, value))
+            {
+                RaisePropertyChanged(nameof(HasValidationError));
+            }
+        }
+    }
+    public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationMessage);
+
+    public DelegateCommand SaveCommand { get; }
+    public DelegateCommand CancelCommand { get; }
+
+    protected bool Invalid(string propertyName)
+    {
+        ValidationMessage = $"{propertyName} is invalid.";
+        return false;
+    }
+
+    private void Save()
+    {
+        if (!TryBuild(out var value)) return;
+        IsBusy = true;
+        try
+        {
+            var saved = store.Save(EditingId, value);
+            SyncRelated(saved);
+            Navigation.GoTo(ListViewName);
+        }
+        catch (Exception)
+        {
+            ValidationMessage = $"Could not save {EntityName}. You must add its related record(s) first.";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void Cancel() => Navigation.GoTo(ListViewName);
+}

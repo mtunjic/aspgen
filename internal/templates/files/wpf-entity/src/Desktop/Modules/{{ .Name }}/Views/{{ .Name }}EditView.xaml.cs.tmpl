@@ -1,0 +1,52 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+
+namespace {{ .Namespace }}.Views;
+
+public partial class {{ .Name }}EditView : UserControl
+{
+    private bool justActivatedEdit;
+
+    public {{ .Name }}EditView() => InitializeComponent();
+{{- range .Relations }}{{- if index $.RelationQuickAdds .Target }}
+
+    // Clicking the relation dropdown flips it into editable mode so the user
+    // can type a new related record and add it with the "+" button.
+    private void Begin{{ .Target }}QuickAdd(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is {{ $.Namespace }}.ViewModels.{{ $.Name }}EditViewModel viewModel)
+        {
+            if (!viewModel.Add{{ .Target }}Mode)
+            {
+                justActivatedEdit = true;
+                viewModel.Begin{{ .Target }}QuickAdd();
+            }
+        }
+    }
+
+    // Keep the item list closed when the click only flips the combo into
+    // editable mode, so typing isn't interrupted by the dropdown popping open.
+    private void On{{ .Target }}DropDownOpened(object sender, System.EventArgs e)
+    {
+        if (justActivatedEdit)
+        {
+            justActivatedEdit = false;
+            ((ComboBox)sender).IsDropDownOpen = false;
+        }
+    }
+
+    // "+" commits whatever is typed in the editable combo as a new related
+    // record, reading the text directly from the control (no binding needed).
+    private void OnAdd{{ .Target }}Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is {{ $.Namespace }}.ViewModels.{{ $.Name }}EditViewModel viewModel)
+        {
+            if (viewModel.Add{{ .Target }}({{ camel .Target }}Combo.Text))
+            {
+                {{ camel .Target }}Combo.Text = string.Empty;
+            }
+        }
+    }
+{{- end }}{{- end }}
+}

@@ -291,3 +291,104 @@ func injectableTargets(relations []Relation, manyToMany []ManyToManyRelation) []
 	}
 	return result
 }
+
+// buildRelationQuickAdds computes, for every many-to-one relation target, the
+// C# expression that constructs a new target Row (Id 0 + the typed display
+// value + defaults for every other property) so the WPF edit form's inline
+// "+" quick-add can create the related record without leaving the form. Only
+// targets whose non-display properties are all safely defaultable qualify.
+// The second map names, per target, the entity it must already have been
+// created under (its first FK target), for the friendly constraint message.
+func buildRelationQuickAdds(relations []Relation, entities []EntityMeta) (map[string]string, map[string]string) {
+	rows := map[string]string{}
+	missing := map[string]string{}
+	for _, rel := range relations {
+		target := findEntityMeta(entities, rel.Target)
+		if target == nil {
+			continue
+		}
+		if !quickAddFeasible(*target, rel.DisplayProperty) {
+			continue
+		}
+		args := []string{"0"}
+		for _, p := range target.Properties {
+			if p.Name == rel.DisplayProperty {
+				args = append(args, "name")
+				continue
+			}
+			if p.RelationTarget != "" && missing[rel.Target] == "" {
+				missing[rel.Target] = p.RelationTarget
+			}
+			args = append(args, quickAddDefault(p))
+		}
+		rows[rel.Target] = "new " + rel.Target + "Row(" + strings.Join(args, ", ") + ")"
+	}
+	return rows, missing
+}
+
+// buildBlazorQuickAdds computes, for every quick-addable relation target, the
+// C# expression constructing its API Request from the typed display value
+// (e.g. "new CustomerRequest(newCustomerName)") for the Blazor edit page's
+// inline "+" quick-add. Only targets whose non-display properties default
+// safely qualify (the same feasibility rule as WPF).
+func buildBlazorQuickAdds(relations []Relation, entities []EntityMeta) map[string]string {
+	result := map[string]string{}
+	for _, rel := range relations {
+		target := findEntityMeta(entities, rel.Target)
+		if target == nil {
+			continue
+		}
+		if !quickAddFeasible(*target, rel.DisplayProperty) {
+			continue
+		}
+		var args []string
+		for _, p := range target.Properties {
+			if p.Name == rel.DisplayProperty {
+				args = append(args, "new"+rel.Target+"Name")
+				continue
+			}
+			args = append(args, quickAddDefault(p))
+		}
+		result[rel.Target] = "new " + rel.Target + "Request(" + strings.Join(args, ", ") + ")"
+	}
+	return result
+}
+
+// quickAddFeasible reports whether a relation target can be created inline
+// from just its display property: the display property must be a string, and
+// every other property must default safely (nullable, bool, numeric, Guid).
+func quickAddFeasible(target EntityMeta, displayProperty string) bool {
+	hasDisplay := false
+	for _, p := range target.Properties {
+		if p.Name == displayProperty {
+			if strings.TrimSuffix(p.CSharpType, "?") != "string" {
+				return false
+			}
+			hasDisplay = true
+			continue
+		}
+		if quickAddDefault(p) == "" {
+			return false
+		}
+	}
+	return hasDisplay
+}
+
+// quickAddDefault renders a default C# literal for a target property used by
+// the inline quick-add, or "" when the property can't be defaulted safely
+// (required strings, dates, and unknown types are excluded).
+func quickAddDefault(p Property) string {
+	switch strings.TrimSuffix(p.CSharpType, "?") {
+	case "bool":
+		return "false"
+	case "int", "long", "decimal", "float":
+		return "0"
+	case "Guid":
+		return "Guid.Empty"
+	case "string":
+		if strings.HasSuffix(p.CSharpType, "?") {
+			return "null"
+		}
+	}
+	return ""
+}

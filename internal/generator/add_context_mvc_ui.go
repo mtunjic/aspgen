@@ -17,6 +17,9 @@ func attachContextMvcUI(project string, m *Manifest, override string, dryRun, fo
 	if err := renderTree(project, "mvc-context", hostData, override, dryRun, force); err != nil {
 		return err
 	}
+	if err := updateReadmeRunSection(project, m.Project, "mvc", "dm", dryRun); err != nil {
+		return err
+	}
 	// The WebMvc is a real ASP.NET Core host, so dm-tier MVC projects get an
 	// IntegrationTests project (WebApplicationFactory) alongside the usual
 	// UnitTests. Its relation test files are added per-aggregate at `add`
@@ -94,6 +97,7 @@ func updateMvcNav(project, projectName, aggregate string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
+	content = normalizeCRLF(content)
 	li := "                    <li class=\"nav-item\"><a class=\"nav-link\" asp-controller=\"" + aggregate + "\" asp-action=\"Index\">" + aggregate + "</a></li>"
 	if strings.Contains(content, li) {
 		return nil
@@ -114,6 +118,7 @@ func updateHomeRedirect(project, projectName, aggregate string, dryRun bool) err
 	if err != nil {
 		return err
 	}
+	content = normalizeCRLF(content)
 	marker := "        // aspgen:redirect\n        return View();"
 	redirect := fmt.Sprintf("        return RedirectToAction(\"Index\", %q);", aggregate)
 	if !strings.Contains(content, marker) {
@@ -121,4 +126,11 @@ func updateHomeRedirect(project, projectName, aggregate string, dryRun bool) err
 	}
 	content = strings.Replace(content, marker, redirect, 1)
 	return writeMarkerFile(path, content, dryRun)
+}
+
+// normalizeCRLF converts CRLF line endings to LF so marker matching works
+// regardless of the working-tree/checkout line endings (templates and
+// generated files may legitimately be either LF or CRLF on Windows).
+func normalizeCRLF(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
 }

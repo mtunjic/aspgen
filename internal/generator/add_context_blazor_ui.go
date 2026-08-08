@@ -16,8 +16,11 @@ func attachContextBlazorUI(project string, m *Manifest, override string, dryRun,
 	if err := renderTree(project, "blazor-context", hostData, override, dryRun, force); err != nil {
 		return err
 	}
+	if err := updateReadmeRunSection(project, m.Project, "blazor", componentBackend(m.Components), dryRun); err != nil {
+		return err
+	}
 	for _, entity := range m.Entities {
-		if err := renderContextBlazorCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), reconstructManyToMany(entity, m.Entities), override, dryRun, force); err != nil {
+		if err := renderContextBlazorCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), reconstructManyToMany(entity, m.Entities), buildBlazorQuickAdds(reconstructRelations(entity.Properties), m.Entities), override, dryRun, force); err != nil {
 			return err
 		}
 		if err := updateBlazorNav(project, m.Project, entity.Name, entity.Context, dryRun); err != nil {
@@ -31,15 +34,16 @@ func attachContextBlazorUI(project string, m *Manifest, override string, dryRun,
 // pages. Shared by attachContextBlazorUI (existing aggregates) and
 // renderAggregateCrud's cqrs/es cases (aggregates added after -ui blazor is
 // already attached).
-func renderContextBlazorCrud(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, manyToMany []ManyToManyRelation, override string, dryRun, force bool) error {
+func renderContextBlazorCrud(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, manyToMany []ManyToManyRelation, blazorQuickAdds map[string]string, override string, dryRun, force bool) error {
 	pageData := data{
-		Project:    projectName,
-		Namespace:  projectName,
-		Context:    contextName,
-		Aggregate:  aggregate,
-		Properties: properties,
-		Relations:  relations,
-		ManyToMany: manyToMany,
+		Project:                projectName,
+		Namespace:              projectName,
+		Context:                contextName,
+		Aggregate:              aggregate,
+		Properties:             properties,
+		Relations:              relations,
+		ManyToMany:             manyToMany,
+		RelationBlazorQuickAdds: blazorQuickAdds,
 	}
 	return renderTree(project, "blazor-context-crud", pageData, override, dryRun, force)
 }
@@ -51,7 +55,7 @@ func renderContextBlazorCrudIfAttached(r addRequest, m *Manifest, d data) error 
 	if m.UI != "blazor" {
 		return nil
 	}
-	if err := renderContextBlazorCrud(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, d.ManyToMany, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+	if err := renderContextBlazorCrud(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, d.ManyToMany, buildBlazorQuickAdds(d.Relations, m.Entities), templateDir(r.Args), r.DryRun, r.Force); err != nil {
 		return err
 	}
 	return updateBlazorNav(r.Project, m.Project, d.Aggregate, d.Context, r.DryRun)
@@ -67,6 +71,7 @@ func updateBlazorNav(project, projectName, aggregate, contextName string, dryRun
 	if err != nil {
 		return err
 	}
+	content = normalizeCRLF(content)
 	href := blazorNavHref(contextName, aggregate)
 	li := "                <li class=\"nav-item\"><NavLink class=\"nav-link\" href=\"" + href + "\">" + aggregate + "s</NavLink></li>"
 	if strings.Contains(content, li) {

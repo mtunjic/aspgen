@@ -1,0 +1,256 @@
+using System.Collections.ObjectModel;
+using System.Threading.Tasks;
+{{- if eq .Theme "wpfui" }}
+using Wpf.Ui;
+using Wpf.Ui.Controls;
+using Wpf.Ui.Extensions;
+{{- else }}
+using System.Windows;
+{{- end }}
+using Prism.Commands;
+using Prism.Mvvm;
+using Prism.Navigation;
+using Prism.Navigation.Regions;
+
+namespace {{ .Project }}.Desktop.Shared;
+
+// Shared list-view plumbing for every generated module: search + advanced
+// filter lifecycle, pagination, create/edit/details navigation, delete
+// confirmation and reload-on-navigation. Derived view models only supply the
+// entity-specific criteria/filters and relation items.
+public abstract class ListViewModelBase<TStore, TRow, TCriteria, TPage> : BindableBase, INavigationAware
+    where TStore : IListStore<TRow, TCriteria, TPage>
+    where TRow : class, IEntityRow
+    where TPage : IListPageResult<TRow>
+{
+    protected const int PageSize = 25;
+    protected readonly IAppNavigationService Navigation;
+{{- if eq .Theme "wpfui" }}
+    private readonly IContentDialogService dialogService;
+    private readonly ISnackbarService snackbarService;
+{{- end }}
+    private readonly TStore store;
+    private TRow? selectedItem;
+    private bool isBusy;
+    private string searchText = string.Empty;
+    private bool isAdvancedFilterExpanded;
+    private int page = 1;
+    private long totalCount;
+
+    protected ListViewModelBase(TStore store, IAppNavigationService navigation{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }})
+    {
+        this.store = store;
+        Navigation = navigation;
+{{- if eq .Theme "wpfui" }}
+        this.dialogService = dialogService;
+        this.snackbarService = snackbarService;
+{{- end }}
+        NewCommand = new DelegateCommand(New, () => !IsBusy);
+        EditCommand = new DelegateCommand<TRow>(Edit, _ => !IsBusy);
+        DeleteCommand = new DelegateCommand<TRow>(Delete, _ => !IsBusy);
+        SearchCommand = new DelegateCommand(Search, () => !IsBusy);
+        PrevPageCommand = new DelegateCommand(PrevPage, () => !IsBusy && Page > 1);
+        NextPageCommand = new DelegateCommand(NextPage, () => !IsBusy && Page < TotalPages);
+        ClearFiltersCommand = new DelegateCommand(ClearFilters, () => !IsBusy);
+        ViewDetailsCommand = new DelegateCommand(ViewDetails, () => SelectedItem is not null);
+    }
+
+    // Prism reuses the view + ViewModel when the user navigates back, so the
+    // constructor alone would leave the pickers (and list) stale. Reloading
+    // on every navigation keeps relation dropdowns in sync with data added
+    // through the related modules.
+    public bool IsNavigationTarget(NavigationContext navigationContext) => true;
+
+    public void OnNavigatedFrom(NavigationContext navigationContext)
+    {
+    }
+
+    public void OnNavigatedTo(NavigationContext navigationContext)
+    {
+        LoadRelated();
+        Search();
+    }
+
+    protected abstract string EntityName { get; }
+    protected abstract string EditViewName { get; }
+    protected abstract string DetailsViewName { get; }
+    protected abstract void LoadRelated();
+    protected abstract TCriteria BuildCriteria(int page);
+    protected abstract void ClearFilterFields();
+
+    public ObservableCollection<TRow> Items { get; } = [];
+    public bool IsEmpty => Items.Count == 0;
+    public string SearchText
+    {
+        get => searchText;
+        set => SetProperty(ref searchText, value);
+    }
+    public bool IsAdvancedFilterExpanded
+    {
+        get => isAdvancedFilterExpanded;
+        set => SetProperty(ref isAdvancedFilterExpanded, value);
+    }
+    public int Page
+    {
+        get => page;
+        private set
+        {
+            if (SetProperty(ref page, value))
+            {
+                RaisePropertyChanged(nameof(PageLabel));
+                PrevPageCommand.RaiseCanExecuteChanged();
+                NextPageCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+    public long TotalCount
+    {
+        get => totalCount;
+        private set
+        {
+            if (SetProperty(ref totalCount, value))
+            {
+                RaisePropertyChanged(nameof(PageLabel));
+            }
+        }
+    }
+    public int TotalPages => totalCount == 0 ? 1 : (int)Math.Ceiling((double)totalCount / PageSize);
+    public string PageLabel => $"Page {Page} of {TotalPages}";
+    public bool IsBusy
+    {
+        get => isBusy;
+        private set
+        {
+            if (SetProperty(ref isBusy, value))
+            {
+                NewCommand.RaiseCanExecuteChanged();
+                EditCommand.RaiseCanExecuteChanged();
+                DeleteCommand.RaiseCanExecuteChanged();
+                SearchCommand.RaiseCanExecuteChanged();
+                PrevPageCommand.RaiseCanExecuteChanged();
+                NextPageCommand.RaiseCanExecuteChanged();
+                ClearFiltersCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public TRow? SelectedItem
+    {
+        get => selectedItem;
+        set
+        {
+            if (SetProperty(ref selectedItem, value))
+            {
+                ViewDetailsCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public DelegateCommand NewCommand { get; }
+    public DelegateCommand<TRow> EditCommand { get; }
+    public DelegateCommand<TRow> DeleteCommand { get; }
+    public DelegateCommand SearchCommand { get; }
+    public DelegateCommand PrevPageCommand { get; }
+    public DelegateCommand NextPageCommand { get; }
+    public DelegateCommand ClearFiltersCommand { get; }
+    public DelegateCommand ViewDetailsCommand { get; }
+
+    private void ExecuteSearch()
+    {
+        IsBusy = true;
+        try
+        {
+            var result = store.Search(BuildCriteria(Page));
+            Items.Clear();
+            foreach (var item in result.Items) Items.Add(item);
+            TotalCount = result.TotalCount;
+            RaisePropertyChanged(nameof(IsEmpty));
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void Search()
+    {
+        Page = 1;
+        ExecuteSearch();
+    }
+
+    private void PrevPage()
+    {
+        if (Page <= 1) return;
+        Page--;
+        ExecuteSearch();
+    }
+
+    private void NextPage()
+    {
+        if (Page >= TotalPages) return;
+        Page++;
+        ExecuteSearch();
+    }
+
+    private void ClearFilters()
+    {
+        SearchText = string.Empty;
+        ClearFilterFields();
+        Search();
+    }
+
+    private void New() => Navigation.GoTo(EditViewName);
+
+    private void Edit(TRow? item)
+    {
+        if (item is null) return;
+        Navigation.GoTo(EditViewName, item.Id);
+    }
+
+    private void ViewDetails()
+    {
+        if (SelectedItem is null) return;
+        Navigation.GoTo(DetailsViewName, SelectedItem.Id);
+    }
+
+    private void Delete(TRow? item)
+    {
+        if (item is null) return;
+        _ = DeleteAsync(item);
+    }
+
+    private async Task DeleteAsync(TRow item)
+    {
+{{- if eq .Theme "wpfui" }}
+        var result = await dialogService.ShowSimpleDialogAsync(new SimpleContentDialogCreateOptions
+        {
+            Title = "Delete " + EntityName + "?",
+            Content = "This will permanently delete the selected " + EntityName + " record.",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel"
+        });
+        if (result != ContentDialogResult.Primary) return;
+{{- else }}
+        var confirmed = MessageBox.Show(
+            "This will permanently delete the selected " + EntityName + " record.",
+            "Delete " + EntityName + "?",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        if (!confirmed) return;
+{{- end }}
+        IsBusy = true;
+        try
+        {
+            store.Delete(item.Id);
+            SelectedItem = null;
+            Search();
+{{- if eq .Theme "wpfui" }}
+            snackbarService.Show("Deleted", EntityName + " deleted successfully.", ControlAppearance.Success, new SymbolIcon { Symbol = SymbolRegular.Delete24 }, TimeSpan.FromSeconds(4));
+{{- end }}
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+}

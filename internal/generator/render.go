@@ -43,6 +43,19 @@ type data struct {
 	// group); nil unless an aggregate with relations was just added to a
 	// dm/cqrs-tier project.
 	RelationTest *RelationTest
+	// RelationQuickAdds maps a relation target's name to the C# expression
+	// constructing a new target Row for the edit form's inline "add related"
+	// quick-add (e.g. "new CustomerRow(0, name)"). Absent targets are not
+	// quick-addable.
+	RelationQuickAdds map[string]string
+	// RelationQuickAddMissing maps a quick-addable relation target to the
+	// entity it must have been created under first (its own first FK target),
+	// so the friendly constraint message can name it.
+	RelationQuickAddMissing map[string]string
+	// RelationBlazorQuickAdds maps a relation target to the C# expression
+	// constructing its API Request for the Blazor edit page's inline
+	// quick-add (e.g. "new CustomerRequest(newCustomerName)").
+	RelationBlazorQuickAdds map[string]string
 }
 
 func renderTree(root, group string, d data, override string, dryRun, force bool) error {

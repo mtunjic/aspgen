@@ -13,8 +13,9 @@ import (
 //
 // This is an intentionally minimal, non-grammar parser: it does not support
 // ALTER TABLE, views, generated/computed columns, or nested subqueries.
-// FOREIGN KEY/CHECK/DEFAULT clauses are recognized only enough to be
-// skipped over, never surfaced as columns.
+// FOREIGN KEY constraints are recognized (inline `REFERENCES tbl(col)` and
+// table-level `FOREIGN KEY (col) REFERENCES tbl(col)`, single-column only);
+// CHECK/DEFAULT clauses are skipped over and never surfaced as columns.
 func ParseScript(provider, sqlText string) ([]Table, error) {
 	body := stripComments(sqlText)
 	re := regexp.MustCompile(`(?is)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(` + identifierPattern + `)`)
@@ -49,23 +50,35 @@ const identifierPattern = `"[^"]+"|` + "`[^`]+`" + `|\[[^\]]+\]|[A-Za-z_][A-Za-z
 
 var tableConstraintPrefix = regexp.MustCompile(`(?i)^(PRIMARY\s+KEY|FOREIGN\s+KEY|CONSTRAINT|UNIQUE|CHECK|KEY|INDEX)\b`)
 var primaryKeyPrefix = regexp.MustCompile(`(?i)^PRIMARY\s+KEY`)
+var foreignKeyAnyPattern = regexp.MustCompile(`(?i)\bFOREIGN\s+KEY\b`)
 var notNullPattern = regexp.MustCompile(`(?i)\bNOT\s+NULL\b`)
 var inlinePKPattern = regexp.MustCompile(`(?i)\bPRIMARY\s+KEY\b`)
 var identifierRe = regexp.MustCompile(identifierPattern)
+var fkTargetPattern = regexp.MustCompile(`(?i)\bREFERENCES\s+(` + identifierPattern + `)`)
 
 func parseColumns(body string) ([]Column, error) {
 	defs := splitTopLevel(body, ',')
 	var columns []Column
 	pkNames := map[string]bool{}
+	fkByCol := map[string]string{}
 	for _, def := range defs {
 		def = strings.TrimSpace(def)
 		if def == "" {
 			continue
 		}
 		if tableConstraintPrefix.MatchString(def) {
-			if primaryKeyPrefix.MatchString(def) {
+			// Covers bare and CONSTRAINT-named PRIMARY/FOREIGN KEY clauses.
+			if primaryKeyPrefix.MatchString(def) || inlinePKPattern.MatchString(def) {
 				for _, col := range extractParenIdentifiers(def) {
 					pkNames[strings.ToLower(col)] = true
+				}
+			} else if foreignKeyAnyPattern.MatchString(def) {
+				// FOREIGN KEY (local) REFERENCES tbl(col) — single-column only.
+				local := extractParenIdentifiers(def)
+				if len(local) > 0 {
+					if m := fkTargetPattern.FindStringSubmatch(def); len(m) > 1 {
+						fkByCol[strings.ToLower(local[0])] = unquoteIdentifier(m[1])
+					}
 				}
 			}
 			continue
@@ -80,6 +93,9 @@ func parseColumns(body string) ([]Column, error) {
 		if pkNames[strings.ToLower(columns[i].Name)] {
 			columns[i].IsPrimaryKey = true
 			columns[i].Nullable = false
+		}
+		if ref := fkByCol[strings.ToLower(columns[i].Name)]; ref != "" {
+			columns[i].ForeignKey = ref
 		}
 	}
 	if len(columns) == 0 {
@@ -103,6 +119,9 @@ func parseColumnDef(def string) (Column, error) {
 	}
 	if inlinePKPattern.MatchString(tail) {
 		col.IsPrimaryKey = true
+	}
+	if m := fkTargetPattern.FindStringSubmatch(tail); len(m) > 1 {
+		col.ForeignKey = unquoteIdentifier(m[1])
 	}
 	return col, nil
 }

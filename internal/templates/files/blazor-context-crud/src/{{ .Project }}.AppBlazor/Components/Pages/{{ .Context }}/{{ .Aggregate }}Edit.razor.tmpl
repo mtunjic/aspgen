@@ -1,0 +1,197 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Json
+@page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit"
+@page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit/{Id:long}"
+@using {{ .Project }}.Application
+@using {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }}
+{{- range .ManyToMany }}
+@using {{ $.Project }}.Application.Features.{{ $.Context }}.{{ .JoinEntity }}
+{{- end }}
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Home</a></li>
+        <li class="breadcrumb-item"><a href="/{{ kebab .Context }}/{{ kebab .Aggregate }}s">{{ .Aggregate }}s</a></li>
+        <li class="breadcrumb-item active" aria-current="page">@(editingId == 0 ? "Create" : "Edit")</li>
+    </ol>
+</nav>
+
+<h1 class="h3 mb-4">@(editingId == 0 ? "Create {{ .Aggregate }}" : "Edit {{ .Aggregate }}")</h1>
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="form" OnValidSubmit="SaveAsync" FormName="{{ .Aggregate }}Edit">
+            <DataAnnotationsValidator />
+{{- range .Properties }}
+            <div class="mb-3">
+                <label class="form-label">{{ .DisplayName }}</label>
+{{- if .RelationTarget }}
+                <div class="d-flex gap-2">
+                    <InputSelect @bind-Value="form.{{ .Name }}" class="form-select">
+                        <option value="">Select {{ .DisplayName }}</option>
+                        @foreach (var option in {{ .RelationTarget }}Items)
+                        {
+                            <option value="@option.Id">@option.{{ .RelationDisplayProperty }}</option>
+                        }
+                    </InputSelect>
+{{- if index $.RelationBlazorQuickAdds .RelationTarget }}
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => showAdd{{ .RelationTarget }} = !showAdd{{ .RelationTarget }}">+</button>
+{{- end }}
+                </div>
+{{- if index $.RelationBlazorQuickAdds .RelationTarget }}
+                @if (showAdd{{ .RelationTarget }})
+                {
+                    <div class="d-flex gap-2 mt-2">
+                        <input class="form-control" @bind="new{{ .RelationTarget }}Name" placeholder="New {{ .RelationTarget }} {{ .RelationDisplayProperty }}..." />
+                        <button type="button" class="btn btn-primary" @onclick="Add{{ .RelationTarget }}Async">Add {{ .RelationTarget }}</button>
+                    </div>
+                }
+{{- end }}
+{{- else if eq .CSharpType "Guid" }}
+                <InputText @bind-Value="form.{{ .Name }}Text" class="form-control" />
+{{- else }}
+                <{{ .UIControl }} @bind-Value="form.{{ .Name }}" class="form-control" />
+{{- end }}
+            </div>
+{{- end }}
+{{- range .ManyToMany }}
+            <div class="mb-3">
+                <label class="form-label">{{ .DisplayName }}</label>
+                <div class="border rounded p-3">
+                    @foreach (var option in {{ .Target }}Options)
+                    {
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" @bind="option.Selected" />
+                            <label class="form-check-label">@option.Display</label>
+                        </div>
+                    }
+                </div>
+            </div>
+{{- end }}
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-outline-secondary" @onclick="Cancel">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private const string ApiPath = "/api/{{ kebab .Context }}/{{ kebab .Aggregate }}";
+    [Parameter] public long Id { get; set; }
+    private long editingId;
+    private {{ .Aggregate }}Editor form = new();
+{{- range .Relations }}
+    private List<{{ .Target }}View> {{ .Target }}Items = [];
+{{- if index $.RelationBlazorQuickAdds .Target }}
+    private bool showAdd{{ .Target }};
+    private string new{{ .Target }}Name = "";
+{{- end }}
+{{- end }}
+{{- range .ManyToMany }}
+    private List<{{ .Target }}Option> {{ .Target }}Options = [];
+{{- end }}
+
+    protected override async Task OnInitializedAsync()
+    {
+        editingId = Id;
+{{- range .Relations }}
+        {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
+{{- end }}
+{{- range .ManyToMany }}
+        var {{ camel .Target }}Source = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
+        {{ .Target }}Options = {{ camel .Target }}Source.Select(x => new {{ .Target }}Option { Id = x.Id, Display = {{ if eq .DisplayProperty "Id" }}x.Id.ToString(){{ else }}x.{{ .DisplayProperty }}{{ end }} }).ToList();
+{{- end }}
+        if (editingId != 0)
+        {
+            var item = await Http.GetFromJsonAsync<{{ .Aggregate }}View>($"{ApiPath}/{editingId}");
+            if (item is not null)
+            {
+{{- range .Properties }}
+{{- if eq .CSharpType "Guid" }}
+                form.{{ .Name }}Text = item.{{ .Name }}.ToString();
+{{- else }}
+                form.{{ .Name }} = item.{{ .Name }};
+{{- end }}
+{{- end }}
+{{- range .ManyToMany }}
+                var linked{{ .Target }} = (await Http.GetFromJsonAsync<{{ .JoinEntity }}PagedResponse>($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/search?{{ camel $.Aggregate }}Id={editingId}&pageSize=1000"))?.Items.Select(x => x.{{ .Target }}Id).ToHashSet() ?? [];
+                foreach (var option in {{ .Target }}Options) option.Selected = linked{{ .Target }}.Contains(option.Id);
+{{- end }}
+            }
+        }
+    }
+
+    private void Cancel() => Navigation.NavigateTo("/{{ kebab .Context }}/{{ kebab .Aggregate }}s");
+
+    private async Task SaveAsync()
+    {
+        var request = new {{ .Aggregate }}Request(
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }});
+        if (editingId == 0)
+        {
+            var response = await Http.PostAsJsonAsync(ApiPath, request);
+            if (!response.IsSuccessStatusCode) return;
+            editingId = (await response.Content.ReadFromJsonAsync<{{ .Aggregate }}View>())?.Id ?? 0;
+        }
+        else
+        {
+            var response = await Http.PutAsJsonAsync($"{ApiPath}/{editingId}", request);
+            if (!response.IsSuccessStatusCode) return;
+        }
+{{- range .ManyToMany }}
+        await Sync{{ .Target }}sAsync(editingId);
+{{- end }}
+        Navigation.NavigateTo("/{{ kebab .Context }}/{{ kebab .Aggregate }}s");
+    }
+
+{{- range .ManyToMany }}
+    private async Task Sync{{ .Target }}sAsync(long {{ $.Aggregate }}Id)
+    {
+        var selected = {{ .Target }}Options.Where(o => o.Selected).Select(o => o.Id).ToHashSet();
+        var current = await Http.GetFromJsonAsync<{{ .JoinEntity }}PagedResponse>($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/search?{{ camel $.Aggregate }}Id={ {{ $.Aggregate }}Id }&pageSize=1000") ?? new {{ .JoinEntity }}PagedResponse([], 0, 1, 1000);
+        foreach (var link in current.Items)
+            if (!selected.Contains(link.{{ .Target }}Id))
+                await Http.DeleteAsync($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/{link.Id}");
+        var existing = current.Items.Select(x => x.{{ .Target }}Id).ToHashSet();
+        foreach (var id in selected.Except(existing))
+            await Http.PostAsJsonAsync("/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}", new {{ .JoinEntity }}Request({{ $.Aggregate }}Id, id));
+    }
+{{- end }}
+{{- range .Relations }}{{- if index $.RelationBlazorQuickAdds .Target }}
+    private async Task Add{{ .Target }}Async()
+    {
+        if (string.IsNullOrWhiteSpace(new{{ .Target }}Name)) return;
+        var response = await Http.PostAsJsonAsync("/api/{{ kebab $.Context }}/{{ kebab .Target }}", {{ index $.RelationBlazorQuickAdds .Target }});
+        if (!response.IsSuccessStatusCode) return;
+        var created = await response.Content.ReadFromJsonAsync<{{ .Target }}View>();
+        if (created is null) return;
+        {{ .Target }}Items.Add(created);
+        form.{{ .FKProperty }} = created.Id;
+        new{{ .Target }}Name = "";
+        showAdd{{ .Target }} = false;
+    }
+{{- end }}{{- end }}
+
+    private sealed class {{ .Aggregate }}Editor
+    {
+{{- range .Properties }}
+{{- if eq .CSharpType "Guid" }}
+        public string {{ .Name }}Text { get; set; } = "";
+{{- else }}
+        public {{ .CSharpType }} {{ .Name }} { get; set; } = default!;
+{{- end }}
+{{- end }}
+    }
+
+{{- range .ManyToMany }}
+    private sealed class {{ .Target }}Option
+    {
+        public long Id { get; init; }
+        public string Display { get; init; } = "";
+        public bool Selected { get; set; }
+    }
+{{- end }}
+}

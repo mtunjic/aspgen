@@ -3,6 +3,7 @@ using Prism.Navigation;
 using Prism.Navigation.Regions;
 using {{ .Namespace }}.Models;
 using {{ .Namespace }}.Services;
+using {{ .Project }}.Desktop.Shared;
 {{- range injectableTargets .Relations .ManyToMany }}
 using {{ $.Project }}.Desktop.Modules.{{ . }}.Services;
 using {{ $.Project }}.Desktop.Modules.{{ . }}.Models;
@@ -17,7 +18,7 @@ namespace {{ .Namespace }}.ViewModels;
 public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
 {
     private readonly I{{ .Name }}Store store;
-    private readonly IRegionManager regionManager;
+    private readonly IAppNavigationService navigation;
 {{- range injectableTargets .Relations .ManyToMany }}
     private readonly I{{ . }}Store {{ camel . }}Store;
 {{- end }}
@@ -26,17 +27,17 @@ public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
 {{- end }}
     private {{ .Name }}Row? item;
 
-    public {{ .Name }}DetailsViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range injectableTargets .Relations .ManyToMany }}, I{{ . }}Store {{ camel . }}Store{{ end }}{{ range .ManyToMany }}, I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store{{ end }})
+    public {{ .Name }}DetailsViewModel(I{{ .Name }}Store store, IAppNavigationService navigation{{ range injectableTargets .Relations .ManyToMany }}, I{{ . }}Store {{ camel . }}Store{{ end }}{{ range .ManyToMany }}, I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store{{ end }})
     {
         this.store = store;
-        this.regionManager = regionManager;
+        this.navigation = navigation;
 {{- range injectableTargets .Relations .ManyToMany }}
         this.{{ camel . }}Store = {{ camel . }}Store;
 {{- end }}
 {{- range .ManyToMany }}
         this.{{ camel .JoinEntity }}Store = {{ camel .JoinEntity }}Store;
 {{- end }}
-        BackCommand = new Prism.Commands.DelegateCommand(() => regionManager.RequestNavigate("MainRegion", "{{ .Name }}View"));
+        BackCommand = new Prism.Commands.DelegateCommand(() => navigation.GoTo("{{ .Name }}List"));
     }
 
     public {{ .Name }}Row? Item

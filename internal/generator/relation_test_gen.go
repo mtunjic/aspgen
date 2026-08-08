@@ -18,14 +18,18 @@ type RelationTest struct {
 	CtorArgs   []string // `new Aggregate(...)` argument expressions
 	Relations  []RelationTestTarget
 	ManyToMany []RelationTestTarget
+	// Prereqs are the transitive FK dependencies of every relation target
+	// (e.g. Region before Customer), created before the targets so their
+	// FK constructor arguments resolve to real ids.
+	Prereqs []RelationTestTarget
 	// FormFields are the HTML form field name/value pairs the aggregate's
 	// Create/Edit POST binds to its Request record, used by the MVC
 	// integration test to drive the real controller flow.
 	FormFields []RelationTestFormField
 	// HasStringProp/FirstStringProp let the MVC integration test submit an
 	// invalid form (empty first string property) to exercise validation.
-	HasStringProp    bool
-	FirstStringProp  string
+	HasStringProp   bool
+	FirstStringProp string
 }
 
 // RelationTestFormField is one `name = value` pair posted to the MVC
@@ -45,9 +49,12 @@ type RelationTestTarget struct {
 	CtorArgs   []string
 	// RequestArgs are the positional arguments for the target's API Request
 	// record, used by the WebApi integration test to create the target over
-	// HTTP (FK properties fall back to a numeric seed rather than an id
-	// reference, since the target is created before any principal exists).
+	// HTTP (FK properties reference the created prerequisite View's Id).
 	RequestArgs []string
+	// MvcArgs are the positional arguments for the in-process CrudService
+	// Request in the MVC integration test, where a prerequisite is a long id
+	// rather than a View (FK properties reference the raw long variable).
+	MvcArgs []string
 	// DisplayProperty is the target's display property (e.g. "Name"), used to
 	// name the nested relation filter (e.g. CustomerNameContains) in tests.
 	DisplayProperty string
@@ -63,18 +70,55 @@ func buildRelationTest(m *Manifest, contextName, aggregate string, props []Prope
 		Var:       camel(aggregate),
 		CtorArgs:  testCtorArgs(props),
 	}
+	var prereqs []RelationTestTarget
+	prereqSeen := map[string]bool{}
+	directTargets := map[string]bool{}
+	for _, rel := range relations {
+		directTargets[rel.Target] = true
+	}
+	for _, rel := range manyToMany {
+		directTargets[rel.Target] = true
+	}
+	var collectPrereqs func(target EntityMeta)
+	collectPrereqs = func(target EntityMeta) {
+		for _, p := range target.Properties {
+			if p.RelationTarget == "" || prereqSeen[p.RelationTarget] || directTargets[p.RelationTarget] {
+				continue
+			}
+			sub := findEntityMeta(m.Entities, p.RelationTarget)
+			if sub == nil {
+				continue
+			}
+			collectPrereqs(*sub)
+			prereqSeen[sub.Name] = true
+			prereqs = append(prereqs, RelationTestTarget{
+				Target:      sub.Name,
+				Var:         camel(sub.Name),
+				CtorArgs:    testCtorArgs(sub.Properties),
+				RequestArgs: testRequestArgs(sub.Properties),
+				MvcArgs:     testMvcArgs(sub.Properties),
+			})
+		}
+	}
 	for _, rel := range relations {
 		target := findEntityMeta(m.Entities, rel.Target)
+		if target != nil {
+			collectPrereqs(*target)
+		}
 		rt.Relations = append(rt.Relations, RelationTestTarget{
 			Target:          rel.Target,
 			Var:             camel(rel.Target),
 			CtorArgs:        testCtorArgs(target.Properties),
 			RequestArgs:     testRequestArgs(target.Properties),
+			MvcArgs:         testMvcArgs(target.Properties),
 			DisplayProperty: rel.DisplayProperty,
 		})
 	}
 	for _, rel := range manyToMany {
 		target := findEntityMeta(m.Entities, rel.Target)
+		if target != nil {
+			collectPrereqs(*target)
+		}
 		rt.ManyToMany = append(rt.ManyToMany, RelationTestTarget{
 			Target:          rel.Target,
 			Var:             camel(rel.Target) + "1",
@@ -82,9 +126,11 @@ func buildRelationTest(m *Manifest, contextName, aggregate string, props []Prope
 			JoinEntity:      rel.JoinEntity,
 			CtorArgs:        testCtorArgs(target.Properties),
 			RequestArgs:     testRequestArgs(target.Properties),
+			MvcArgs:         testMvcArgs(target.Properties),
 			DisplayProperty: rel.DisplayProperty,
 		})
 	}
+	rt.Prereqs = prereqs
 	for _, p := range props {
 		if p.RelationTarget != "" {
 			rt.FormFields = append(rt.FormFields, RelationTestFormField{Name: p.Name, Value: camel(p.RelationTarget) + ".ToString()"})
@@ -117,12 +163,31 @@ func testCtorArgs(properties []Property) []string {
 	return args
 }
 
-// testRequestArgs renders positional seed literals for every property
-// (including foreign keys, which get a plain numeric seed) to construct an
-// API Request record that does not reference other test entities.
+// testRequestArgs renders positional arguments for an entity's API Request
+// record: a foreign-key property references the prerequisite entity's created
+// id (e.g. "region.Id"), anything else gets a deterministic seed literal.
 func testRequestArgs(properties []Property) []string {
 	var args []string
 	for _, p := range properties {
+		if p.RelationTarget != "" {
+			args = append(args, camel(p.RelationTarget)+".Id")
+			continue
+		}
+		args = append(args, testSeedLiteral(p))
+	}
+	return args
+}
+
+// testMvcArgs is testRequestArgs but for the MVC integration test, where a
+// prerequisite is captured as a raw long id rather than a View, so a
+// foreign-key argument is just the variable name (e.g. "region").
+func testMvcArgs(properties []Property) []string {
+	var args []string
+	for _, p := range properties {
+		if p.RelationTarget != "" {
+			args = append(args, camel(p.RelationTarget))
+			continue
+		}
 		args = append(args, testSeedLiteral(p))
 	}
 	return args

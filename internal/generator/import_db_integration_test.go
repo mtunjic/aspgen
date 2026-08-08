@@ -20,6 +20,19 @@ CREATE TABLE Orders (
 );
 `
 
+const importDBFKTestScript = `
+CREATE TABLE Customers (
+    Id INTEGER PRIMARY KEY,
+    Name TEXT NOT NULL
+);
+
+CREATE TABLE Orders (
+    Id INTEGER PRIMARY KEY,
+    CustomerId BIGINT NOT NULL REFERENCES Customers(Id),
+    Total DECIMAL(18,2) NOT NULL
+);
+`
+
 func writeImportDBTestScript(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "schema.sql")
@@ -61,8 +74,35 @@ func TestImportDBCmdIncremental(t *testing.T) {
 	}
 }
 
-func TestImportDBRequiresContext(t *testing.T) {
-	script := writeImportDBTestScript(t)
+func TestImportDBForeignKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema.sql")
+	if err := os.WriteFile(path, []byte(importDBFKTestScript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := filepath.Join(t.TempDir(), "FkImportApp")
+	if err := Run([]string{"new", "FkImportApp", "--context", "Catalog", "--arch", "ar", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"import-db", "--project", project, "--context", "Catalog", "--script", path, "--provider", "sqlite"}); err != nil {
+		t.Fatal(err)
+	}
+	order, err := os.ReadFile(filepath.Join(project, "src/WebApi/Models/Catalog/Order.cs"))
+	if err != nil {
+		t.Fatalf("Order.cs not generated: %v", err)
+	}
+	orderSrc := string(order)
+	if !strings.Contains(orderSrc, "public long CustomerId { get; set; }") {
+		t.Errorf("Order.cs missing FK property CustomerId from imported relation; got:\n%s", orderSrc)
+	}
+	if !strings.Contains(orderSrc, "public Customer? Customer { get; set; }") {
+		t.Errorf("Order.cs missing navigation property Customer; got:\n%s", orderSrc)
+	}
+	if _, err := os.ReadFile(filepath.Join(project, "src/WebApi/Models/Catalog/Customer.cs")); err != nil {
+		t.Fatalf("Customer.cs not generated (FK target must be imported first): %v", err)
+	}
+}
+
+func TestImportDBRequiresContext(t *testing.T) {	script := writeImportDBTestScript(t)
 	project := filepath.Join(t.TempDir(), "ImportNoContextDemo")
 	if err := Run([]string{"new", "ImportNoContextDemo", "--context", "Catalog", "--arch", "ar", "--output", project}); err != nil {
 		t.Fatal(err)

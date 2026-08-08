@@ -46,7 +46,7 @@ CREATE TABLE Customers (
 			}},
 		},
 		{
-			name: "multiple tables and bracket-quoted identifiers ignoring FK/comments",
+			name: "multiple tables and bracket-quoted identifiers with table-level FK",
 			sql: `/* schema */
 CREATE TABLE [Products] (
     [Id] INT PRIMARY KEY,
@@ -60,13 +60,29 @@ CREATE TABLE Categories (
 			want: []Table{
 				{Name: "Products", Columns: []Column{
 					{Name: "Id", RawType: "INT", Nullable: false, IsPrimaryKey: true},
-					{Name: "CategoryId", RawType: "INT", Nullable: false},
+					{Name: "CategoryId", RawType: "INT", Nullable: false, ForeignKey: "Categories"},
 				}},
 				{Name: "Categories", Columns: []Column{
 					{Name: "Id", RawType: "INT", Nullable: false, IsPrimaryKey: true},
 					{Name: "Name", RawType: "TEXT", Nullable: true},
 				}},
 			},
+		},
+		{
+			name: "inline REFERENCES foreign key and composite constraint ordering",
+			sql: `CREATE TABLE PostTags (
+    PostId INT NOT NULL REFERENCES Posts(Id),
+    TagId BIGINT NOT NULL,
+    CONSTRAINT PK_PostTags PRIMARY KEY (PostId, TagId),
+    CONSTRAINT FK_PostTags_Tag FOREIGN KEY (TagId) REFERENCES Tags(Id)
+);`,
+			want: []Table{{
+				Name: "PostTags",
+				Columns: []Column{
+					{Name: "PostId", RawType: "INT", Nullable: false, IsPrimaryKey: true, ForeignKey: "Posts"},
+					{Name: "TagId", RawType: "BIGINT", Nullable: false, IsPrimaryKey: true, ForeignKey: "Tags"},
+				},
+			}},
 		},
 		{
 			name:   "no CREATE TABLE statements",
@@ -137,5 +153,19 @@ func TestRenderSchemaSQL(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("RenderSchemaSQL() missing %q; got:\n%s", want, got)
 		}
+	}
+}
+
+func TestRenderSchemaSQLForeignKeys(t *testing.T) {
+	tables := []Table{{
+		Name: "Orders",
+		Columns: []Column{
+			{Name: "Id", RawType: "INTEGER", IsPrimaryKey: true},
+			{Name: "CustomerId", RawType: "INTEGER", Nullable: false, ForeignKey: "Customers"},
+		},
+	}}
+	got := RenderSchemaSQL(tables)
+	if !strings.Contains(got, "CustomerId INTEGER NOT NULL REFERENCES Customers") {
+		t.Errorf("RenderSchemaSQL() missing REFERENCES clause; got:\n%s", got)
 	}
 }

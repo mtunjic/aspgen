@@ -1,0 +1,21 @@
+using Prism.Navigation.Regions;
+
+namespace {{ .Project }}.Desktop.Shared;
+
+public interface IAppNavigationService
+{
+    void GoTo(string viewName);
+    void GoTo(string viewName, long id);
+}
+
+public sealed class AppNavigationService : IAppNavigationService
+{
+    private readonly IRegionManager regionManager;
+
+    public AppNavigationService(IRegionManager regionManager) => this.regionManager = regionManager;
+
+    public void GoTo(string viewName) => regionManager.RequestNavigate("MainRegion", viewName);
+
+    public void GoTo(string viewName, long id) =>
+        regionManager.RequestNavigate("MainRegion", viewName, new NavigationParameters { { "id", id } });
+}

@@ -19,15 +19,19 @@ func RenderSchemaSQL(tables []Table) string {
 			if c.Nullable {
 				null = "NULL"
 			}
-			suffix := ""
-			if i < len(t.Columns)-1 {
-				suffix = ","
-			}
-			pk := ""
-			if c.IsPrimaryKey {
-				pk = " PRIMARY KEY"
-			}
-			fmt.Fprintf(&b, "    %s %s %s%s%s\n", c.Name, c.RawType, null, pk, suffix)
+		suffix := ""
+		if i < len(t.Columns)-1 {
+			suffix = ","
+		}
+		pk := ""
+		if c.IsPrimaryKey {
+			pk = " PRIMARY KEY"
+		}
+		fk := ""
+		if c.ForeignKey != "" {
+			fk = " REFERENCES " + c.ForeignKey
+		}
+		fmt.Fprintf(&b, "    %s %s %s%s%s%s\n", c.Name, c.RawType, null, pk, fk, suffix)
 		}
 		b.WriteString(");\n\n")
 	}

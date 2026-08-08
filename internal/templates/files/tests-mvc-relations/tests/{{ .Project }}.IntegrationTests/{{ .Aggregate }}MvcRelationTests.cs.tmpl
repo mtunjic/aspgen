@@ -23,6 +23,9 @@ public class {{ .Aggregate }}MvcRelationTests
             builder.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source=rel-{Guid.NewGuid():N}.db"));
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
+{{- range .RelationTest.Prereqs }}
+        long {{ .Var }};
+{{- end }}
 {{- range .RelationTest.Relations }}
         long {{ .Var }};
 {{- end }}
@@ -33,12 +36,15 @@ public class {{ .Aggregate }}MvcRelationTests
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<{{ .Project }}Database>();
+{{- range .RelationTest.Prereqs }}
+            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+{{- end }}
 {{- range .RelationTest.Relations }}
-            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .RequestArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
 {{- end }}
 {{- range .RelationTest.ManyToMany }}
-            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .RequestArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
-            {{ .SecondVar }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .RequestArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+            {{ .SecondVar }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .MvcArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
 {{- end }}
         }
 

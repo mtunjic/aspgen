@@ -1,14 +1,14 @@
 using Prism.Commands;
 using Prism.Mvvm;
-using Prism.Navigation.Regions;
+using {{ $.Project }}.Desktop.Shared;
 
 namespace {{ .Namespace }}.ViewModels;
 
 public sealed class {{ .Name }}MenuViewModel : BindableBase
 {
-    public {{ .Name }}MenuViewModel(IRegionManager regionManager)
+    public {{ .Name }}MenuViewModel(IAppNavigationService navigation)
     {
-        OpenCommand = new DelegateCommand(() => regionManager.RequestNavigate("MainRegion", "{{ .Name }}View"));
+        OpenCommand = new DelegateCommand(() => navigation.GoTo("{{ $.Name }}List"));
     }
 
     public DelegateCommand OpenCommand { get; }

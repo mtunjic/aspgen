@@ -1,0 +1,233 @@
+using System.Collections.ObjectModel;
+using Prism.Mvvm;
+using {{ .Namespace }}.Models;
+using {{ .Namespace }}.Services;
+{{- range injectableTargets .Relations .ManyToMany }}
+using {{ $.Project }}.Desktop.Modules.{{ . }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ . }}.Models;
+{{- end }}
+{{- range .ManyToMany }}
+using {{ $.Project }}.Desktop.Modules.{{ .JoinEntity }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ .JoinEntity }}.Models;
+{{- end }}
+using {{ .Project }}.Desktop.Shared;
+
+namespace {{ .Namespace }}.ViewModels;
+
+// Dedicated create/edit view for a single {{ .Name }} record. The list view
+// navigates here with an "id" parameter (0 = create); saving persists the
+// record (and its many-to-many links) and navigates back to the list.
+public sealed class {{ .Name }}EditViewModel : EditViewModelBase<I{{ .Name }}Store, {{ .Name }}Row, {{ .Name }}Editor>
+{
+{{- range injectableTargets .Relations .ManyToMany }}
+    private readonly I{{ . }}Store {{ camel . }}Store;
+{{- end }}
+{{- range .ManyToMany }}
+    private readonly I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store;
+{{- end }}
+{{- range .Relations }}{{- if index $.RelationQuickAdds .Target }}
+    private bool add{{ .Target }}Mode;
+{{- end }}{{- end }}
+
+    public {{ .Name }}EditViewModel(I{{ .Name }}Store store, IAppNavigationService navigation{{ range injectableTargets .Relations .ManyToMany }}, I{{ . }}Store {{ camel . }}Store{{ end }}{{ range .ManyToMany }}, I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store{{ end }})
+        : base(store, navigation)
+    {
+{{- range injectableTargets .Relations .ManyToMany }}
+        this.{{ camel . }}Store = {{ camel . }}Store;
+{{- end }}
+{{- range .ManyToMany }}
+        this.{{ camel .JoinEntity }}Store = {{ camel .JoinEntity }}Store;
+{{- end }}
+    }
+
+{{- range .Relations }}
+    public ObservableCollection<{{ .Target }}Row> {{ .Target }}Items { get; } = [];
+{{- end }}
+{{- range .ManyToMany }}
+    public ObservableCollection<{{ .Target }}Option> {{ .Target }}Options { get; } = [];
+{{- end }}
+{{- range .Relations }}{{- if index $.RelationQuickAdds .Target }}
+    public bool Add{{ .Target }}Mode
+    {
+        get => add{{ .Target }}Mode;
+        set => SetProperty(ref add{{ .Target }}Mode, value);
+    }
+{{- end }}{{- end }}
+
+    protected override string EntityName => "{{ .Name }}";
+    protected override string ListViewName => "{{ .Name }}List";
+    protected override {{ .Name }}Editor CreateForm() => new();
+    protected override void ResetForm({{ .Name }}Row? item) => Form.Reset(item);
+
+    protected override void LoadRelated()
+    {
+{{- range .Relations }}
+        {{ .Target }}Items.Clear();
+        foreach (var related in {{ camel .Target }}Store.GetAll()) {{ .Target }}Items.Add(related);
+{{- end }}
+{{- range .ManyToMany }}
+        {{ .Target }}Options.Clear();
+        foreach (var related in {{ camel .Target }}Store.GetAll()) {{ .Target }}Options.Add(new {{ .Target }}Option(related.Id, {{ if eq .DisplayProperty "Id" }}related.Id.ToString(){{ else }}related.{{ .DisplayProperty }}{{ end }}));
+        if (EditingId != 0)
+        {
+            var linked{{ .Target }} = {{ camel .JoinEntity }}Store.Search(new {{ .JoinEntity }}SearchCriteria(null, EditingId, null, 1, 1000)).Items.Select(x => x.{{ .Target }}Id).ToHashSet();
+            foreach (var option in {{ .Target }}Options) option.IsSelected = linked{{ .Target }}.Contains(option.Id);
+        }
+{{- end }}
+    }
+
+    protected override void SyncRelated({{ .Name }}Row saved)
+    {
+{{- range .ManyToMany }}
+        var selected{{ .Target }} = {{ .Target }}Options.Where(o => o.IsSelected).Select(o => o.Id).ToHashSet();
+        var current{{ .Target }} = {{ camel .JoinEntity }}Store.Search(new {{ .JoinEntity }}SearchCriteria(null, saved.Id, null, 1, 1000)).Items;
+        foreach (var link in current{{ .Target }})
+            if (!selected{{ .Target }}.Contains(link.{{ .Target }}Id))
+                {{ camel .JoinEntity }}Store.Delete(link.Id);
+        var keep{{ .Target }} = current{{ .Target }}.Select(x => x.{{ .Target }}Id).ToHashSet();
+        foreach (var id in selected{{ .Target }}.Except(keep{{ .Target }}))
+            {{ camel .JoinEntity }}Store.Save(0, new {{ .JoinEntity }}Row(0, saved.Id, id));
+{{- end }}
+    }
+
+    protected override bool TryBuild(out {{ .Name }}Row value)
+    {
+        value = default!;
+{{- range .Properties }}
+{{- if .RelationTarget }}
+{{- if eq .CSharpType "long" }}
+        if (Form.{{ .Name }} is null) return Invalid(nameof(Form.{{ .Name }}));
+        var {{ camel .Name }} = Form.{{ .Name }}.Value;
+{{- else }}
+        var {{ camel .Name }} = Form.{{ .Name }};
+{{- end }}
+{{- else if eq .CSharpType "string" }}
+        var {{ camel .Name }} = Form.{{ .Name }}.Trim();
+        if ({{ camel .Name }}.Length == 0) return Invalid(nameof(Form.{{ .Name }}));
+{{- else if eq .CSharpType "string?" }}
+        var {{ camel .Name }} = string.IsNullOrWhiteSpace(Form.{{ .Name }}) ? null : Form.{{ .Name }}!.Trim();
+{{- else if eq .CSharpType "bool" }}
+        var {{ camel .Name }} = Form.{{ .Name }};
+{{- else if eq .CSharpType "DateOnly" }}
+        if (Form.{{ .Name }} is null) return Invalid(nameof(Form.{{ .Name }}));
+        var {{ camel .Name }} = DateOnly.FromDateTime(Form.{{ .Name }}.Value);
+{{- else if eq .CSharpType "DateTime" }}
+        if (Form.{{ .Name }} is null) return Invalid(nameof(Form.{{ .Name }}));
+        if (Form.{{ .Name }}Time is null) return Invalid(nameof(Form.{{ .Name }}));
+        var {{ camel .Name }} = DateTime.SpecifyKind(Form.{{ .Name }}.Value.Date + Form.{{ .Name }}Time.Value, DateTimeKind.Unspecified);
+{{- else if or (eq .CSharpType "int") (eq .CSharpType "long") (eq .CSharpType "decimal") (eq .CSharpType "float") (eq .CSharpType "Guid") }}
+        if (!{{ .CSharpType }}.TryParse(Form.{{ .Name }}, out var {{ camel .Name }})) return Invalid(nameof(Form.{{ .Name }}));
+{{- else if eq .CSharpType "DateOnly?" }}
+        DateOnly? {{ camel .Name }} = Form.{{ .Name }} is null ? null : DateOnly.FromDateTime(Form.{{ .Name }}.Value);
+{{- else if eq .CSharpType "DateTime?" }}
+        DateTime? {{ camel .Name }} = Form.{{ .Name }} is null || Form.{{ .Name }}Time is null ? null : DateTime.SpecifyKind(Form.{{ .Name }}.Value.Date + Form.{{ .Name }}Time.Value, DateTimeKind.Unspecified);
+{{- else if or (eq .CSharpType "int?") (eq .CSharpType "long?") (eq .CSharpType "decimal?") (eq .CSharpType "float?") (eq .CSharpType "Guid?") }}
+        {{ .CSharpType }} {{ camel .Name }} = null;
+        if (!string.IsNullOrWhiteSpace(Form.{{ .Name }}))
+        {
+            if (!{{ trimSuffix .CSharpType "?" }}.TryParse(Form.{{ .Name }}, out var parsed{{ .Name }})) return Invalid(nameof(Form.{{ .Name }}));
+            {{ camel .Name }} = parsed{{ .Name }};
+        }
+{{- end }}
+{{- end }}
+        value = new {{ .Name }}Row(EditingId{{ range .Properties }}, {{ camel .Name }}{{ end }});
+        return true;
+    }
+
+{{- range .Relations }}{{- if index $.RelationQuickAdds .Target }}
+    public void Begin{{ .Target }}QuickAdd() => Add{{ .Target }}Mode = true;
+
+    public bool Add{{ .Target }}(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        name = name.Trim();
+        var existing = {{ .Target }}Items.FirstOrDefault(x => string.Equals(x.{{ .DisplayProperty }}, name, System.StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            Form.{{ .FKProperty }} = existing.Id;
+            return true;
+        }
+        try
+        {
+            var created = {{ camel .Target }}Store.Save(0, {{ index $.RelationQuickAdds .Target }});
+            {{ .Target }}Items.Add(created);
+            Form.{{ .FKProperty }} = created.Id;
+            return true;
+        }
+        catch (Exception)
+        {
+{{- if index $.RelationQuickAddMissing .Target }}
+            ValidationMessage = "Could not add {{ .Target }}. You must add {{ index $.RelationQuickAddMissing .Target }} first.";
+{{- else }}
+            ValidationMessage = "Could not add {{ .Target }}. You must add its related record(s) first.";
+{{- end }}
+            return false;
+        }
+    }
+{{- end }}{{- end }}
+}
+
+public sealed class {{ .Name }}Editor : BindableBase
+{
+{{- range .Properties }}
+{{- if .RelationTarget }}
+    private long? {{ camel .Name }};
+    public long? {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- else if eq .CSharpType "bool" }}
+    private bool {{ camel .Name }};
+    public bool {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- else if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
+    private DateTime? {{ camel .Name }};
+    public DateTime? {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- if or (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
+    private TimeSpan? {{ camel .Name }}Time;
+    public TimeSpan? {{ .Name }}Time { get => {{ camel .Name }}Time; set => SetProperty(ref {{ camel .Name }}Time, value); }
+{{- end }}
+{{- else }}
+    private string {{ camel .Name }} = string.Empty;
+    public string {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- end }}
+{{- end }}
+
+    public void Reset({{ .Name }}Row? item)
+    {
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        {{ .Name }} = item?.{{ .Name }};
+{{- else if eq .CSharpType "bool" }}
+        {{ .Name }} = item?.{{ .Name }} ?? false;
+{{- else if eq .CSharpType "DateOnly" }}
+        {{ .Name }} = item is null ? null : item.{{ .Name }}.ToDateTime(TimeOnly.MinValue);
+{{- else if eq .CSharpType "DateOnly?" }}
+        {{ .Name }} = item?.{{ .Name }}?.ToDateTime(TimeOnly.MinValue);
+{{- else if eq .CSharpType "DateTime" }}
+        {{ .Name }} = item?.{{ .Name }};
+        {{ .Name }}Time = item?.{{ .Name }}.TimeOfDay;
+{{- else if eq .CSharpType "DateTime?" }}
+        {{ .Name }} = item?.{{ .Name }};
+        {{ .Name }}Time = item?.{{ .Name }}?.TimeOfDay;
+{{- else if eq .CSharpType "string?" }}
+        {{ .Name }} = item is null ? string.Empty : item.{{ .Name }} ?? string.Empty;
+{{- else }}
+        {{ .Name }} = item is null ? string.Empty : item.{{ .Name }}.ToString();
+{{- end }}
+{{- end }}
+    }
+}
+
+{{- range .ManyToMany }}
+public sealed class {{ .Target }}Option : BindableBase
+{
+    public {{ .Target }}Option(long id, string display)
+    {
+        Id = id;
+        Display = display;
+    }
+
+    public long Id { get; }
+    public string Display { get; }
+
+    private bool isSelected;
+    public bool IsSelected { get => isSelected; set => SetProperty(ref isSelected, value); }
+}
+{{- end }}

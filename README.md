@@ -143,6 +143,33 @@ a relation target must already exist (mirroring natural FK-creation order).
 Adding a UI later (`add ui wpf|blazor|mvc`) retrofits the pickers for
 pre-existing aggregates from the manifest's recorded relation metadata.
 
+#### Nested relation search
+
+The advanced filters on every list page also search *through* a relation's
+target by its display property — e.g. a **"Customer name contains"** box on the
+Posts list that filters posts whose related customer's name matches:
+
+```text
+go run ./cmd/aspgen add aggregate Post title:string customer:Customer --context Blog --project ./Billing
+```
+
+WPF, Blazor, and MVC all render this alongside the exact-id dropdown. dm/cqrs
+filter by traversing the aggregate's navigation property; es uses a subquery
+into the target's read model.
+
+#### Quick-add on the edit form
+
+Each relation dropdown on the edit form has a **"+"** that lets you create the
+related record without leaving the form. Click the dropdown (WPF) or "+" (Blazor)
+to type a name, then confirm — the record is created, added to the picker, and
+selected. If it needs its own parent first (e.g. adding a Customer that requires
+a Region), you get a friendly notice instead of a crash:
+
+```text
+go run ./cmd/aspgen add aggregate Region name:string --context Blog --project ./Billing
+go run ./cmd/aspgen add aggregate Customer name:string region:Region --context Blog --project ./Billing
+```
+
 ### Generating entities from an existing database
 
 Instead of hand-typing `name:type` properties, aspgen can scaffold `ar`-tier entities from an existing database schema — a static SQL DDL script — via the `import-db` verb against an already-`new`-ed project. Supported providers are `sqlite`, `postgres`, `sqlserver`, and `mysql`.
@@ -153,6 +180,8 @@ go run ./cmd/aspgen import-db --project ./MyApp --context Catalog --script schem
 ```
 
 `--tables` accepts `all` (the default) or a comma-separated list of table names. Each selected table becomes one `ar`-tier entity (its name PascalCased and best-effort singularized) via the same code path `add entity` uses. Primary-key columns are skipped since generated entities already provide them; columns with no known type mapping (e.g. `json`, `blob`) are skipped with a warning rather than failing the whole table.
+
+Single-column foreign keys (`FOREIGN KEY (col) REFERENCES tbl(col)`, inline or table-level) are auto-detected: instead of a scalar column the FK becomes a `nav:Target` relation (nullable if the column is nullable), with tables imported referenced-first so relations resolve. When the referenced table is excluded via `--tables`, the FK column falls back to a scalar instead.
 
 A `schema.sql` backup snapshot of the discovered tables is written at the project root on every run. It's a reference artifact only — aspgen never invokes `dotnet ef`; run `dotnet ef migrations add`/`dotnet ef database update` yourself against the generated entities and `DbContext`. Connection strings are never written to `.aspgen/manifest.json`, `schema.sql`, or any generated file.
 
@@ -171,3 +200,57 @@ Generated projects contain `.aspgen/manifest.json`, allowing components to be ad
 Generated projects use SDK-style `.csproj` files. Incremental generation also adds explicit safe `<Compile Update>` and `<Page Update>` entries for generated `.cs` and `.xaml` files, so new entities and modules appear in Solution Explorer and remain owned by the correct project. The `.sln` file contains project entries; it is updated whenever a new project, such as an incremental WPF UI, is added.
 
 The WPF target uses current Prism 9 conventions with `Prism.DryIoc`: `PrismApplication`, `IContainerRegistry`, `IContainerProvider`, `IModule`, `ConfigureModuleCatalog`, `ViewModelLocator`, `BindableBase`, `DelegateCommand`, regions, navigation registration, and typed `PubSubEvent` communication.
+
+## Generated UI workflow
+
+All three frontends share the same **list → edit → details** workflow:
+
+- **List page** — search box + advanced filters (including nested relation search), a
+  card-styled list/table, per-row **Edit**/**Delete**, double-click (WPF) or row-click
+  (Blazor/MVC) for details, pagination, and a **+ Add new** button.
+- **Edit page** — the create/edit form (per-type inputs, relation dropdowns with
+  quick-add, many-to-many checkboxes) with **Save/Cancel** back to the list.
+- **Details page** — read-only record with related names resolved.
+
+WPF views live under `src/Desktop/Modules/{Name}/` as `{Name}View` (list),
+`{Name}EditView`, and `{Name}DetailsView`, registered for navigation as
+`{Name}List` / `{Name}Edit` / `{Name}Details`.
+
+## WPF architecture
+
+The Desktop shell ships a shared layer under `src/Desktop/Shared/` so every
+module stays small and consistent:
+
+- **Base ViewModels** — `ListViewModelBase` (search/filter lifecycle, pagination,
+  navigation, delete confirm, reload-on-navigation) and `EditViewModelBase`
+  (record loading, form reset, save + many-to-many sync, validation). Each
+  module's ViewModel is a thin subclass that only supplies its properties,
+  filters, and relations.
+- **Design system** — `src/Desktop/Themes/AppStyles.xaml` defines `CardStyle`,
+  `CardSecondaryStyle`, `SectionHeaderStyle`, `ListHeaderStyle`, and
+  `HeaderBandStyle`, merged into `App.xaml` and referenced from every view, so a
+  look change is a one-line edit instead of a change in each module.
+- **Navigation** — `IAppNavigationService` wraps `RequestNavigate` behind
+  `GoTo(viewName[, id])`, keeping navigation out of the ViewModels.
+- **Stores & models** — `I{{ Name }}Store` derives from a generic
+  `IListStore<TRow, TCriteria, TPage>`; rows implement `IEntityRow` and page
+  results implement `IListPageResult<TRow>`.
+
+WPF apps default to the **wpfui** theme (light mode); pass `--theme:wpfui
+--theme-mode:dark` for dark, and `-ui wpf` uses wpfui even when no `--theme` is
+given.
+
+## Generated tests
+
+Besides the schema smoke test, every aggregate with relations also generates
+tests that exercise the relationship flow end-to-end:
+
+- `tests/{Project}.UnitTests` — `{Aggregate}RelationTests.cs` creates the
+  related entities (including transitive prerequisites) and join rows through
+  the DbContext, then queries them back by foreign key.
+- `tests/{Project}.IntegrationTests` (cqrs/es) — `{Aggregate}RelationApiTests.cs`
+  drives the same flow over the WebApi HTTP contract, including the nested
+  relation search filter.
+- dm-tier MVC projects get a WebMvc integration test that posts the Create form
+  (with many-to-many values) through the real controller and verifies the join
+  rows.

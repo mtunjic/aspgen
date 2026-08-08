@@ -1,6 +1,12 @@
 using {{ .Project }}.AppBlazor;
 
-var builder = WebApplication.CreateBuilder(args);
+// The Blazor host is a separate process from the WebApi: bind it to its own
+// port so it doesn't collide with the API's default http://localhost:5000.
+// Override the UI address with ASPGENT_BLAZOR_URL; the API address it calls
+// is ASPGENT_API_URL (default http://localhost:5000).
+var blazorUrl = Environment.GetEnvironmentVariable("ASPGENT_BLAZOR_URL") ?? "http://localhost:5001";
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args });
+builder.WebHost.UseUrls(blazorUrl);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 var apiUrl = Environment.GetEnvironmentVariable("ASPGENT_API_URL") ?? "http://localhost:5000";
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiUrl) });
