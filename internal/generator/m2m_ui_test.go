@@ -128,6 +128,12 @@ func TestRenderWpfEditBase(t *testing.T) {
 		"protected abstract void SyncRelated(TRow saved);",
 		"public DelegateCommand SaveCommand { get; }",
 		"public DelegateCommand CancelCommand { get; }",
+		// per-field errors: FieldErrors dictionary + extraction of the server's
+		// FluentValidation failures without referencing the type
+		"public IReadOnlyDictionary<string, string> FieldErrors => fieldErrors;",
+		"private bool ApplyValidationErrors(Exception ex)",
+		"protected void SetFieldError(string property, string message)",
+		"Please fix the highlighted fields.",
 		// honest error split: FK violations hint at a missing relation,
 		// everything else is reported generically (details only in the log)
 		"private static bool IsForeignKeyFailure(Exception ex)",
@@ -322,6 +328,10 @@ func TestWpfEditViewManyToManyRendering(t *testing.T) {
 		// live there, not in the module view)
 		"<controls:EditPage>",
 		"<controls:EditPage.FormContent>",
+		// each field renders an inline error label bound to its FieldErrors entry
+		`Text="{Binding FieldErrors[Title]}"`,
+		`Text="{Binding FieldErrors[Body]}"`,
+		`Text="{Binding FieldErrors[CustomerId]}"`,
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("PostEditView.xaml rendering is missing %q\n--- rendered ---\n%s", expected, out)

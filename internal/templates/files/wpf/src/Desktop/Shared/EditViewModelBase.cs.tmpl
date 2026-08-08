@@ -23,6 +23,7 @@ public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INa
     protected TStore Store => store;
     private bool isBusy;
     private string validationMessage = string.Empty;
+    private readonly Dictionary<string, string> fieldErrors = [];
 
     protected EditViewModelBase(TStore store, IAppNavigationService navigation)
     {
@@ -47,6 +48,7 @@ public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INa
         ResetForm(item);
         LoadRelated();
         ValidationMessage = string.Empty;
+        ClearFieldErrors();
     }
 
     protected abstract TForm CreateForm();
@@ -85,17 +87,43 @@ public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INa
     }
     public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationMessage);
 
+    // Per-field errors, keyed by property name (e.g. "Title"). The edit form's
+    // generated fields bind an error label to FieldErrors[PropertyName], so a
+    // failed field is highlighted inline instead of only showing the summary.
+    public IReadOnlyDictionary<string, string> FieldErrors => fieldErrors;
+
+    public string? FieldError(string property) => fieldErrors.GetValueOrDefault(property);
+
     public DelegateCommand SaveCommand { get; }
     public DelegateCommand CancelCommand { get; }
+
+    private void RaiseFieldErrorsChanged() => RaisePropertyChanged(nameof(FieldErrors));
+
+    protected void SetFieldError(string property, string message)
+    {
+        fieldErrors[property] = message;
+        RaiseFieldErrorsChanged();
+    }
+
+    private void ClearFieldErrors()
+    {
+        if (fieldErrors.Count > 0)
+        {
+            fieldErrors.Clear();
+            RaiseFieldErrorsChanged();
+        }
+    }
 
     protected bool Invalid(string propertyName)
     {
         ValidationMessage = $"{propertyName} is invalid.";
+        SetFieldError(propertyName, $"{propertyName} is invalid.");
         return false;
     }
 
     private void Save()
     {
+        ClearFieldErrors();
         if (!TryBuild(out var value)) return;
         IsBusy = true;
         try
@@ -107,18 +135,50 @@ public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INa
         catch (Exception ex)
         {
             // Full detail always goes to the structured log; the user only
-            // sees an honest, actionable message. A foreign-key violation
-            // really does mean a related record is missing; anything else is
-            // reported generically instead of blaming a relation.
+            // sees an honest, actionable message. Server-side FluentValidation
+            // failures highlight each field; a foreign-key violation really
+            // does mean a related record is missing; anything else is reported
+            // generically instead of blaming a relation.
             AppLog.Error(ex, "Save failed for {Entity}", EntityName);
-            ValidationMessage = IsForeignKeyFailure(ex)
-                ? $"Could not save {EntityName}. You must add its related record(s) first."
-                : $"Could not save {EntityName}. Something went wrong; the details have been logged.";
+            if (ApplyValidationErrors(ex))
+            {
+                ValidationMessage = "Please fix the highlighted fields.";
+            }
+            else
+            {
+                ValidationMessage = IsForeignKeyFailure(ex)
+                    ? $"Could not save {EntityName}. You must add its related record(s) first."
+                    : $"Could not save {EntityName}. Something went wrong; the details have been logged.";
+            }
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    // Extracts FluentValidation's per-field errors (ValidationException.Errors
+    // -> ValidationFailure{PropertyName, ErrorMessage}) without referencing the
+    // type directly: the shared base also compiles into HTTP-backed cqrs/es
+    // desktops that do not ship FluentValidation.
+    private bool ApplyValidationErrors(Exception ex)
+    {
+        if (ex.GetType().Name != "ValidationException") return false;
+        var errors = ex.GetType().GetProperty("Errors")?.GetValue(ex) as System.Collections.IEnumerable;
+        if (errors is null) return false;
+        var applied = false;
+        foreach (var failure in errors)
+        {
+            var property = failure?.GetType().GetProperty("PropertyName")?.GetValue(failure) as string;
+            var message = failure?.GetType().GetProperty("ErrorMessage")?.GetValue(failure) as string;
+            if (!string.IsNullOrWhiteSpace(property) && !string.IsNullOrWhiteSpace(message))
+            {
+                fieldErrors[property] = message;
+                applied = true;
+            }
+        }
+        if (applied) RaiseFieldErrorsChanged();
+        return applied;
     }
 
     // Detects a foreign-key constraint violation without depending on EF Core
