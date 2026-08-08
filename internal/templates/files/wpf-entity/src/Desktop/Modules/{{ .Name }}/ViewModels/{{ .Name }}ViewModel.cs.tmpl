@@ -32,6 +32,13 @@ public sealed class {{ .Name }}ViewModel : ListViewModelBase<I{{ .Name }}Store, 
     }
 
     public {{ .Name }}FilterEditor Filter { get; }
+    public IReadOnlyList<SortField> SortFields { get; } =
+    [
+        new("Id", "Id"),
+{{- range .Properties }}{{- if not .RelationTarget }}
+        new("{{ .Name }}", "{{ .DisplayName }}"),
+{{- end }}{{- end }}
+    ];
 {{- range .Relations }}
     public ObservableCollection<{{ .Target }}Row> {{ .Target }}Items { get; } = [];
 {{- end }}
@@ -75,7 +82,7 @@ public sealed class {{ .Name }}ViewModel : ListViewModelBase<I{{ .Name }}Store, 
 {{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
         var {{ camel (relationNestedFilterField .) }} = string.IsNullOrWhiteSpace(Filter.{{ relationNestedFilterField . }}) ? null : Filter.{{ relationNestedFilterField . }};
 {{- end }}{{- end }}
-        return new {{ .Name }}SearchCriteria(string.IsNullOrWhiteSpace(SearchText) ? null : SearchText{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }}, page, PageSize);
+        return new {{ .Name }}SearchCriteria(string.IsNullOrWhiteSpace(SearchText) ? null : SearchText{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }}, page, PageSize, SortBy, SortDesc);
     }
 }
 

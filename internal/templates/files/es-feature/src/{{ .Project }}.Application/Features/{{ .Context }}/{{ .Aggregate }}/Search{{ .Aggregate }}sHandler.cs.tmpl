@@ -15,8 +15,9 @@ public sealed class Search{{ .Aggregate }}sHandler({{ .Project }}Database databa
 {{- end }}
         {{ filterWhereClauses .Properties "x" "request." }}
         {{ relationFilterWhereClauses .Properties "x" "request." "es" }}
+        {{ sortOrderSwitch .Properties "request.SortBy" "request.SortDesc" }}
         var totalCount = await query.LongCountAsync(cancellationToken);
-        var items = await query.OrderBy(x => x.Id).Skip((request.Page - 1) * request.PageSize).Take(request.PageSize).Select(x => new {{ .Aggregate }}View(x.Id,
+        var items = await query.Skip((request.Page - 1) * request.PageSize).Take(request.PageSize).Select(x => new {{ .Aggregate }}View(x.Id,
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }})).ToListAsync(cancellationToken);
         return Result<{{ .Aggregate }}PagedResponse>.Success(new {{ .Aggregate }}PagedResponse(items, totalCount, request.Page, request.PageSize));
     }

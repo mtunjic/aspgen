@@ -114,7 +114,7 @@ func renderString(raw string, d data) (string, error) {
 		"relationNestedFilterField": relationNestedFilterField, "hasRelationNestedFilters": hasRelationNestedFilters,
 		"relationFilterParamDecls": relationFilterParamDecls, "relationFilterParamNames": relationFilterParamNames, "relationFilterWhereClauses": relationFilterWhereClauses,
 		"injectableTargets": injectableTargets,
-		"seedArgs":          seedArgs, "searchNullArgs": searchNullArgs,
+		"seedArgs":          seedArgs, "searchNullArgs": searchNullArgs, "sortOrderSwitch": sortOrderSwitch,
 	}).Parse(raw)
 	if err != nil {
 		return "", err

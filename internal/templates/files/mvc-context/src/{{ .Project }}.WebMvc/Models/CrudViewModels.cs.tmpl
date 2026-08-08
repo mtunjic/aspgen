@@ -3,6 +3,9 @@ namespace {{ .Project }}.WebMvc.Models;
 // A selectable option for a relation/bool advanced-filter dropdown.
 public sealed record SelectOption(long Id, string Display);
 
+// One sortable list column (query value + label) for the sort selector.
+public sealed record SortOption(string Name, string Label);
+
 // One advanced-filter field. The shared _FilterBar partial renders the input
 // from Kind and binds it by Name (which matches the controller's action
 // parameter), so no per-aggregate markup is needed.
@@ -46,6 +49,10 @@ public abstract class IndexViewModelBase
     // search + advanced filter values, for preserving the query on "Load more".
     public abstract IReadOnlyList<KeyValuePair<string, string?>> RouteValues { get; }
     public abstract bool HasActiveFilters { get; }
+    // current sort (column Name + descending flag) and the sortable columns.
+    public string? SortBy { get; protected set; }
+    public bool SortDesc { get; protected set; }
+    public IReadOnlyList<SortOption> SortableFields { get; protected set; } = [];
 
     public static string? Display(object item, ColumnDescriptor column)
     {

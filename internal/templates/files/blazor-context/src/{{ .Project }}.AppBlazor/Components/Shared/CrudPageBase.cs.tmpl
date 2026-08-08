@@ -17,6 +17,9 @@ public abstract class CrudPageBase<TItem> : ComponentBase
     protected long totalCount;
     // Honest, user-facing error; full detail is only ever in the log.
     protected string? errorMessage;
+    // Current sort column (a column Name from sortFields) + descending flag.
+    protected string? sortBy;
+    protected bool sortDesc;
 
     protected bool hasMore => (long)page * PageSize < totalCount;
 

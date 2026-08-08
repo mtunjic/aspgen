@@ -81,7 +81,7 @@ public sealed class {{ .Aggregate }}CrudService(IDbContextFactory<{{ .Project }}
     }
 {{- end }}
 
-    public async Task<({{ .Aggregate }}View[] Items, long TotalCount)> SearchAsync(string? search{{ filterParamDecls .Properties "camel" }}{{ relationFilterParamDecls .Properties "camel" }}, int page, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<({{ .Aggregate }}View[] Items, long TotalCount)> SearchAsync(string? search{{ filterParamDecls .Properties "camel" }}{{ relationFilterParamDecls .Properties "camel" }}, int page, int pageSize, CancellationToken cancellationToken = default, string? sortBy = null, bool sortDesc = false)
     {
         await using var database = databaseFactory.CreateDbContext();
         var query = database.{{ .Aggregate }}s.Where(x => !x.Deleted).AsQueryable();
@@ -90,8 +90,9 @@ public sealed class {{ .Aggregate }}CrudService(IDbContextFactory<{{ .Project }}
 {{- end }}
         {{ filterWhereClauses .Properties "x" "" }}
         {{ relationFilterWhereClauses .Properties "x" "" "" }}
+        {{ sortOrderSwitch .Properties "sortBy" "sortDesc" }}
         var totalCount = await query.LongCountAsync(cancellationToken);
-        var items = await query.OrderBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).Select(x => new {{ .Aggregate }}View(x.Id,
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).Select(x => new {{ .Aggregate }}View(x.Id,
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }})).ToArrayAsync(cancellationToken);
         return (items, totalCount);
     }

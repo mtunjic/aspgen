@@ -17,15 +17,24 @@ public sealed class {{ .Aggregate }}IndexViewModel : IndexViewModelBase
 {{- end }}
 {{- end }}
 {{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}, string? {{ camel (relationNestedFilterField .) }}{{- end }}{{- end }}
-{{- range .Relations }}, List<{{ .Target }}View> {{ camel .Target }}Items{{ end }})
+{{- range .Relations }}, List<{{ .Target }}View> {{ camel .Target }}Items{{ end }}, string? sortBy, bool sortDesc)
     {
         Items = items;
         TotalCount = totalCount;
         Page = page;
         PageSize = pageSize;
         Search = search;
+        SortBy = sortBy;
+        SortDesc = sortDesc;
         SearchPlaceholder = "Search {{ .Aggregate }}s...";
         EmptyMessage = "No {{ .Aggregate }}s found.";
+        SortableFields =
+        [
+            new("Id", "Id"),
+{{- range .Properties }}{{- if not .RelationTarget }}
+            new("{{ .Name }}", "{{ .DisplayName }}"),
+{{- end }}{{- end }}
+        ];
 {{- range .Properties }}
 {{- if .RelationTarget }}
         {{ .Name }} = {{ camel .Name }};
@@ -101,6 +110,8 @@ public sealed class {{ .Aggregate }}IndexViewModel : IndexViewModelBase
 {{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
             new("{{ camel (relationNestedFilterField .) }}", {{ camel (relationNestedFilterField .) }}),
 {{- end }}{{- end }}
+            new("sortBy", SortBy),
+            new("sortDesc", SortDesc ? "true" : null),
         ];
     }
 

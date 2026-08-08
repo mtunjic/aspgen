@@ -17,3 +17,7 @@ public sealed class FilterField
 }
 
 public sealed record FilterOption(long Id, string Display);
+
+// One sortable list column (query value + label), rendered by the SearchFilterBar
+// sort selector.
+public sealed record SortOption(string Name, string Label);

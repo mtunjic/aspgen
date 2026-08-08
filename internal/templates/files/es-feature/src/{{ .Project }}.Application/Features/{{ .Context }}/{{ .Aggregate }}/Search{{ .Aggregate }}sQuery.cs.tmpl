@@ -1,3 +1,3 @@
 namespace {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }};
 
-public sealed record Search{{ .Aggregate }}sQuery(string? Search{{ filterParamDecls .Properties "pascal" }}{{ relationFilterParamDecls .Properties "pascal" }}, int Page, int PageSize);
+public sealed record Search{{ .Aggregate }}sQuery(string? Search{{ filterParamDecls .Properties "pascal" }}{{ relationFilterParamDecls .Properties "pascal" }}, int Page, int PageSize, string? SortBy = null, bool SortDesc = false);

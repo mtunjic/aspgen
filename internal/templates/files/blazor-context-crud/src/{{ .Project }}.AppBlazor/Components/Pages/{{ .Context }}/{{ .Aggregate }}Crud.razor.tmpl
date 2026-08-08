@@ -8,7 +8,9 @@
 <CrudHeader Title="{{ .Aggregate }}s" CreatePath="/{{ kebab .Context }}/{{ kebab .Aggregate }}s/edit" />
 
 <SearchFilterBar Filters="@filters" SearchText="@searchText" SearchTextChanged="@((string? v) => OnSearchTextChanged(v))"
-                 Apply="@(() => SearchAsync())" Clear="@(() => ClearFiltersAsync())" SearchPlaceholder="Search {{ .Aggregate }}s..." />
+                 Apply="@(() => SearchAsync())" Clear="@(() => ClearFiltersAsync())" SearchPlaceholder="Search {{ .Aggregate }}s..."
+                 SortFields="@sortFields" SortBy="@sortBy" SortByChanged="@((string? v) => OnSortByChanged(v))"
+                 SortDesc="@sortDesc" SortDescChanged="@((bool v) => OnSortDescChanged(v))" />
 
 @if (errorMessage is not null)
 {
@@ -29,6 +31,7 @@
     private string? searchText;
     private List<FilterField> filters = [];
     private List<EntityColumn<{{ .Aggregate }}View>> columns = [];
+    private List<SortOption> sortFields = [];
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
 {{- end }}
@@ -58,6 +61,7 @@
 {{- end }}
         BuildColumns();
         BuildFilters();
+        BuildSortFields();
         await SearchAsync();
     }
 
@@ -131,6 +135,8 @@
 {{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
         if (!string.IsNullOrWhiteSpace(filter{{ relationNestedFilterField . }})) query.Add($"{{ camel (relationNestedFilterField .) }}={Uri.EscapeDataString(filter{{ relationNestedFilterField . }})}");
 {{- end }}{{- end }}
+        if (!string.IsNullOrWhiteSpace(sortBy)) query.Add($"sortBy={sortBy}");
+        if (sortDesc) query.Add("sortDesc=true");
         query.Add($"page={page}");
         query.Add($"pageSize={PageSize}");
         var result = await Http.GetFromJsonAsync<{{ .Aggregate }}PagedResponse>($"{ApiPath}/search?{string.Join("&", query)}");
@@ -138,6 +144,29 @@
     }
 
     private void OnSearchTextChanged(string? value) => searchText = value;
+
+    private void BuildSortFields()
+    {
+        sortFields = new List<SortOption>
+        {
+            new("Id", "Id"),
+{{- range .Properties }}{{- if not .RelationTarget }}
+            new("{{ .Name }}", "{{ .DisplayName }}"),
+{{- end }}{{- end }}
+        };
+    }
+
+    private void OnSortByChanged(string? value)
+    {
+        sortBy = value;
+        _ = SearchAsync();
+    }
+
+    private void OnSortDescChanged(bool value)
+    {
+        sortDesc = value;
+        _ = SearchAsync();
+    }
 
     private async Task ClearFiltersAsync()
     {

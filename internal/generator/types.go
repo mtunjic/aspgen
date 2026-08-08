@@ -488,3 +488,15 @@ func searchNullArgs(properties []Property) string {
 	}
 	return ", " + strings.Join(parts, ", ")
 }
+
+// sortOrderSwitch renders a C# switch expression that orders a query by the
+// requested sortBy column (matched by field name), falling back to ordering by
+// Id when the name is unknown or empty. sortByVar/sortDescVar are the local
+// variable names holding the sort column and descending flag.
+func sortOrderSwitch(properties []Property, sortByVar, sortDescVar string) string {
+	var cases []string
+	for _, p := range properties {
+		cases = append(cases, fmt.Sprintf("\"%s\" => %s ? query.OrderByDescending(x => x.%s) : query.OrderBy(x => x.%s),", p.Name, sortDescVar, p.Name, p.Name))
+	}
+	return "\n        query = " + sortByVar + " switch\n        {\n        " + strings.Join(cases, "\n        ") + "\n        _ => query.OrderBy(x => x.Id),\n        };"
+}

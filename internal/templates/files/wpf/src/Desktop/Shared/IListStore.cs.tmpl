@@ -1,5 +1,9 @@
 namespace {{ .Project }}.Desktop.Shared;
 
+// One sortable list column (sortBy value + user-facing label), exposed by each
+// module's list view model and rendered by the shared ListPage sort selector.
+public sealed record SortField(string Name, string Label);
+
 public interface IListPageResult<TRow>
 {
     IReadOnlyList<TRow> Items { get; }

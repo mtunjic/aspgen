@@ -42,6 +42,8 @@ public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
 {{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
         if (!string.IsNullOrWhiteSpace(criteria.{{ relationNestedFilterField . }})) query.Add($"{{ camel (relationNestedFilterField .) }}={Uri.EscapeDataString(criteria.{{ relationNestedFilterField . }})}");
 {{- end }}{{- end }}
+        if (!string.IsNullOrWhiteSpace(criteria.SortBy)) query.Add($"sortBy={criteria.SortBy}");
+        if (criteria.SortDesc) query.Add("sortDesc=true");
         query.Add($"page={criteria.Page}");
         query.Add($"pageSize={criteria.PageSize}");
         var url = $"{Path}/search?{string.Join("&", query)}";
@@ -84,7 +86,7 @@ public sealed class {{ .Name }}Store({{ .Name }}CrudService service) : I{{ .Name
 
     public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
     {
-        var (items, totalCount) = Task.Run(() => service.SearchAsync(criteria.Search{{ filterParamNames .Properties "criteria." "pascal" }}{{ relationFilterParamNames .Properties "criteria." "pascal" }}, criteria.Page, criteria.PageSize)).GetAwaiter().GetResult();
+        var (items, totalCount) = Task.Run(() => service.SearchAsync(criteria.Search{{ filterParamNames .Properties "criteria." "pascal" }}{{ relationFilterParamNames .Properties "criteria." "pascal" }}, criteria.Page, criteria.PageSize, default, criteria.SortBy, criteria.SortDesc)).GetAwaiter().GetResult();
         var rows = items.Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }})).ToList();
         return new {{ .Name }}PageResult(rows, totalCount, criteria.Page, criteria.PageSize);
     }

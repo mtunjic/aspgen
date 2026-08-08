@@ -10,6 +10,24 @@
                 <input type="hidden" name="@hidden.Name" value="@hidden.CurrentValue" />
             }
         </form>
+        @if (Model.SortableFields.Count > 0)
+        {
+            <form method="get" class="d-flex gap-2 align-items-center mt-2">
+                <label class="form-label small mb-0">Sort by</label>
+                <select name="sortBy" class="form-select form-select-sm" style="width:auto">
+                    <option value="">Id</option>
+                    @foreach (var field in Model.SortableFields)
+                    {
+                        <option value="@field.Name" selected="@(Model.SortBy == field.Name)">@field.Label</option>
+                    }
+                </select>
+                <div class="form-check mb-0">
+                    <input type="checkbox" class="form-check-input" id="sortDesc" name="sortDesc" value="true" checked="@Model.SortDesc" />
+                    <label class="form-check-label small" for="sortDesc">Descending</label>
+                </div>
+                <input type="hidden" name="search" value="@Model.Search" />
+            </form>
+        }
         <details class="mt-3" open="@(Model.HasActiveFilters)">
             <summary class="text-secondary small">Advanced filters</summary>
             <form method="get" class="row g-2 mt-1">

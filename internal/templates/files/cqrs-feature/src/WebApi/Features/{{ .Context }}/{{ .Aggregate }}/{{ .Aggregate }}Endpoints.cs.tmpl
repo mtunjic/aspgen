@@ -14,11 +14,11 @@ public static class {{ .Aggregate }}Endpoints
             var result = await handler.HandleAsync(new Get{{ .Aggregate }}sQuery(), cancellationToken);
             return Results.Ok(result.Value);
         });
-        group.MapGet("/search", async (string? search{{ filterParamDecls .Properties "camel" }}{{ relationFilterParamDecls .Properties "camel" }}, int page, int pageSize, IHandler<Search{{ .Aggregate }}sQuery, {{ .Aggregate }}PagedResponse> handler, CancellationToken cancellationToken) =>
+        group.MapGet("/search", async (string? search{{ filterParamDecls .Properties "camel" }}{{ relationFilterParamDecls .Properties "camel" }}, int page, int pageSize, IHandler<Search{{ .Aggregate }}sQuery, {{ .Aggregate }}PagedResponse> handler, CancellationToken cancellationToken = default, string? sortBy = null, bool sortDesc = false) =>
         {
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 25;
-            var query = new Search{{ .Aggregate }}sQuery(search{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }}, page, pageSize);
+            var query = new Search{{ .Aggregate }}sQuery(search{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }}, page, pageSize, sortBy, sortDesc);
             var result = await handler.HandleAsync(query, cancellationToken);
             return Results.Ok(result.Value);
         });

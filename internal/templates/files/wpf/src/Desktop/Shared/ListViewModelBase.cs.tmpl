@@ -85,6 +85,24 @@ public abstract class ListViewModelBase<TStore, TRow, TCriteria, TPage> : Bindab
         get => searchText;
         set => SetProperty(ref searchText, value);
     }
+    private string? sortBy;
+    private bool sortDesc;
+    public string? SortBy
+    {
+        get => sortBy;
+        set
+        {
+            if (SetProperty(ref sortBy, value)) Search();
+        }
+    }
+    public bool SortDesc
+    {
+        get => sortDesc;
+        set
+        {
+            if (SetProperty(ref sortDesc, value)) Search();
+        }
+    }
     public bool IsAdvancedFilterExpanded
     {
         get => isAdvancedFilterExpanded;
