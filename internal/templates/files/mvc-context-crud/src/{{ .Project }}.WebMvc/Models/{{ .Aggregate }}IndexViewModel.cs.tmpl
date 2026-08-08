@@ -2,7 +2,7 @@ using {{ .Project }}.Application;
 
 namespace {{ .Project }}.WebMvc.Models;
 
-public sealed class {{ .Aggregate }}IndexViewModel({{ .Aggregate }}View[] items, long totalCount, int page, int pageSize, string? search{{ filterParamDecls .Properties "camel" }})
+public sealed class {{ .Aggregate }}IndexViewModel({{ .Aggregate }}View[] items, long totalCount, int page, int pageSize, string? search{{ filterParamDecls .Properties "camel" }}{{ relationFilterParamDecls .Properties "camel" }})
 {
     public {{ .Aggregate }}View[] Items { get; } = items;
     public long TotalCount { get; } = totalCount;
@@ -10,6 +10,25 @@ public sealed class {{ .Aggregate }}IndexViewModel({{ .Aggregate }}View[] items,
     public int PageSize { get; } = pageSize;
     public string? Search { get; } = search;
     public bool HasMore => (long)Page * PageSize < TotalCount;
+    // True when any filter (search, advanced, or nested relation) is active,
+    // used to keep the advanced-filter panel open after applying filters.
+    public bool HasActiveFilters => !string.IsNullOrWhiteSpace(Search)
+{{- range .Properties }}
+{{- if .RelationTarget }}
+        || {{ .Name }}.HasValue
+{{- else if eq (filterKind .CSharpType) "string" }}
+        || !string.IsNullOrWhiteSpace({{ .Name }}Contains)
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+        || {{ .Name }}Min.HasValue || {{ .Name }}Max.HasValue
+{{- else if eq (filterKind .CSharpType) "date" }}
+        || {{ .Name }}Min.HasValue || {{ .Name }}Max.HasValue
+{{- else if eq (filterKind .CSharpType) "bool" }}
+        || {{ .Name }}.HasValue
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+        || !string.IsNullOrWhiteSpace({{ relationNestedFilterField . }})
+{{- end }}{{- end }};
 {{- range .Properties }}
 {{- if .RelationTarget }}
     public long? {{ .Name }} { get; } = {{ camel .Name }};
@@ -26,4 +45,7 @@ public sealed class {{ .Aggregate }}IndexViewModel({{ .Aggregate }}View[] items,
     public bool? {{ .Name }} { get; } = {{ camel .Name }};
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+    public string? {{ relationNestedFilterField . }} { get; } = {{ camel (relationNestedFilterField .) }};
+{{- end }}{{- end }}
 }

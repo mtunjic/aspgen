@@ -1,0 +1,109 @@
+using System.Net;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Xunit;
+using {{ .Project }}.Application;
+using {{ .Project }}.Persistence;
+
+namespace {{ .Project }}.IntegrationTests;
+
+// Exercises the dm-tier MVC frontend end-to-end over HTTP: seed the related
+// entities in-process, POST the aggregate's Create form (with the many-to-many
+// multi-select values) to the real controller, then verify the foreign key and
+// join rows were persisted. Each test gets its own fresh SQLite file (via a
+// per-run connection string) so runs stay isolated and idempotent.
+public class {{ .Aggregate }}MvcRelationTests
+{
+    [Fact]
+    public async Task CreateWithRelationsPersistsJoinRows()
+    {
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source=rel-{Guid.NewGuid():N}.db"));
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+{{- range .RelationTest.Relations }}
+        long {{ .Var }};
+{{- end }}
+{{- range .RelationTest.ManyToMany }}
+        long {{ .Var }};
+        long {{ .SecondVar }};
+{{- end }}
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<{{ .Project }}Database>();
+{{- range .RelationTest.Relations }}
+            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .RequestArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+{{- end }}
+{{- range .RelationTest.ManyToMany }}
+            {{ .Var }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .RequestArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+            {{ .SecondVar }} = (await new {{ .Target }}CrudService(db, new {{ .Target }}Validator()).CreateAsync(new {{ .Target }}Request({{ range $i, $a := .RequestArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}))).Id;
+{{- end }}
+        }
+
+        var form = new FormUrlEncodedContent(new[]
+        {
+{{- range .RelationTest.FormFields }}
+            new KeyValuePair<string, string>("{{ .Name }}", {{ .Value }}),
+{{- end }}
+{{- range .RelationTest.ManyToMany }}
+            new KeyValuePair<string, string>("selected{{ .Target }}Ids", {{ .Var }}.ToString()),
+            new KeyValuePair<string, string>("selected{{ .Target }}Ids", {{ .SecondVar }}.ToString()),
+{{- end }}
+        });
+        var response = await client.PostAsync("/{{ kebab .Context }}/{{ kebab .Aggregate }}/create", form);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+
+        // The list page must render end-to-end (layout + tag helpers + views),
+        // proving the generated HTML shell is present and functional.
+        var index = await client.GetAsync("/{{ kebab .Context }}/{{ kebab .Aggregate }}");
+        Assert.Equal(HttpStatusCode.OK, index.StatusCode);
+        var indexBody = await index.Content.ReadAsStringAsync();
+        Assert.Contains("{{ .Aggregate }}s", indexBody);
+        Assert.Contains("bootstrap", indexBody);
+
+        // The Create page (with the many-to-many multi-select) must render
+        // without crashing and show no empty validation notice on a fresh GET.
+        var createPage = await client.GetAsync("/{{ kebab .Context }}/{{ kebab .Aggregate }}/create");
+        Assert.Equal(HttpStatusCode.OK, createPage.StatusCode);
+        var createBody = await createPage.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("alert-danger", createBody);
+{{- range .RelationTest.ManyToMany }}
+        Assert.Contains("selected{{ .Target }}Ids", createBody);
+{{- end }}
+
+        // An invalid submission must surface the validation notice WITH its text.
+{{- if .RelationTest.HasStringProp }}
+        var badForm = new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("{{ .RelationTest.FirstStringProp }}", "") });
+        var badResponse = await client.PostAsync("/{{ kebab .Context }}/{{ kebab .Aggregate }}/create", badForm);
+        Assert.Equal(HttpStatusCode.OK, badResponse.StatusCode);
+        var badBody = await badResponse.Content.ReadAsStringAsync();
+        Assert.Contains("is required", badBody);
+{{- end }}
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<{{ .Project }}Database>();
+            var aggregate = await db.{{ .Aggregate }}s.OrderByDescending(x => x.Id).FirstAsync();
+{{- range .RelationTest.Relations }}
+            Assert.Equal({{ .Var }}, aggregate.{{ .Target }}Id);
+{{- end }}
+{{- range .RelationTest.ManyToMany }}
+            var {{ .Target }}Links = await db.{{ .JoinEntity }}s.Where(x => x.{{ $.RelationTest.Aggregate }}Id == aggregate.Id).ToListAsync();
+            Assert.Equal(2, {{ .Target }}Links.Count);
+            Assert.Contains({{ .Target }}Links, l => l.{{ .Target }}Id == {{ .Var }});
+            Assert.Contains({{ .Target }}Links, l => l.{{ .Target }}Id == {{ .SecondVar }});
+{{- end }}
+        }
+
+{{- range .RelationTest.Relations }}{{- if ne .DisplayProperty "Id" }}
+        // Nested relation search on the Index page: filter by the related
+        // entity's display property (e.g. the customer's name).
+        var nestedHit = await client.GetAsync($"/{{ kebab $.Context }}/{{ kebab $.Aggregate }}?{{ camel .Target }}{{ .DisplayProperty }}Contains={Uri.EscapeDataString("Name sample")}");
+        Assert.DoesNotContain("No {{ $.Aggregate }}s found", await nestedHit.Content.ReadAsStringAsync());
+        var nestedMiss = await client.GetAsync($"/{{ kebab $.Context }}/{{ kebab $.Aggregate }}?{{ camel .Target }}{{ .DisplayProperty }}Contains={Uri.EscapeDataString("no-such-name")}");
+        Assert.Contains("No {{ $.Aggregate }}s found", await nestedMiss.Content.ReadAsStringAsync());
+{{- end }}{{- end }}
+    }
+}

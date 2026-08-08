@@ -52,8 +52,11 @@ func addContextUICmd(r addRequest, m *Manifest) error {
 			return errors.New("-ui wpf requires a cqrs or es arch-tier context (needs a WebApi host) or a dm arch-tier context (in-process); no WebApi host was found")
 		}
 		theme := r.Theme
-		themeMode := r.ThemeMode
-		if err := attachContextWpfUI(r.Project, m, theme, themeMode, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+		if theme == "" {
+			theme = "wpfui"
+		}
+		themeMode, themeModeValue := resolveThemeMode(theme, r.ThemeMode)
+		if err := attachContextWpfUI(r.Project, m, theme, themeModeValue, templateDir(r.Args), r.DryRun, r.Force); err != nil {
 			return err
 		}
 		withTests := hasComponent(m.Components, "tests:unit")

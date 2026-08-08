@@ -15,6 +15,415 @@ func assertExists(t *testing.T, root, relative string) {
 	}
 }
 
+func TestManyToManyWpfUI(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "WpfM2MDemo")
+	if err := Run([]string{"new", "WpfM2MDemo", "--context", "Blog", "--arch", "dm", "-ui", "wpf", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	assertM2mWpfModule(t, project, "Post")
+
+	// retrofit case: aggregates added first, -ui wpf attached afterwards -
+	// the many-to-many metadata must be recovered from the manifest.
+	retrofit := filepath.Join(t.TempDir(), "WpfM2MRetroDemo")
+	if err := Run([]string{"new", "WpfM2MRetroDemo", "--context", "Blog", "--arch", "dm", "--output", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "ui", "wpf", "--framework", "wpf", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	assertM2mWpfModule(t, retrofit, "Post")
+}
+
+func assertM2mWpfModule(t *testing.T, project, aggregate string) {
+	t.Helper()
+	view, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "Views", aggregate+"View.xaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"ItemsSource=\"{Binding TagOptions}\"", "IsChecked=\"{Binding IsSelected, Mode=TwoWay}\"", "Content=\"{Binding Display}\""} {
+		if !strings.Contains(string(view), expected) {
+			t.Fatalf("%sView.xaml multi-select missing %q: %s", aggregate, expected, view)
+		}
+	}
+	vm, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "ViewModels", aggregate+"ViewModel.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vmText := string(vm)
+	for _, expected := range []string{
+		"IPostTagStore postTagStore",
+		"ObservableCollection<TagOption> TagOptions { get; }",
+		"new PostTagSearchCriteria(null, SelectedItem.Id, null, 1, 1000)",
+		"new PostTagRow(0, saved.Id, id)",
+		"public sealed class TagOption : BindableBase",
+	} {
+		if !strings.Contains(vmText, expected) {
+			t.Fatalf("%sViewModel.cs missing %q", aggregate, expected)
+		}
+	}
+	detailsVM, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "ViewModels", aggregate+"DetailsViewModel.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(detailsVM), "TagsDisplay") || !strings.Contains(string(detailsVM), "IPostTagStore postTagStore") {
+		t.Fatalf("%sDetailsViewModel.cs missing many-to-many display wiring: %s", aggregate, detailsVM)
+	}
+	detailsView, err := os.ReadFile(filepath.Join(project, "src", "Desktop", "Modules", aggregate, "Views", aggregate+"DetailsView.xaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(detailsView), "Text=\"{Binding TagsDisplay}\"") {
+		t.Fatalf("%sDetailsView.xaml missing many-to-many display: %s", aggregate, detailsView)
+	}
+}
+
+func TestManyToManyBlazorUI(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "BlazorM2MDemo")
+	if err := Run([]string{"new", "BlazorM2MDemo", "--context", "Blog", "--arch", "cqrs", "-ui", "blazor", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	page, err := os.ReadFile(filepath.Join(project, "src", "BlazorM2MDemo.AppBlazor", "Components", "Pages", "Blog", "PostCrud.razor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pageText := string(page)
+	for _, expected := range []string{
+		"type=\"checkbox\" class=\"form-check-input\" @bind=\"option.Selected\"",
+		"private List<TagOption> TagOptions = [];",
+		"await SyncTagsAsync(savedId);",
+		"private async Task SyncTagsAsync(long PostId)",
+		"new PostTagRequest(PostId, id)",
+		"private sealed class TagOption",
+		"new PostTagPagedResponse([], 0, 1, 1000)",
+	} {
+		if !strings.Contains(pageText, expected) {
+			t.Fatalf("PostCrud.razor missing %q: %s", expected, page)
+		}
+	}
+	details, err := os.ReadFile(filepath.Join(project, "src", "BlazorM2MDemo.AppBlazor", "Components", "Pages", "Blog", "PostDetails.razor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"selectedTagIds", "TagOptions.Where(x => selectedTagIds.Contains(x.Id))"} {
+		if !strings.Contains(string(details), expected) {
+			t.Fatalf("PostDetails.razor missing %q: %s", expected, details)
+		}
+	}
+}
+
+func TestManyToManyMvcUI(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "MvcM2MDemo")
+	if err := Run([]string{"new", "MvcM2MDemo", "--context", "Blog", "--arch", "dm", "-ui", "mvc", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	controller, err := os.ReadFile(filepath.Join(project, "src", "MvcM2MDemo.WebMvc", "Controllers", "PostController.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	controllerText := string(controller)
+	for _, expected := range []string{
+		"PostTagCrudService postTagService",
+		"long[]? selectedTagIds",
+		"await SyncTagsAsync(created.Id, selectedTagIds ?? [], cancellationToken);",
+		"private async Task SyncTagsAsync(long PostId, long[] selectedTagIds, CancellationToken cancellationToken)",
+		"new PostTagRequest(PostId, id)",
+		"ViewBag.TagSelectedIds",
+	} {
+		if !strings.Contains(controllerText, expected) {
+			t.Fatalf("PostController.cs missing %q: %s", expected, controller)
+		}
+	}
+	create, err := os.ReadFile(filepath.Join(project, "src", "MvcM2MDemo.WebMvc", "Views", "Post", "Create.cshtml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"name=\"selectedTagIds\"", "checked=\"@(((List<long>)ViewBag.TagSelectedIds).Contains(option.Id))\""} {
+		if !strings.Contains(string(create), expected) {
+			t.Fatalf("Create.cshtml missing %q: %s", expected, create)
+		}
+	}
+	details, err := os.ReadFile(filepath.Join(project, "src", "MvcM2MDemo.WebMvc", "Views", "Post", "Details.cshtml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(details), "ViewBag.TagSelectedIds") {
+		t.Fatalf("Details.cshtml missing joined-names display: %s", details)
+	}
+}
+
+func TestRelationUnitTestGenerated(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "RelTestDemo")
+	if err := Run([]string{"new", "RelTestDemo", "--context", "Blog", "--arch", "dm", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Customer", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "body:string?", "customer:Customer?", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+
+	testFile, err := os.ReadFile(filepath.Join(project, "tests", "RelTestDemo.UnitTests", "PostRelationTests.cs"))
+	if err != nil {
+		t.Fatalf("relation unit test was not generated: %v", err)
+	}
+	testText := string(testFile)
+	for _, expected := range []string{
+		"public class PostRelationTests",
+		`var post = new Post("Title sample 1", "Body sample 1", customer.Id);`,
+		"db.PostTags.Add(new PostTag(post.Id, tag1.Id));",
+		"Assert.Equal(2, TagLinks.Count);",
+		"Assert.Single(CustomerMatch);",
+	} {
+		if !strings.Contains(testText, expected) {
+			t.Fatalf("PostRelationTests.cs missing %q: %s", expected, testFile)
+		}
+	}
+	csproj, err := os.ReadFile(filepath.Join(project, "tests", "RelTestDemo.UnitTests", "RelTestDemo.UnitTests.csproj"))
+	if err != nil || !strings.Contains(string(csproj), `<Compile Update="PostRelationTests.cs" />`) {
+		t.Fatalf("relation unit test not registered in the tests csproj: %v", err)
+	}
+
+	// A relation-less aggregate must NOT get a relation test.
+	if err := Run([]string{"add", "aggregate", "PlainNote", "text:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(project, "tests", "RelTestDemo.UnitTests", "PlainNoteRelationTests.cs")); !os.IsNotExist(err) {
+		t.Fatalf("relation-less aggregate should not get a relation test: %v", err)
+	}
+}
+
+func TestRelationApiTestGenerated(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "ApiRelTestDemo")
+	if err := Run([]string{"new", "ApiRelTestDemo", "--context", "Blog", "--arch", "cqrs", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	apiTest, err := os.ReadFile(filepath.Join(project, "tests", "ApiRelTestDemo.IntegrationTests", "PostRelationApiTests.cs"))
+	if err != nil {
+		t.Fatalf("relation WebApi integration test was not generated: %v", err)
+	}
+	for _, expected := range []string{
+		"public class PostRelationApiTests",
+		`$"/api/blog/post-tag/search?postId={ post.Id }&page=1&pageSize=100"`,
+		"new PostTagRequest(post.Id, tag1.Id)",
+	} {
+		if !strings.Contains(string(apiTest), expected) {
+			t.Fatalf("PostRelationApiTests.cs missing %q: %s", expected, apiTest)
+		}
+	}
+	csproj, err := os.ReadFile(filepath.Join(project, "tests", "ApiRelTestDemo.IntegrationTests", "ApiRelTestDemo.IntegrationTests.csproj"))
+	if err != nil || !strings.Contains(string(csproj), `<Compile Update="PostRelationApiTests.cs" />`) {
+		t.Fatalf("relation integration test not registered in the csproj: %v", err)
+	}
+}
+
+func TestRelationMvcTestGenerated(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "MvcRelTestDemo")
+	if err := Run([]string{"new", "MvcRelTestDemo", "--context", "Blog", "--arch", "dm", "-ui", "mvc", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	// dm-tier MVC projects must get an IntegrationTests project (the WebMvc
+	// is a real ASP.NET Core host) plus the per-aggregate relation test.
+	mvcTest, err := os.ReadFile(filepath.Join(project, "tests", "MvcRelTestDemo.IntegrationTests", "PostMvcRelationTests.cs"))
+	if err != nil {
+		t.Fatalf("MVC relation integration test was not generated: %v", err)
+	}
+	for _, expected := range []string{
+		"public class PostMvcRelationTests",
+		`new KeyValuePair<string, string>("selectedTagIds", tag1.ToString()),`,
+		`PostAsync("/blog/post/create", form)`,
+	} {
+		if !strings.Contains(string(mvcTest), expected) {
+			t.Fatalf("PostMvcRelationTests.cs missing %q: %s", expected, mvcTest)
+		}
+	}
+	csproj, err := os.ReadFile(filepath.Join(project, "tests", "MvcRelTestDemo.IntegrationTests", "MvcRelTestDemo.IntegrationTests.csproj"))
+	if err != nil || !strings.Contains(string(csproj), "Microsoft.AspNetCore.Mvc.Testing") {
+		t.Fatalf("MVC integration test project was not generated: %v", err)
+	}
+	solution, err := os.ReadFile(filepath.Join(project, "MvcRelTestDemo.sln"))
+	if err != nil || !strings.Contains(string(solution), "MvcRelTestDemo.IntegrationTests") {
+		t.Fatalf("MVC integration test project not in solution: %v", err)
+	}
+	// The WebMvc host must expose Program for WebApplicationFactory and
+	// bootstrap its schema so it can actually serve queries.
+	program, err := os.ReadFile(filepath.Join(project, "src", "MvcRelTestDemo.WebMvc", "Program.cs"))
+	if err != nil || !strings.Contains(string(program), "public partial class Program") || !strings.Contains(string(program), "EnsureCreated") {
+		t.Fatalf("WebMvc Program.cs missing WebApplicationFactory/schema bootstrap: %v", err)
+	}
+}
+
+func TestMvcNavAndHomeRedirect(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "MvcNavDemo")
+	if err := Run([]string{"new", "MvcNavDemo", "--context", "Blog", "--arch", "dm", "-ui", "mvc", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+
+	layout, err := os.ReadFile(filepath.Join(project, "src", "MvcNavDemo.WebMvc", "Views", "Shared", "_Layout.cshtml"))
+	if err != nil {
+		t.Fatalf("MVC layout was not generated (was it excluded from embed?): %v", err)
+	}
+	for _, expected := range []string{
+		`asp-controller="Tag" asp-action="Index">Tag</a>`,
+		`asp-controller="Post" asp-action="Index">Post</a>`,
+		"bootstrap@5.3.3",
+	} {
+		if !strings.Contains(string(layout), expected) {
+			t.Fatalf("_Layout.cshtml missing %q: %s", expected, layout)
+		}
+	}
+
+	home, err := os.ReadFile(filepath.Join(project, "src", "MvcNavDemo.WebMvc", "Controllers", "HomeController.cs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(home), `RedirectToAction("Index", "Tag")`) {
+		t.Fatalf("HomeController should redirect to the first aggregate: %s", home)
+	}
+
+	// retrofit: aggregates added first, -ui mvc attached later - nav + redirect
+	// must be patched for the pre-existing aggregates too.
+	retrofit := filepath.Join(t.TempDir(), "MvcNavRetroDemo")
+	if err := Run([]string{"new", "MvcNavRetroDemo", "--context", "Blog", "--arch", "dm", "--output", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "ui", "mvc", "--framework", "mvc", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	layout, err = os.ReadFile(filepath.Join(retrofit, "src", "MvcNavRetroDemo.WebMvc", "Views", "Shared", "_Layout.cshtml"))
+	if err != nil {
+		t.Fatalf("retrofit MVC layout missing: %v", err)
+	}
+	if !strings.Contains(string(layout), `asp-controller="Tag"`) || !strings.Contains(string(layout), `asp-controller="Post"`) {
+		t.Fatalf("retrofit layout missing nav links: %s", layout)
+	}
+}
+
+func TestBlazorNavLinks(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "BlazorNavDemo")
+	if err := Run([]string{"new", "BlazorNavDemo", "--context", "Blog", "--arch", "cqrs", "-ui", "blazor", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	layout, err := os.ReadFile(filepath.Join(project, "src", "BlazorNavDemo.AppBlazor", "Components", "Layout", "MainLayout.razor"))
+	if err != nil {
+		t.Fatalf("Blazor MainLayout was not generated: %v", err)
+	}
+	for _, expected := range []string{
+		`href="/blog/tags">Tags</NavLink>`,
+		`href="/blog/posts">Posts</NavLink>`,
+		"bootstrap",
+	} {
+		if !strings.Contains(string(layout), expected) {
+			t.Fatalf("MainLayout.razor missing %q: %s", expected, layout)
+		}
+	}
+
+	// retrofit: aggregates first, -ui blazor attached later - nav must be
+	// patched for the pre-existing aggregates too.
+	retrofit := filepath.Join(t.TempDir(), "BlazorNavRetroDemo")
+	if err := Run([]string{"new", "BlazorNavRetroDemo", "--context", "Blog", "--arch", "cqrs", "--output", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "ui", "blazor", "--framework", "blazor", "--project", retrofit}); err != nil {
+		t.Fatal(err)
+	}
+	layout, err = os.ReadFile(filepath.Join(retrofit, "src", "BlazorNavRetroDemo.AppBlazor", "Components", "Layout", "MainLayout.razor"))
+	if err != nil {
+		t.Fatalf("retrofit Blazor MainLayout missing: %v", err)
+	}
+	if !strings.Contains(string(layout), `href="/blog/tags">Tags`) || !strings.Contains(string(layout), `href="/blog/posts">Posts`) {
+		t.Fatalf("retrofit MainLayout missing nav links: %s", layout)
+	}
+}
+
+func TestManyToManyEsTier(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "EsM2MDemo")
+	if err := Run([]string{"new", "EsM2MDemo", "--context", "Blog", "--arch", "es", "--output", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Tag", "name:string", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run([]string{"add", "aggregate", "Post", "title:string", "tags:Tag[]", "--context", "Blog", "--project", project}); err != nil {
+		t.Fatal(err)
+	}
+	// es-tier aggregates are event-sourced (no renoir-aggregate shape), but
+	// must still carry the // aspgen:navigation marker so the join entity's
+	// inverse collections land on both sides.
+	for _, agg := range []string{"Post", "Tag"} {
+		aggregateFile, err := os.ReadFile(filepath.Join(project, "src", "EsM2MDemo.DomainModel", "Blog", agg+".cs"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(aggregateFile), "// aspgen:navigation") || !strings.Contains(string(aggregateFile), "ICollection<PostTag> PostTags") {
+			t.Fatalf("%s.cs missing es-tier inverse navigation: %s", agg, aggregateFile)
+		}
+	}
+}
+
 func TestManyToManyRelationGenerationRenoir(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "M2MRenoirDemo")
 	if err := Run([]string{"new", "M2MRenoirDemo", "--context", "Catalog", "--arch", "dm", "--output", project}); err != nil {

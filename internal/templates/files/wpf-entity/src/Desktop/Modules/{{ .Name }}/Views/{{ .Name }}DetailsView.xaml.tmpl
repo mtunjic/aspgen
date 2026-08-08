@@ -42,6 +42,16 @@
 {{- end }}
                 </StackPanel>
 {{- end }}
+{{- range .ManyToMany }}
+                <StackPanel Margin="0,8,0,0">
+{{- if eq $.Theme "wpfui" }}
+                    <ui:TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{{ .DisplayName }}" />
+{{- else }}
+                    <TextBlock FontWeight="SemiBold" Text="{{ .DisplayName }}" />
+{{- end }}
+                    <TextBlock Text="{Binding {{ .Name }}Display}" />
+                </StackPanel>
+{{- end }}
             </StackPanel>
         </ScrollViewer>
     </Grid>

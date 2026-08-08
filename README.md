@@ -110,6 +110,39 @@ Project names may be dotted .NET names such as `Markosoft.Commerce`. In that cas
 
 SQLite is the default database for every arch tier. Use `--database postgres` (also accepted as `--database:postgres`) when PostgreSQL is required. The selected provider is recorded in `.aspgen/manifest.json` and is emitted into the generated EF Core project, connection string, and dependency-injection setup.
 
+### Entity relations: FK dropdowns and many-to-many multi-select
+
+The `add entity`/`add aggregate` `name:type` syntax accepts another entity's
+name as the type to declare a relation to an already-added entity. The UI then
+adapts to the relation automatically — a dropdown that displays the target's
+first `string` property (falling back to `Id`) and stores the foreign key id:
+
+```text
+go run ./cmd/aspgen add aggregate Customer name:string --context Sales --project ./Billing
+go run ./cmd/aspgen add aggregate Order total:decimal customer:Customer --context Sales --project ./Billing
+```
+
+- `customer:Customer` — required many-to-one (nullable FK with `customer:Customer?`).
+  The `Order` edit form renders a dropdown of customers; the grid and details
+  screens show the customer's name instead of the raw id.
+- `tags:Tag[]` — many-to-many. aspgen materializes a `PostTag` join aggregate
+  (full CRUD + API endpoints of its own) and the `Post` edit form renders a
+  checkbox multi-select of tags; saving syncs the join rows (adds new links,
+  removes deselected ones). Blazor, WPF, and MVC all render the multi-select,
+  and the details screen lists the related names. Many-to-many only applies to
+  dm+ aggregates via `add aggregate`; ar-tier `add entity` supports many-to-one
+  only.
+
+```text
+go run ./cmd/aspgen add aggregate Tag name:string --context Blog --project ./Billing
+go run ./cmd/aspgen add aggregate Post title:string tags:Tag[] --context Blog --project ./Billing
+```
+
+Both relation kinds are restricted to targets in the same bounded context, and
+a relation target must already exist (mirroring natural FK-creation order).
+Adding a UI later (`add ui wpf|blazor|mvc`) retrofits the pickers for
+pre-existing aggregates from the manifest's recorded relation metadata.
+
 ### Generating entities from an existing database
 
 Instead of hand-typing `name:type` properties, aspgen can scaffold `ar`-tier entities from an existing database schema — a static SQL DDL script — via the `import-db` verb against an already-`new`-ed project. Supported providers are `sqlite`, `postgres`, `sqlserver`, and `mysql`.

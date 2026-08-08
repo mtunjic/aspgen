@@ -1,5 +1,11 @@
 package generator
 
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+)
+
 // attachContextBlazorUI wires `-ui blazor` onto a cqrs/es-tier
 // --context/--arch project: renders the AppBlazor host (a fresh Blazor
 // Server project that talks to the WebApi host over HttpClient, unlike
@@ -11,7 +17,10 @@ func attachContextBlazorUI(project string, m *Manifest, override string, dryRun,
 		return err
 	}
 	for _, entity := range m.Entities {
-		if err := renderContextBlazorCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), override, dryRun, force); err != nil {
+		if err := renderContextBlazorCrud(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), reconstructManyToMany(entity, m.Entities), override, dryRun, force); err != nil {
+			return err
+		}
+		if err := updateBlazorNav(project, m.Project, entity.Name, entity.Context, dryRun); err != nil {
 			return err
 		}
 	}
@@ -22,7 +31,7 @@ func attachContextBlazorUI(project string, m *Manifest, override string, dryRun,
 // pages. Shared by attachContextBlazorUI (existing aggregates) and
 // renderAggregateCrud's cqrs/es cases (aggregates added after -ui blazor is
 // already attached).
-func renderContextBlazorCrud(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, override string, dryRun, force bool) error {
+func renderContextBlazorCrud(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, manyToMany []ManyToManyRelation, override string, dryRun, force bool) error {
 	pageData := data{
 		Project:    projectName,
 		Namespace:  projectName,
@@ -30,6 +39,7 @@ func renderContextBlazorCrud(project, projectName, aggregate, contextName string
 		Aggregate:  aggregate,
 		Properties: properties,
 		Relations:  relations,
+		ManyToMany: manyToMany,
 	}
 	return renderTree(project, "blazor-context-crud", pageData, override, dryRun, force)
 }
@@ -41,5 +51,35 @@ func renderContextBlazorCrudIfAttached(r addRequest, m *Manifest, d data) error 
 	if m.UI != "blazor" {
 		return nil
 	}
-	return renderContextBlazorCrud(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, templateDir(r.Args), r.DryRun, r.Force)
+	if err := renderContextBlazorCrud(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, d.ManyToMany, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+		return err
+	}
+	return updateBlazorNav(r.Project, m.Project, d.Aggregate, d.Context, r.DryRun)
+}
+
+// updateBlazorNav adds a navbar link for aggregate to the Blazor shell's
+// MainLayout navigation, guarded by the `<!-- aspgen:nav -->` marker so every
+// aggregate added to a cqrs/es -ui blazor project becomes reachable from the
+// shell.
+func updateBlazorNav(project, projectName, aggregate, contextName string, dryRun bool) error {
+	path := filepath.Join(project, "src", projectName+".AppBlazor", "Components", "Layout", "MainLayout.razor")
+	content, err := readMarkerFile(path, "MainLayout.razor")
+	if err != nil {
+		return err
+	}
+	href := blazorNavHref(contextName, aggregate)
+	li := "                <li class=\"nav-item\"><NavLink class=\"nav-link\" href=\"" + href + "\">" + aggregate + "s</NavLink></li>"
+	if strings.Contains(content, li) {
+		return nil
+	}
+	if !strings.Contains(content, "<!-- aspgen:nav -->") {
+		return missingMarkerErr("MainLayout.razor", "<!-- aspgen:nav -->")
+	}
+	content = strings.Replace(content, "<!-- aspgen:nav -->", "<!-- aspgen:nav -->\n"+li, 1)
+	return writeMarkerFile(path, content, dryRun)
+}
+
+// ensureHref helper keeps the aggregate href construction testable.
+func blazorNavHref(contextName, aggregate string) string {
+	return fmt.Sprintf("/%s/%ss", kebab(contextName), kebab(aggregate))
 }

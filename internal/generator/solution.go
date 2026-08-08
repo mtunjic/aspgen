@@ -101,13 +101,14 @@ func writeSolution(root, name, app string, force, simple bool, backend string, w
 	}
 	// Generated test projects (--context/--arch engine only, opt out with
 	// --no-tests): every tier gets a UnitTests project exercising its
-	// DbContext; dm has no WebApi host to test over HTTP, so it's the only
-	// tier that skips IntegrationTests.
+	// DbContext; dm only skips IntegrationTests when it stays headless - a
+	// dm-tier WebMvc host (-ui mvc) is a real ASP.NET Core app that gets an
+	// IntegrationTests project too.
 	if withTests {
 		projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"",
 			name+".UnitTests", "tests\\"+name+".UnitTests\\"+name+".UnitTests.csproj", projectGUID(name, "unittests")))
 		targets = append(targets, "unittests")
-		if app != "dm" {
+		if app != "dm" || ui == "mvc" {
 			projects = append(projects, fmt.Sprintf("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"%s\", \"%s\", \"{%s}\"",
 				name+".IntegrationTests", "tests\\"+name+".IntegrationTests\\"+name+".IntegrationTests.csproj", projectGUID(name, "integrationtests")))
 			targets = append(targets, "integrationtests")

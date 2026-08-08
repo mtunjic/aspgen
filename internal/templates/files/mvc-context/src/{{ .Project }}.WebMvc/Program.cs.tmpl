@@ -20,4 +20,14 @@ app.UseStaticFiles();
 app.UseRouting();
 app.MapControllers();
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
+
+// Dev-time schema bootstrap; switch to `dotnet ef database update` once the
+// schema needs real migrations (EnsureCreated and migrations do not mix).
+using (var scope = app.Services.CreateScope())
+{
+    scope.ServiceProvider.GetRequiredService<{{ .Project }}Database>().Database.EnsureCreated();
+}
+
 app.Run();
+
+public partial class Program { }

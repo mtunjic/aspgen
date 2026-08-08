@@ -1,5 +1,14 @@
 @{
     ViewData["Title"] = "{{ .Project }}";
 }
-<h1>{{ .Project }}</h1>
-<p>MVC UI for the {{ .Project }} API.</p>
+<div class="text-center py-5">
+    <span class="badge text-bg-primary-subtle text-primary-emphasis mb-3 px-3 py-2">MVC UI</span>
+    <h1 class="display-4 fw-bold mb-3">{{ .Project }}</h1>
+    <p class="lead text-muted mx-auto" style="max-width: 36rem;">
+        Manage your {{ .Project }} data. Add aggregates to your project and they will appear in the navigation above.
+    </p>
+    <div class="d-inline-flex gap-2 mt-2">
+        <span class="text-muted small">No modules yet &mdash; run
+            <code>aspgen add aggregate Name field:type --context &hellip;</code></span>
+    </div>
+</div>

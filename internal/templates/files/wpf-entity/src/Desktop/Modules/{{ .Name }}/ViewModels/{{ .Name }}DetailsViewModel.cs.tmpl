@@ -3,9 +3,13 @@ using Prism.Navigation;
 using Prism.Navigation.Regions;
 using {{ .Namespace }}.Models;
 using {{ .Namespace }}.Services;
-{{- range .Relations }}
-using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Services;
-using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Models;
+{{- range injectableTargets .Relations .ManyToMany }}
+using {{ $.Project }}.Desktop.Modules.{{ . }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ . }}.Models;
+{{- end }}
+{{- range .ManyToMany }}
+using {{ $.Project }}.Desktop.Modules.{{ .JoinEntity }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ .JoinEntity }}.Models;
 {{- end }}
 
 namespace {{ .Namespace }}.ViewModels;
@@ -14,17 +18,23 @@ public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
 {
     private readonly I{{ .Name }}Store store;
     private readonly IRegionManager regionManager;
-{{- range .Relations }}
-    private readonly I{{ .Target }}Store {{ camel .Target }}Store;
+{{- range injectableTargets .Relations .ManyToMany }}
+    private readonly I{{ . }}Store {{ camel . }}Store;
+{{- end }}
+{{- range .ManyToMany }}
+    private readonly I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store;
 {{- end }}
     private {{ .Name }}Row? item;
 
-    public {{ .Name }}DetailsViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range .Relations }}, I{{ .Target }}Store {{ camel .Target }}Store{{ end }})
+    public {{ .Name }}DetailsViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range injectableTargets .Relations .ManyToMany }}, I{{ . }}Store {{ camel . }}Store{{ end }}{{ range .ManyToMany }}, I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store{{ end }})
     {
         this.store = store;
         this.regionManager = regionManager;
-{{- range .Relations }}
-        this.{{ camel .Target }}Store = {{ camel .Target }}Store;
+{{- range injectableTargets .Relations .ManyToMany }}
+        this.{{ camel . }}Store = {{ camel . }}Store;
+{{- end }}
+{{- range .ManyToMany }}
+        this.{{ camel .JoinEntity }}Store = {{ camel .JoinEntity }}Store;
 {{- end }}
         BackCommand = new Prism.Commands.DelegateCommand(() => regionManager.RequestNavigate("MainRegion", "{{ .Name }}View"));
     }
@@ -36,6 +46,9 @@ public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
     }
 {{- range .Relations }}
     public {{ .Target }}Row? {{ .Target }} => Item is null ? null : {{ camel .Target }}Store.GetAll().FirstOrDefault(x => x.Id == Item.{{ .Target }}Id);
+{{- end }}
+{{- range .ManyToMany }}
+    public string {{ .Name }}Display { get; private set; } = string.Empty;
 {{- end }}
 
     public Prism.Commands.DelegateCommand BackCommand { get; }
@@ -52,6 +65,11 @@ public sealed class {{ .Name }}DetailsViewModel : BindableBase, INavigationAware
         Item = store.GetAll().FirstOrDefault(x => x.Id == id);
 {{- range .Relations }}
         RaisePropertyChanged(nameof({{ .Target }}));
+{{- end }}
+{{- range .ManyToMany }}
+        var linked{{ .Target }} = {{ camel .JoinEntity }}Store.Search(new {{ .JoinEntity }}SearchCriteria(null, id, null, 1, 1000)).Items.Select(x => x.{{ .Target }}Id).ToHashSet();
+        {{ .Name }}Display = string.Join(", ", {{ camel .Target }}Store.GetAll().Where(x => linked{{ .Target }}.Contains(x.Id)).Select(x => x.{{ .DisplayProperty }}));
+        RaisePropertyChanged(nameof({{ .Name }}Display));
 {{- end }}
     }
 }

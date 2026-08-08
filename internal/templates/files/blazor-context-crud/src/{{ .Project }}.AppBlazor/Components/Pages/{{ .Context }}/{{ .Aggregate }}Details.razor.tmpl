@@ -2,10 +2,21 @@
 @using System.Net.Http.Json
 @using {{ .Project }}.Application
 @using {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }}
+{{- range .ManyToMany }}
+@using {{ $.Project }}.Application.Features.{{ $.Context }}.{{ .JoinEntity }}
+{{- end }}
 @inject HttpClient Http
 @inject NavigationManager Navigation
 
-<h1>{{ .Aggregate }} details</h1>
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Home</a></li>
+        <li class="breadcrumb-item"><a href="/{{ kebab .Context }}/{{ kebab .Aggregate }}s">{{ .Aggregate }}s</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Details</li>
+    </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ .Aggregate }} details</h1>
 
 @if (item is null)
 {
@@ -13,17 +24,28 @@
 }
 else
 {
-    <dl class="row">
+    <div class="card">
+        <div class="card-body">
+            <dl class="row mb-0">
 {{- range .Properties }}
-        <dt class="col-sm-3">{{ .DisplayName }}</dt>
+                <dt class="col-sm-3 fw-semibold">{{ .DisplayName }}</dt>
 {{- if .RelationTarget }}
-        <dd class="col-sm-9">@({{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</dd>
+                <dd class="col-sm-9">@({{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</dd>
 {{- else }}
-        <dd class="col-sm-9">@item.{{ .Name }}</dd>
+                <dd class="col-sm-9">@item.{{ .Name }}</dd>
 {{- end }}
 {{- end }}
-    </dl>
-    <button class="btn btn-secondary" @onclick="Back">Back</button>
+{{- range .ManyToMany }}
+                <dt class="col-sm-3 fw-semibold">{{ .DisplayName }}</dt>
+                <dd class="col-sm-9">@string.Join(", ", {{ .Target }}Options.Where(x => selected{{ .Target }}Ids.Contains(x.Id)).Select(x => x.{{ .DisplayProperty }}))</dd>
+{{- end }}
+            </dl>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-4">
+        <button class="btn btn-primary" @onclick="Back">Back to list</button>
+    </div>
 }
 
 @code {
@@ -32,12 +54,21 @@ else
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
 {{- end }}
+{{- range .ManyToMany }}
+    private List<{{ .Target }}View> {{ .Target }}Options = [];
+    private HashSet<long> selected{{ .Target }}Ids = [];
+{{- end }}
 
     protected override async Task OnInitializedAsync()
     {
         item = await Http.GetFromJsonAsync<{{ .Aggregate }}View>($"/api/{{ kebab .Context }}/{{ kebab .Aggregate }}/{Id}");
 {{- range .Relations }}
         {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
+{{- end }}
+{{- range .ManyToMany }}
+        var {{ camel .Target }}Links = await Http.GetFromJsonAsync<{{ .JoinEntity }}PagedResponse>($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/search?{{ camel $.Aggregate }}Id={Id}&pageSize=1000");
+        selected{{ .Target }}Ids = ({{ camel .Target }}Links?.Items.Select(x => x.{{ .Target }}Id) ?? []).ToHashSet();
+        {{ .Target }}Options = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
 {{- end }}
     }
 

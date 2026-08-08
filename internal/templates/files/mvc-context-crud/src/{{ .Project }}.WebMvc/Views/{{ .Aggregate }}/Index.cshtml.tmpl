@@ -2,102 +2,172 @@
 @{
     ViewData["Title"] = "{{ .Aggregate }}s";
 }
-<h1>{{ .Aggregate }}s</h1>
-<p><a asp-action="Create">Create new</a></p>
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ .Aggregate }}s</li>
+    </ol>
+</nav>
 
-<form method="get" class="mb-3 d-flex gap-2">
-    <input type="text" name="search" value="@Model.Search" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
-    <button type="submit" class="btn btn-outline-primary">Search</button>
-</form>
-<details class="mb-3">
-    <summary>Advanced filters</summary>
-    <form method="get" class="row g-2 mt-1">
-        <input type="hidden" name="search" value="@Model.Search" />
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">{{ .Aggregate }}s</h1>
+    <a asp-action="Create" class="btn btn-primary">+ Create new</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">Search &amp; filter</div>
+    <div class="card-body">
+        <form method="get" class="d-flex gap-2">
+            <input type="text" name="search" value="@Model.Search" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
+            <button type="submit" class="btn btn-outline-primary">Search</button>
 {{- range .Properties }}
 {{- if .RelationTarget }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }}</label>
-            <select name="{{ camel .Name }}" class="form-control">
-                <option value="">Any</option>
-                @foreach (var option in Model.{{ .RelationTarget }}Items)
-                {
-                    <option value="@option.Id" selected="@(Model.{{ .Name }} == option.Id)">@option.{{ .RelationDisplayProperty }}</option>
-                }
-            </select>
-        </div>
+            <input type="hidden" name="{{ camel .Name }}" value="@Model.{{ .Name }}" />
 {{- else if eq (filterKind .CSharpType) "string" }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }} contains</label>
-            <input type="text" name="{{ camel .Name }}Contains" value="@Model.{{ .Name }}Contains" class="form-control" />
-        </div>
+            <input type="hidden" name="{{ camel .Name }}Contains" value="@Model.{{ .Name }}Contains" />
 {{- else if eq (filterKind .CSharpType) "numeric" }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }} min</label>
-            <input type="number" name="{{ camel .Name }}Min" value="@Model.{{ .Name }}Min" class="form-control" />
-        </div>
-        <div class="col-auto">
-            <label>{{ .DisplayName }} max</label>
-            <input type="number" name="{{ camel .Name }}Max" value="@Model.{{ .Name }}Max" class="form-control" />
-        </div>
+            <input type="hidden" name="{{ camel .Name }}Min" value="@Model.{{ .Name }}Min" />
+            <input type="hidden" name="{{ camel .Name }}Max" value="@Model.{{ .Name }}Max" />
 {{- else if eq (filterKind .CSharpType) "date" }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }} from</label>
-            <input type="date" name="{{ camel .Name }}Min" value="@Model.{{ .Name }}Min?.ToString("yyyy-MM-dd")" class="form-control" />
-        </div>
-        <div class="col-auto">
-            <label>{{ .DisplayName }} to</label>
-            <input type="date" name="{{ camel .Name }}Max" value="@Model.{{ .Name }}Max?.ToString("yyyy-MM-dd")" class="form-control" />
-        </div>
+            <input type="hidden" name="{{ camel .Name }}Min" value="@Model.{{ .Name }}Min?.ToString("yyyy-MM-dd")" />
+            <input type="hidden" name="{{ camel .Name }}Max" value="@Model.{{ .Name }}Max?.ToString("yyyy-MM-dd")" />
 {{- else if eq (filterKind .CSharpType) "bool" }}
-        <div class="col-auto">
-            <label>{{ .DisplayName }}</label>
-            <select name="{{ camel .Name }}" class="form-control">
-                <option value="">Any</option>
-                <option value="true" selected="@(Model.{{ .Name }} == true)">Yes</option>
-                <option value="false" selected="@(Model.{{ .Name }} == false)">No</option>
-            </select>
-        </div>
+            <input type="hidden" name="{{ camel .Name }}" value="@Model.{{ .Name }}" />
 {{- end }}
 {{- end }}
-        <div class="col-auto align-self-end">
-            <a asp-action="Index" class="btn btn-outline-secondary">Clear</a>
-            <button type="submit" class="btn btn-primary">Apply</button>
-        </div>
-    </form>
-</details>
-
-<table class="table">
-    <thead>
-        <tr>
-{{- range .Properties }}
-            <th>{{ .DisplayName }}</th>
-{{- end }}
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var item in Model.Items)
-    {
-        <tr>
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+            <input type="hidden" name="{{ camel (relationNestedFilterField .) }}" value="@Model.{{ relationNestedFilterField . }}" />
+{{- end }}{{- end }}
+        </form>
+        <details class="mt-3" open="@(Model.HasActiveFilters)">
+            <summary class="text-secondary small">Advanced filters</summary>
+            <form method="get" class="row g-2 mt-1">
+                <input type="hidden" name="search" value="@Model.Search" />
 {{- range .Properties }}
 {{- if .RelationTarget }}
-            <td>@(Model.{{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</td>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }}</label>
+                    <select name="{{ camel .Name }}" class="form-select form-select-sm">
+                        <option value="">Any</option>
+                        @foreach (var option in Model.{{ .RelationTarget }}Items)
+                        {
+                            <option value="@option.Id" selected="@(Model.{{ .Name }} == option.Id)">@option.{{ .RelationDisplayProperty }}</option>
+                        }
+                    </select>
+                </div>
+{{- else if eq (filterKind .CSharpType) "string" }}
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} contains</label>
+                    <input type="text" name="{{ camel .Name }}Contains" value="@Model.{{ .Name }}Contains" class="form-control form-control-sm" />
+                </div>
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} min</label>
+                    <input type="number" name="{{ camel .Name }}Min" value="@Model.{{ .Name }}Min" class="form-control form-control-sm" />
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} max</label>
+                    <input type="number" name="{{ camel .Name }}Max" value="@Model.{{ .Name }}Max" class="form-control form-control-sm" />
+                </div>
+{{- else if eq (filterKind .CSharpType) "date" }}
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} from</label>
+                    <input type="date" name="{{ camel .Name }}Min" value="@Model.{{ .Name }}Min?.ToString("yyyy-MM-dd")" class="form-control form-control-sm" />
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }} to</label>
+                    <input type="date" name="{{ camel .Name }}Max" value="@Model.{{ .Name }}Max?.ToString("yyyy-MM-dd")" class="form-control form-control-sm" />
+                </div>
+{{- else if eq (filterKind .CSharpType) "bool" }}
+                <div class="col-auto">
+                    <label class="form-label small">{{ .DisplayName }}</label>
+                    <select name="{{ camel .Name }}" class="form-select form-select-sm">
+                        <option value="">Any</option>
+                        <option value="true" selected="@(Model.{{ .Name }} == true)">Yes</option>
+                        <option value="false" selected="@(Model.{{ .Name }} == false)">No</option>
+                    </select>
+                </div>
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+                <div class="col-auto">
+                    <label class="form-label small">{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains</label>
+                    <input type="text" name="{{ camel (relationNestedFilterField .) }}" value="@Model.{{ relationNestedFilterField . }}" class="form-control form-control-sm" />
+                </div>
+{{- end }}{{- end }}
+                <div class="col-auto align-self-end">
+                    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">Clear</a>
+                    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                </div>
+            </form>
+        </details>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+{{- range .Properties }}
+                    <th>{{ .DisplayName }}</th>
+{{- end }}
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var item in Model.Items)
+            {
+                <tr>
+{{- range .Properties }}
+{{- if .RelationTarget }}
+                    <td>@(Model.{{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</td>
 {{- else }}
-            <td>@item.{{ .Name }}</td>
+                    <td>@item.{{ .Name }}</td>
 {{- end }}
 {{- end }}
-            <td>
-                <a asp-action="Details" asp-route-id="@item.Id">Details</a>
-                <a asp-action="Edit" asp-route-id="@item.Id">Edit</a>
-                <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this {{ .Aggregate }}?');">
-                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                </form>
-            </td>
-        </tr>
-    }
-    </tbody>
-</table>
+                    <td class="text-end text-nowrap">
+                        <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Details</a>
+                        <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Edit</a>
+                        <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this {{ .Aggregate }}?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            @if (!Model.Items.Any())
+            {
+                <tr>
+                    <td colspan="99" class="text-center text-muted py-4">
+                        No {{ .Aggregate }}s found.
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
 @if (Model.HasMore)
 {
-    <a asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-search="@Model.Search" class="btn btn-outline-secondary">Load more</a>
+    <div class="text-center mt-3">
+        <a asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-search="@Model.Search"
+{{- range .Properties }}
+{{- if .RelationTarget }}
+           asp-route-{{ camel .Name }}="@Model.{{ .Name }}"
+{{- else if eq (filterKind .CSharpType) "string" }}
+           asp-route-{{ camel .Name }}Contains="@Model.{{ .Name }}Contains"
+{{- else if eq (filterKind .CSharpType) "numeric" }}
+           asp-route-{{ camel .Name }}Min="@Model.{{ .Name }}Min" asp-route-{{ camel .Name }}Max="@Model.{{ .Name }}Max"
+{{- else if eq (filterKind .CSharpType) "date" }}
+           asp-route-{{ camel .Name }}Min="@Model.{{ .Name }}Min" asp-route-{{ camel .Name }}Max="@Model.{{ .Name }}Max"
+{{- else if eq (filterKind .CSharpType) "bool" }}
+           asp-route-{{ camel .Name }}="@Model.{{ .Name }}"
+{{- end }}
+{{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+           asp-route-{{ camel (relationNestedFilterField .) }}="@Model.{{ relationNestedFilterField . }}"
+{{- end }}{{- end }}
+           class="btn btn-outline-secondary">Load more</a>
+    </div>
 }

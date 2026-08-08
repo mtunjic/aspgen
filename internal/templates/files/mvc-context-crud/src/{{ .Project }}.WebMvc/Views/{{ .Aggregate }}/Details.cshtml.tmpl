@@ -3,15 +3,36 @@
 @{
     ViewData["Title"] = "{{ .Aggregate }} details";
 }
-<h1>{{ .Aggregate }} details</h1>
-<dl class="row">
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">Home</a></li>
+        <li class="breadcrumb-item"><a asp-action="Index">{{ .Aggregate }}s</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Details</li>
+    </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ .Aggregate }} details</h1>
+
+<div class="card">
+    <div class="card-body">
+        <dl class="row mb-0">
 {{- range .Properties }}
-    <dt class="col-sm-3">{{ .DisplayName }}</dt>
+            <dt class="col-sm-3 fw-semibold">{{ .DisplayName }}</dt>
 {{- if .RelationTarget }}
-    <dd class="col-sm-9">@(((List<{{ .RelationTarget }}View>)ViewBag.{{ .RelationTarget }}Items).FirstOrDefault(x => x.Id == Model.{{ .Name }})?.{{ .RelationDisplayProperty }})</dd>
+            <dd class="col-sm-9">@(((List<{{ .RelationTarget }}View>)ViewBag.{{ .RelationTarget }}Items).FirstOrDefault(x => x.Id == Model.{{ .Name }})?.{{ .RelationDisplayProperty }})</dd>
 {{- else }}
-    <dd class="col-sm-9">@Model.{{ .Name }}</dd>
+            <dd class="col-sm-9">@Model.{{ .Name }}</dd>
 {{- end }}
 {{- end }}
-</dl>
-<a asp-action="Index" class="btn btn-secondary">Back</a>
+{{- range .ManyToMany }}
+            <dt class="col-sm-3 fw-semibold">{{ .DisplayName }}</dt>
+            <dd class="col-sm-9">@string.Join(", ", ((List<{{ .Target }}View>)ViewBag.{{ .Target }}Items).Where(x => ((List<long>)ViewBag.{{ .Target }}SelectedIds).Contains(x.Id)).Select(x => x.{{ .DisplayProperty }}))</dd>
+{{- end }}
+        </dl>
+    </div>
+</div>
+
+<div class="d-flex gap-2 mt-4">
+    <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">Edit</a>
+    <a asp-action="Index" class="btn btn-outline-secondary">Back to list</a>
+</div>

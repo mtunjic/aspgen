@@ -17,6 +17,11 @@ type Property struct {
 	// key property, empty for plain scalar properties.
 	RelationTarget          string `json:"relationTarget,omitempty"`
 	RelationDisplayProperty string `json:"relationDisplayProperty,omitempty"`
+	// NoNestedFilter suppresses the advanced "related display property
+	// contains" filter for this FK property. Set on many-to-many join-entity
+	// foreign keys so the join's search stays positional-argument compatible
+	// with the multi-select sync calls that filter it by parent id.
+	NoNestedFilter bool `json:"noNestedFilter,omitempty"`
 }
 
 func parseProperties(args []string) ([]Property, error) {
@@ -279,6 +284,103 @@ func filterWhereClauses(properties []Property, varName, valuePrefix string) stri
 			v := ref(p.Name)
 			lines = append(lines, fmt.Sprintf("if (%s.HasValue) query = query.Where(%s => %s.%s == %s.Value);", v, varName, varName, p.Name, v))
 		}
+	}
+	return strings.Join(lines, "\n        ")
+}
+
+// relationNestedFilterField returns the advanced-filter field name that
+// searches a many-to-one relation's target by its display property (e.g.
+// "CustomerNameContains" for customer:Customer whose display is Name), or ""
+// when the target has no searchable string display property to search on.
+func relationNestedFilterField(p Property) string {
+	if p.NoNestedFilter || p.RelationTarget == "" || p.RelationDisplayProperty == "" || p.RelationDisplayProperty == "Id" {
+		return ""
+	}
+	return p.RelationTarget + p.RelationDisplayProperty + "Contains"
+}
+
+// hasRelationNestedFilters reports whether any property exposes a nested
+// relation filter field.
+func hasRelationNestedFilters(properties []Property) bool {
+	for _, p := range properties {
+		if relationNestedFilterField(p) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// relationFilterParamDecls renders a leading-comma list of
+// "string? customerNameContains" declarations for every relation's nested
+// filter field, for method signatures and record constructors.
+func relationFilterParamDecls(properties []Property, casing string) string {
+	var parts []string
+	for _, p := range properties {
+		field := relationNestedFilterField(p)
+		if field == "" {
+			continue
+		}
+		if casing == "camel" {
+			field = camel(field)
+		}
+		parts = append(parts, "string? "+field)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return ", " + strings.Join(parts, ", ")
+}
+
+// relationFilterParamNames renders a leading-comma list of value references
+// matching relationFilterParamDecls's fields, e.g. prefix "request." + casing
+// "pascal" -> ", request.CustomerNameContains" (forwarding a Query's fields).
+func relationFilterParamNames(properties []Property, prefix, casing string) string {
+	var parts []string
+	for _, p := range properties {
+		field := relationNestedFilterField(p)
+		if field == "" {
+			continue
+		}
+		if casing == "camel" {
+			field = camel(field)
+		}
+		parts = append(parts, prefix+field)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return ", " + strings.Join(parts, ", ")
+}
+
+// relationFilterWhereClauses renders one `if (!string.IsNullOrWhiteSpace(x))
+// query = query.Where(...);` statement per relation's nested filter. arch
+// "es" queries the target's flat read model via a subquery
+// (database.CustomerReadModels.Any(c => c.Id == x.CustomerId && c.Name.Contains(...)));
+// every other tier traverses the aggregate's navigation property
+// (dm/cqrs aggregates expose the related entity as a navigation).
+func relationFilterWhereClauses(properties []Property, varName, valuePrefix, arch string) string {
+	ref := func(name string) string {
+		if valuePrefix == "" {
+			return camel(name)
+		}
+		return valuePrefix + name
+	}
+	var lines []string
+	for _, p := range properties {
+		field := relationNestedFilterField(p)
+		if field == "" {
+			continue
+		}
+		v := ref(field)
+		if arch == "es" {
+			lines = append(lines, fmt.Sprintf(
+				"if (!string.IsNullOrWhiteSpace(%s)) query = query.Where(%s => database.%sReadModels.Any(%s => %s.Id == %s.%s && %s.%s.Contains(%s)));",
+				v, varName, p.RelationTarget, camel(p.RelationTarget), camel(p.RelationTarget), varName, p.Name, camel(p.RelationTarget), p.RelationDisplayProperty, v))
+			continue
+		}
+		lines = append(lines, fmt.Sprintf(
+			"if (!string.IsNullOrWhiteSpace(%s)) query = query.Where(%s => %s.%s != null && %s.%s.%s.Contains(%s));",
+			v, varName, varName, p.RelationTarget, varName, p.RelationTarget, p.RelationDisplayProperty, v))
 	}
 	return strings.Join(lines, "\n        ")
 }

@@ -109,6 +109,12 @@
                     </StackPanel>
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+                    <StackPanel Margin="0,0,12,8">
+                        <TextBlock Text="{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains" />
+                        <TextBox Width="160" Margin="0,4,0,0" Text="{Binding Filter.{{ relationNestedFilterField . }}, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+{{- end }}{{- end }}
                 </WrapPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
 {{- if eq .Theme "wpfui" }}
@@ -231,6 +237,22 @@
                     <TextBox Margin="0,4,0,0" Text="{Binding Form.{{ .Name }}, UpdateSourceTrigger=PropertyChanged}" />
 {{- end }}
 {{- end }}
+                </StackPanel>
+{{- end }}
+{{- range .ManyToMany }}
+                <StackPanel Margin="0,8,0,0">
+{{- if eq $.Theme "wpfui" }}
+                    <ui:TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="{{ .DisplayName }}" />
+{{- else }}
+                    <TextBlock Text="{{ .DisplayName }}" />
+{{- end }}
+                    <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding {{ .Target }}Options}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Margin="0,2,0,0" IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding Display}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 {{- end }}
 {{- if eq .Theme "wpfui" }}

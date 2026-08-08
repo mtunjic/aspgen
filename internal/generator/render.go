@@ -20,7 +20,12 @@ type data struct {
 	// Relations holds many-to-one references declared on this entity;
 	// the corresponding foreign key is also present in Properties.
 	Relations []Relation
-	Context   string
+	// ManyToMany holds the `nav:Entity[]` references declared on this
+	// entity; each is materialized as its own join aggregate (see
+	// applyManyToManyRenoir) whose store/crud the UI's multi-select
+	// picker syncs through.
+	ManyToMany []ManyToManyRelation
+	Context    string
 	Aggregate string
 	Crud      bool
 	Theme     string
@@ -34,6 +39,10 @@ type data struct {
 	// tests-unit) that need to branch on which DbContext/host shape a
 	// tier has.
 	Arch string
+	// RelationTest drives the generated relation unit test (tests-relations
+	// group); nil unless an aggregate with relations was just added to a
+	// dm/cqrs-tier project.
+	RelationTest *RelationTest
 }
 
 func renderTree(root, group string, d data, override string, dryRun, force bool) error {
@@ -89,6 +98,9 @@ func renderString(raw string, d data) (string, error) {
 		"pascal": pascal, "camel": camel, "kebab": kebab, "trimSuffix": strings.TrimSuffix,
 		"filterKind": filterKind, "quickSearchExpr": quickSearchExpr, "hasQuickSearchField": hasQuickSearchField,
 		"filterParamDecls": filterParamDecls, "filterParamNames": filterParamNames, "filterWhereClauses": filterWhereClauses,
+		"relationNestedFilterField": relationNestedFilterField, "hasRelationNestedFilters": hasRelationNestedFilters,
+		"relationFilterParamDecls": relationFilterParamDecls, "relationFilterParamNames": relationFilterParamNames, "relationFilterWhereClauses": relationFilterWhereClauses,
+		"injectableTargets": injectableTargets,
 	}).Parse(raw)
 	if err != nil {
 		return "", err
@@ -153,6 +165,9 @@ func validateTemplateTree(source fs.FS, root string) error {
 			"pascal": pascal, "camel": camel, "kebab": kebab, "trimSuffix": strings.TrimSuffix,
 			"filterKind": filterKind, "quickSearchExpr": quickSearchExpr, "hasQuickSearchField": hasQuickSearchField,
 			"filterParamDecls": filterParamDecls, "filterParamNames": filterParamNames, "filterWhereClauses": filterWhereClauses,
+			"relationNestedFilterField": relationNestedFilterField, "hasRelationNestedFilters": hasRelationNestedFilters,
+			"relationFilterParamDecls": relationFilterParamDecls, "relationFilterParamNames": relationFilterParamNames, "relationFilterWhereClauses": relationFilterWhereClauses,
+			"injectableTargets": injectableTargets,
 		}).Parse(string(content))
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)

@@ -9,24 +9,32 @@ using System.Windows;
 {{- end }}
 using Prism.Commands;
 using Prism.Mvvm;
+using Prism.Navigation;
 using Prism.Navigation.Regions;
 using {{ .Namespace }}.Models;
 using {{ .Namespace }}.Services;
-{{- range .Relations }}
-using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Services;
-using {{ $.Project }}.Desktop.Modules.{{ .Target }}.Models;
+{{- range injectableTargets .Relations .ManyToMany }}
+using {{ $.Project }}.Desktop.Modules.{{ . }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ . }}.Models;
+{{- end }}
+{{- range .ManyToMany }}
+using {{ $.Project }}.Desktop.Modules.{{ .JoinEntity }}.Services;
+using {{ $.Project }}.Desktop.Modules.{{ .JoinEntity }}.Models;
 {{- end }}
 // aspgen:relatedUsings
 
 namespace {{ .Namespace }}.ViewModels;
 
-public sealed class {{ .Name }}ViewModel : BindableBase
+public sealed class {{ .Name }}ViewModel : BindableBase, INavigationAware
 {
     private const int PageSize = 25;
     private readonly I{{ .Name }}Store store;
     private readonly IRegionManager regionManager;
-{{- range .Relations }}
-    private readonly I{{ .Target }}Store {{ camel .Target }}Store;
+{{- range injectableTargets .Relations .ManyToMany }}
+    private readonly I{{ . }}Store {{ camel . }}Store;
+{{- end }}
+{{- range .ManyToMany }}
+    private readonly I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store;
 {{- end }}
     // aspgen:relatedStores
 {{- if eq .Theme "wpfui" }}
@@ -42,12 +50,15 @@ public sealed class {{ .Name }}ViewModel : BindableBase
     private int page = 1;
     private bool hasMore;
 
-    public {{ .Name }}ViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range .Relations }}, I{{ .Target }}Store {{ camel .Target }}Store{{ end }}{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }}/* aspgen:relatedParams */)
+    public {{ .Name }}ViewModel(I{{ .Name }}Store store, IRegionManager regionManager{{ range injectableTargets .Relations .ManyToMany }}, I{{ . }}Store {{ camel . }}Store{{ end }}{{ range .ManyToMany }}, I{{ .JoinEntity }}Store {{ camel .JoinEntity }}Store{{ end }}{{ if eq .Theme "wpfui" }}, IContentDialogService dialogService, ISnackbarService snackbarService{{ end }}/* aspgen:relatedParams */)
     {
         this.store = store;
         this.regionManager = regionManager;
-{{- range .Relations }}
-        this.{{ camel .Target }}Store = {{ camel .Target }}Store;
+{{- range injectableTargets .Relations .ManyToMany }}
+        this.{{ camel . }}Store = {{ camel . }}Store;
+{{- end }}
+{{- range .ManyToMany }}
+        this.{{ camel .JoinEntity }}Store = {{ camel .JoinEntity }}Store;
 {{- end }}
         // aspgen:relatedAssignments
 {{- if eq .Theme "wpfui" }}
@@ -66,6 +77,20 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         LoadMoreCommand = new DelegateCommand(LoadMore, () => !IsBusy && HasMore);
         ClearFiltersCommand = new DelegateCommand(ClearFilters, () => !IsBusy);
         ViewDetailsCommand = new DelegateCommand(ViewDetails, () => SelectedItem is not null);
+    }
+
+    // Prism reuses the view + ViewModel when the user navigates back to this
+    // module, so the constructor alone would leave the pickers (and list)
+    // stale. Reloading on every navigation keeps relation dropdowns and
+    // multi-selects in sync with data added through the related modules.
+    public bool IsNavigationTarget(NavigationContext navigationContext) => true;
+
+    public void OnNavigatedFrom(NavigationContext navigationContext)
+    {
+    }
+
+    public void OnNavigatedTo(NavigationContext navigationContext)
+    {
         LoadRelated();
         Search();
     }
@@ -73,6 +98,9 @@ public sealed class {{ .Name }}ViewModel : BindableBase
     public ObservableCollection<{{ .Name }}Row> Items { get; } = [];
 {{- range .Relations }}
     public ObservableCollection<{{ .Target }}Row> {{ .Target }}Items { get; } = [];
+{{- end }}
+{{- range .ManyToMany }}
+    public ObservableCollection<{{ .Target }}Option> {{ .Target }}Options { get; } = [];
 {{- end }}
     // aspgen:relatedCollections
     public {{ .Name }}Editor Form { get; }
@@ -163,6 +191,10 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         {{ .Target }}Items.Clear();
         foreach (var item in {{ camel .Target }}Store.GetAll()) {{ .Target }}Items.Add(item);
 {{- end }}
+{{- range .ManyToMany }}
+        {{ .Target }}Options.Clear();
+        foreach (var item in {{ camel .Target }}Store.GetAll()) {{ .Target }}Options.Add(new {{ .Target }}Option(item.Id, {{ if eq .DisplayProperty "Id" }}item.Id.ToString(){{ else }}item.{{ .DisplayProperty }}{{ end }}));
+{{- end }}
         // aspgen:relatedLoads
     }
 
@@ -219,7 +251,7 @@ public sealed class {{ .Name }}ViewModel : BindableBase
     {
 {{- range .Properties }}
 {{- if .RelationTarget }}
-        long? {{ camel .Name }} = long.TryParse(Filter.{{ .Name }}, out var parsed{{ .Name }}) ? parsed{{ .Name }} : null;
+        long? {{ camel .Name }} = Filter.{{ .Name }};
 {{- else if eq (filterKind .CSharpType) "string" }}
         var {{ camel .Name }}Contains = string.IsNullOrWhiteSpace(Filter.{{ .Name }}Contains) ? null : Filter.{{ .Name }}Contains;
 {{- else if eq (filterKind .CSharpType) "numeric" }}
@@ -237,13 +269,19 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         var {{ camel .Name }} = Filter.{{ .Name }};
 {{- end }}
 {{- end }}
-        return new {{ .Name }}SearchCriteria(string.IsNullOrWhiteSpace(SearchText) ? null : SearchText{{ filterParamNames .Properties "" "camel" }}, page, PageSize);
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+        var {{ camel (relationNestedFilterField .) }} = string.IsNullOrWhiteSpace(Filter.{{ relationNestedFilterField . }}) ? null : Filter.{{ relationNestedFilterField . }};
+{{- end }}{{- end }}
+        return new {{ .Name }}SearchCriteria(string.IsNullOrWhiteSpace(SearchText) ? null : SearchText{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }}, page, PageSize);
     }
 
     private void New()
     {
         editingId = 0;
         Form.Reset(null);
+{{- range .ManyToMany }}
+        foreach (var option in {{ .Target }}Options) option.IsSelected = false;
+{{- end }}
         ValidationMessage = string.Empty;
         RaisePropertyChanged(nameof(IsEditing));
     }
@@ -253,6 +291,10 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         if (SelectedItem is null) return;
         editingId = SelectedItem.Id;
         Form.Reset(SelectedItem);
+{{- range .ManyToMany }}
+        var linked{{ .Target }} = {{ camel .JoinEntity }}Store.Search(new {{ .JoinEntity }}SearchCriteria(null, SelectedItem.Id, null, 1, 1000)).Items.Select(x => x.{{ .Target }}Id).ToHashSet();
+        foreach (var option in {{ .Target }}Options) option.IsSelected = linked{{ .Target }}.Contains(option.Id);
+{{- end }}
         ValidationMessage = string.Empty;
         RaisePropertyChanged(nameof(IsEditing));
     }
@@ -264,7 +306,17 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         try
         {
             var operation = editingId == 0 ? "created" : "updated";
-            store.Save(editingId, value);
+            var saved = store.Save(editingId, value);
+{{- range .ManyToMany }}
+            var selected{{ .Target }} = {{ .Target }}Options.Where(o => o.IsSelected).Select(o => o.Id).ToHashSet();
+            var current{{ .Target }} = {{ camel .JoinEntity }}Store.Search(new {{ .JoinEntity }}SearchCriteria(null, saved.Id, null, 1, 1000)).Items;
+            foreach (var link in current{{ .Target }})
+                if (!selected{{ .Target }}.Contains(link.{{ .Target }}Id))
+                    {{ camel .JoinEntity }}Store.Delete(link.Id);
+            var keep{{ .Target }} = current{{ .Target }}.Select(x => x.{{ .Target }}Id).ToHashSet();
+            foreach (var id in selected{{ .Target }}.Except(keep{{ .Target }}))
+                {{ camel .JoinEntity }}Store.Save(0, new {{ .JoinEntity }}Row(0, saved.Id, id));
+{{- end }}
             SelectedItem = null;
             editingId = 0;
             Form.Reset(null);
@@ -324,6 +376,9 @@ public sealed class {{ .Name }}ViewModel : BindableBase
         editingId = 0;
         SelectedItem = null;
         Form.Reset(null);
+{{- range .ManyToMany }}
+        foreach (var option in {{ .Target }}Options) option.IsSelected = false;
+{{- end }}
         ValidationMessage = string.Empty;
         RaisePropertyChanged(nameof(IsEditing));
     }
@@ -338,7 +393,14 @@ public sealed class {{ .Name }}ViewModel : BindableBase
     {
         value = default!;
 {{- range .Properties }}
-{{- if eq .CSharpType "string" }}
+{{- if .RelationTarget }}
+{{- if eq .CSharpType "long" }}
+        if (Form.{{ .Name }} is null) return Invalid(nameof(Form.{{ .Name }}));
+        var {{ camel .Name }} = Form.{{ .Name }}.Value;
+{{- else }}
+        var {{ camel .Name }} = Form.{{ .Name }};
+{{- end }}
+{{- else if eq .CSharpType "string" }}
         var {{ camel .Name }} = Form.{{ .Name }}.Trim();
         if ({{ camel .Name }}.Length == 0) return Invalid(nameof(Form.{{ .Name }}));
 {{- else if eq .CSharpType "string?" }}
@@ -375,7 +437,10 @@ public sealed class {{ .Name }}ViewModel : BindableBase
 public sealed class {{ .Name }}Editor : BindableBase
 {
 {{- range .Properties }}
-{{- if eq .CSharpType "bool" }}
+{{- if .RelationTarget }}
+    private long? {{ camel .Name }};
+    public long? {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+{{- else if eq .CSharpType "bool" }}
     private bool {{ camel .Name }};
     public bool {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
 {{- else if or (eq .CSharpType "DateOnly") (eq .CSharpType "DateOnly?") (eq .CSharpType "DateTime") (eq .CSharpType "DateTime?") }}
@@ -394,7 +459,9 @@ public sealed class {{ .Name }}Editor : BindableBase
     public void Reset({{ .Name }}Row? item)
     {
 {{- range .Properties }}
-{{- if eq .CSharpType "bool" }}
+{{- if .RelationTarget }}
+        {{ .Name }} = item?.{{ .Name }};
+{{- else if eq .CSharpType "bool" }}
         {{ .Name }} = item?.{{ .Name }} ?? false;
 {{- else if eq .CSharpType "DateOnly" }}
         {{ .Name }} = item is null ? null : item.{{ .Name }}.ToDateTime(TimeOnly.MinValue);
@@ -406,6 +473,8 @@ public sealed class {{ .Name }}Editor : BindableBase
 {{- else if eq .CSharpType "DateTime?" }}
         {{ .Name }} = item?.{{ .Name }};
         {{ .Name }}Time = item?.{{ .Name }}?.TimeOfDay;
+{{- else if eq .CSharpType "string?" }}
+        {{ .Name }} = item is null ? string.Empty : item.{{ .Name }} ?? string.Empty;
 {{- else }}
         {{ .Name }} = item is null ? string.Empty : item.{{ .Name }}.ToString();
 {{- end }}
@@ -417,8 +486,8 @@ public sealed class {{ .Name }}FilterEditor : BindableBase
 {
 {{- range .Properties }}
 {{- if .RelationTarget }}
-    private string {{ camel .Name }} = string.Empty;
-    public string {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
+    private long? {{ camel .Name }};
+    public long? {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
 {{- else if eq (filterKind .CSharpType) "string" }}
     private string {{ camel .Name }}Contains = string.Empty;
     public string {{ .Name }}Contains { get => {{ camel .Name }}Contains; set => SetProperty(ref {{ camel .Name }}Contains, value); }
@@ -437,12 +506,16 @@ public sealed class {{ .Name }}FilterEditor : BindableBase
     public bool? {{ .Name }} { get => {{ camel .Name }}; set => SetProperty(ref {{ camel .Name }}, value); }
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+    private string {{ camel (relationNestedFilterField .) }} = string.Empty;
+    public string {{ relationNestedFilterField . }} { get => {{ camel (relationNestedFilterField .) }}; set => SetProperty(ref {{ camel (relationNestedFilterField .) }}, value); }
+{{- end }}{{- end }}
 
     public void Clear()
     {
 {{- range .Properties }}
 {{- if .RelationTarget }}
-        {{ .Name }} = string.Empty;
+        {{ .Name }} = null;
 {{- else if eq (filterKind .CSharpType) "string" }}
         {{ .Name }}Contains = string.Empty;
 {{- else if eq (filterKind .CSharpType) "numeric" }}
@@ -455,5 +528,25 @@ public sealed class {{ .Name }}FilterEditor : BindableBase
         {{ .Name }} = null;
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+        {{ relationNestedFilterField . }} = string.Empty;
+{{- end }}{{- end }}
     }
 }
+
+{{- range .ManyToMany }}
+public sealed class {{ .Target }}Option : BindableBase
+{
+    public {{ .Target }}Option(long id, string display)
+    {
+        Id = id;
+        Display = display;
+    }
+
+    public long Id { get; }
+    public string Display { get; }
+
+    private bool isSelected;
+    public bool IsSelected { get => isSelected; set => SetProperty(ref isSelected, value); }
+}
+{{- end }}

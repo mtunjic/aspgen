@@ -127,6 +127,11 @@ type EntityMeta struct {
 	Name       string     `json:"name"`
 	Context    string     `json:"context,omitempty"`
 	Properties []Property `json:"properties,omitempty"`
+	// ManyToMany records the `nav:Entity[]` relations declared on this
+	// entity, so a later `add ui` (retrofitting a UI onto aggregates that
+	// already existed) can render the multi-select pickers without having
+	// the original add-call args on hand.
+	ManyToMany []ManyToManyRelation `json:"manyToMany,omitempty"`
 }
 
 // appendEntityMeta records name/context/properties in entities, replacing

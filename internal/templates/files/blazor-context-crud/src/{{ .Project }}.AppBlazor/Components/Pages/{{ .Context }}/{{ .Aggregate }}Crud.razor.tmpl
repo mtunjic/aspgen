@@ -3,12 +3,28 @@
 @page "/{{ kebab .Context }}/{{ kebab .Aggregate }}s"
 @using {{ .Project }}.Application
 @using {{ .Project }}.Application.Features.{{ .Context }}.{{ .Aggregate }}
+{{- range .ManyToMany }}
+@using {{ $.Project }}.Application.Features.{{ $.Context }}.{{ .JoinEntity }}
+{{- end }}
 @inject HttpClient Http
 @inject NavigationManager Navigation
 
-<h1>{{ .Aggregate }}s</h1>
-<EditForm Model="form" OnValidSubmit="SaveAsync">
-    <DataAnnotationsValidator />
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ .Aggregate }}s</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">{{ .Aggregate }}s</h1>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">@(editingId == 0 ? "Create {{ .Aggregate }}" : "Edit {{ .Aggregate }}")</div>
+    <div class="card-body">
+        <EditForm Model="form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
 {{- range .Properties }}
     <div class="mb-3">
         <label>{{ .DisplayName }}</label>
@@ -26,16 +42,33 @@
 {{- end }}
     </div>
 {{- end }}
+{{- range .ManyToMany }}
+    <div class="mb-3">
+        <label>{{ .DisplayName }}</label>
+        @foreach (var option in {{ .Target }}Options)
+        {
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" @bind="option.Selected" />
+                <label class="form-check-label">@option.Display</label>
+            </div>
+        }
+    </div>
+{{- end }}
     <button class="btn btn-primary" type="submit">Save</button>
-</EditForm>
-
-<div class="mb-3 d-flex gap-2">
-    <input @bind="searchText" @bind:event="oninput" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
-    <button class="btn btn-outline-primary" @onclick="SearchAsync">Search</button>
+        </EditForm>
+    </div>
 </div>
-<details class="mb-3">
-    <summary>Advanced filters</summary>
-    <div class="row g-2 mt-1">
+
+<div class="card mb-4">
+    <div class="card-header">Search &amp; filter</div>
+    <div class="card-body">
+        <div class="d-flex gap-2">
+            <input @bind="searchText" @bind:event="oninput" class="form-control" placeholder="Search {{ .Aggregate }}s..." />
+            <button class="btn btn-outline-primary" @onclick="SearchAsync">Search</button>
+        </div>
+        <details class="mt-3">
+            <summary class="text-secondary small">Advanced filters</summary>
+            <div class="row g-2 mt-1">
 {{- range .Properties }}
 {{- if .RelationTarget }}
         <div class="col-auto">
@@ -82,32 +115,62 @@
         </div>
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+        <div class="col-auto">
+            <label>{{ .RelationTarget }} {{ .RelationDisplayProperty }} contains</label>
+            <input @bind="filter{{ relationNestedFilterField . }}" @bind:event="oninput" class="form-control" />
+        </div>
+{{- end }}{{- end }}
         <div class="col-auto align-self-end">
             <button class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">Clear</button>
             <button class="btn btn-primary" @onclick="SearchAsync">Apply</button>
         </div>
     </div>
-</details>
+        </details>
+    </div>
+</div>
 
-<table class="table">
-    <tbody>
-    @foreach (var item in items)
-    {
-        <tr style="cursor:pointer" @onclick="() => ViewDetails(item.Id)">
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
 {{- range .Properties }}
-            <td>@item.{{ .Name }}</td>
+                    <th>{{ .DisplayName }}</th>
 {{- end }}
-            <td>
-                <button class="btn btn-secondary" @onclick="() => EditAsync(item.Id)" @onclick:stopPropagation="true">Edit</button>
-                <button class="btn btn-danger" @onclick="() => DeleteAsync(item.Id)" @onclick:stopPropagation="true">Delete</button>
-            </td>
-        </tr>
-    }
-    </tbody>
-</table>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var item in items)
+            {
+                <tr style="cursor:pointer" @onclick="() => ViewDetails(item.Id)">
+{{- range .Properties }}
+{{- if .RelationTarget }}
+                    <td>@({{ .RelationTarget }}Items.FirstOrDefault(x => x.Id == item.{{ .Name }})?.{{ .RelationDisplayProperty }})</td>
+{{- else }}
+                    <td>@item.{{ .Name }}</td>
+{{- end }}
+{{- end }}
+                    <td class="text-end text-nowrap">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => EditAsync(item.Id)" @onclick:stopPropagation="true">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(item.Id)" @onclick:stopPropagation="true">Delete</button>
+                    </td>
+                </tr>
+            }
+            @if (!items.Any())
+            {
+                <tr><td colspan="99" class="text-center text-muted py-4">No {{ .Aggregate }}s found.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
 @if (hasMore)
 {
-    <button class="btn btn-outline-secondary" @onclick="LoadMoreAsync">Load more</button>
+    <div class="text-center mt-3">
+        <button class="btn btn-outline-secondary" @onclick="LoadMoreAsync">Load more</button>
+    </div>
 }
 
 @code {
@@ -115,6 +178,9 @@
     private List<{{ .Aggregate }}View> items = [];
 {{- range .Relations }}
     private List<{{ .Target }}View> {{ .Target }}Items = [];
+{{- end }}
+{{- range .ManyToMany }}
+    private List<{{ .Target }}Option> {{ .Target }}Options = [];
 {{- end }}
     private {{ .Aggregate }}Editor form = new();
     private long editingId;
@@ -138,11 +204,18 @@
     private bool? filter{{ .Name }};
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+    private string? filter{{ relationNestedFilterField . }};
+{{- end }}{{- end }}
 
     protected override async Task OnInitializedAsync()
     {
 {{- range .Relations }}
         {{ .Target }}Items = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
+{{- end }}
+{{- range .ManyToMany }}
+        var {{ camel .Target }}Source = await Http.GetFromJsonAsync<List<{{ .Target }}View>>("/api/{{ kebab $.Context }}/{{ kebab .Target }}") ?? [];
+        {{ .Target }}Options = {{ camel .Target }}Source.Select(x => new {{ .Target }}Option { Id = x.Id, Display = {{ if eq .DisplayProperty "Id" }}x.Id.ToString(){{ else }}x.{{ .DisplayProperty }}{{ end }} }).ToList();
 {{- end }}
         await SearchAsync();
     }
@@ -178,6 +251,9 @@
         if (filter{{ .Name }}.HasValue) query.Add($"{{ camel .Name }}={filter{{ .Name }}.Value}");
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+        if (!string.IsNullOrWhiteSpace(filter{{ relationNestedFilterField . }})) query.Add($"{{ camel (relationNestedFilterField .) }}={Uri.EscapeDataString(filter{{ relationNestedFilterField . }})}");
+{{- end }}{{- end }}
         query.Add($"page={page}");
         query.Add($"pageSize={PageSize}");
         var result = await Http.GetFromJsonAsync<{{ .Aggregate }}PagedResponse>($"{ApiPath}/search?{string.Join("&", query)}");
@@ -204,6 +280,9 @@
         filter{{ .Name }} = null;
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+        filter{{ relationNestedFilterField . }} = null;
+{{- end }}{{- end }}
         await SearchAsync();
     }
 
@@ -213,22 +292,30 @@
     {
         var request = new {{ .Aggregate }}Request(
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }});
+        var savedId = editingId;
         if (editingId == 0)
         {
             var response = await Http.PostAsJsonAsync(ApiPath, request);
             if (!response.IsSuccessStatusCode) return;
+            savedId = (await response.Content.ReadFromJsonAsync<{{ .Aggregate }}View>())?.Id ?? 0;
         }
         else
         {
             var response = await Http.PutAsJsonAsync($"{ApiPath}/{editingId}", request);
             if (!response.IsSuccessStatusCode) return;
         }
+{{- range .ManyToMany }}
+        await Sync{{ .Target }}sAsync(savedId);
+{{- end }}
         form = new();
         editingId = 0;
+{{- range .ManyToMany }}
+        foreach (var option in {{ .Target }}Options) option.Selected = false;
+{{- end }}
         await SearchAsync();
     }
 
-    private void EditAsync(long id)
+    private async Task EditAsync(long id)
     {
         var item = items.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
@@ -240,7 +327,30 @@
         form.{{ .Name }} = item.{{ .Name }};
 {{- end }}
 {{- end }}
+{{- range .ManyToMany }}
+        await LoadSelected{{ .Target }}Async(id);
+{{- end }}
     }
+
+{{- range .ManyToMany }}
+    private async Task LoadSelected{{ .Target }}Async(long id)
+    {
+        var linked = (await Http.GetFromJsonAsync<{{ .JoinEntity }}PagedResponse>($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/search?{{ camel $.Aggregate }}Id={id}&pageSize=1000"))?.Items.Select(x => x.{{ .Target }}Id).ToHashSet() ?? [];
+        foreach (var option in {{ .Target }}Options) option.Selected = linked.Contains(option.Id);
+    }
+
+    private async Task Sync{{ .Target }}sAsync(long {{ $.Aggregate }}Id)
+    {
+        var selected = {{ .Target }}Options.Where(o => o.Selected).Select(o => o.Id).ToHashSet();
+        var current = await Http.GetFromJsonAsync<{{ .JoinEntity }}PagedResponse>($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/search?{{ camel $.Aggregate }}Id={ {{ $.Aggregate }}Id }&pageSize=1000") ?? new {{ .JoinEntity }}PagedResponse([], 0, 1, 1000);
+        foreach (var link in current.Items)
+            if (!selected.Contains(link.{{ .Target }}Id))
+                await Http.DeleteAsync($"/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}/{link.Id}");
+        var existing = current.Items.Select(x => x.{{ .Target }}Id).ToHashSet();
+        foreach (var id in selected.Except(existing))
+            await Http.PostAsJsonAsync("/api/{{ kebab $.Context }}/{{ kebab .JoinEntity }}", new {{ .JoinEntity }}Request({{ $.Aggregate }}Id, id));
+    }
+{{- end }}
 
     private async Task DeleteAsync(long id)
     {
@@ -259,4 +369,13 @@
 {{- end }}
 {{- end }}
     }
+
+{{- range .ManyToMany }}
+    private sealed class {{ .Target }}Option
+    {
+        public long Id { get; init; }
+        public string Display { get; init; } = "";
+        public bool Selected { get; set; }
+    }
+{{- end }}
 }

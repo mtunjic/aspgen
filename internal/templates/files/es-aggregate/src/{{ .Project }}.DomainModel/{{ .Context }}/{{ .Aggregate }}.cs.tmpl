@@ -37,4 +37,6 @@ public sealed partial class {{ .Aggregate }} : EventSourcedAggregate
                 throw new DomainException($"Unhandled event {domainEvent.GetType().Name} for {{ .Aggregate }} #{Id}.");
         }
     }
+
+    // aspgen:navigation
 }

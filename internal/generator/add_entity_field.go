@@ -46,7 +46,7 @@ func addEntityFieldCmd(r addRequest, m *Manifest, d *data) error {
 	}
 
 	updated := append(append([]Property{}, existing.Properties...), newProps...)
-	m.Entities = appendEntityMeta(m.Entities, EntityMeta{Name: existing.Name, Context: existing.Context, Properties: updated})
+	m.Entities = appendEntityMeta(m.Entities, EntityMeta{Name: existing.Name, Context: existing.Context, Properties: updated, ManyToMany: existing.ManyToMany})
 	return nil
 }
 

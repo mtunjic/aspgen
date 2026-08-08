@@ -34,7 +34,7 @@ func attachContextWpfUI(project string, m *Manifest, theme, themeMode, override 
 		if ctx, ok := findContext(m.Contexts, entity.Context); ok && ctx.Arch != "" {
 			entityBackend = archBackend(ctx.Arch)
 		}
-		if err := renderContextWpfModule(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), entityBackend, theme, themeMode, override, dryRun, force); err != nil {
+		if err := renderContextWpfModule(project, m.Project, entity.Name, entity.Context, entity.Properties, reconstructRelations(entity.Properties), reconstructManyToMany(entity, m.Entities), entityBackend, theme, themeMode, override, dryRun, force); err != nil {
 			return err
 		}
 	}
@@ -46,7 +46,7 @@ func attachContextWpfUI(project string, m *Manifest, theme, themeMode, override 
 // the Desktop shell's module catalog. Shared by attachContextWpfUI (existing
 // aggregates) and renderAggregateCrud's cqrs/es cases (aggregates added after
 // -ui wpf is already attached).
-func renderContextWpfModule(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, backend, theme, themeMode, override string, dryRun, force bool) error {
+func renderContextWpfModule(project, projectName, aggregate, contextName string, properties []Property, relations []Relation, manyToMany []ManyToManyRelation, backend, theme, themeMode, override string, dryRun, force bool) error {
 	namespace := projectName + ".Desktop.Modules." + aggregate
 	moduleData := data{
 		Project:    projectName,
@@ -55,6 +55,7 @@ func renderContextWpfModule(project, projectName, aggregate, contextName string,
 		Context:    contextName,
 		Properties: properties,
 		Relations:  relations,
+		ManyToMany: manyToMany,
 		Backend:    backend,
 		Theme:      theme,
 		ThemeMode:  themeMode,
@@ -73,5 +74,5 @@ func renderContextWpfModuleIfAttached(r addRequest, m *Manifest, d data) error {
 	if m.UI != "wpf" {
 		return nil
 	}
-	return renderContextWpfModule(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, d.Backend, d.Theme, d.ThemeMode, templateDir(r.Args), r.DryRun, r.Force)
+	return renderContextWpfModule(r.Project, m.Project, d.Aggregate, d.Context, d.Properties, d.Relations, d.ManyToMany, d.Backend, d.Theme, d.ThemeMode, templateDir(r.Args), r.DryRun, r.Force)
 }

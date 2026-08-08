@@ -39,13 +39,15 @@ public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
         if (criteria.{{ .Name }}.HasValue) query.Add($"{{ camel .Name }}={criteria.{{ .Name }}.Value}");
 {{- end }}
 {{- end }}
+{{- range .Properties }}{{- if ne (relationNestedFilterField .) "" }}
+        if (!string.IsNullOrWhiteSpace(criteria.{{ relationNestedFilterField . }})) query.Add($"{{ camel (relationNestedFilterField .) }}={Uri.EscapeDataString(criteria.{{ relationNestedFilterField . }})}");
+{{- end }}{{- end }}
         query.Add($"page={criteria.Page}");
         query.Add($"pageSize={criteria.PageSize}");
         var url = $"{Path}/search?{string.Join("&", query)}";
         var result = Task.Run(() => http.GetFromJsonAsync<{{ .Name }}PageResult>(url)).GetAwaiter().GetResult();
         return result ?? new {{ .Name }}PageResult([], 0, criteria.Page, criteria.PageSize);
     }
-
     public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
     {
         if (editingId == 0)
@@ -82,7 +84,7 @@ public sealed class {{ .Name }}Store({{ .Name }}CrudService service) : I{{ .Name
 
     public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
     {
-        var (items, totalCount) = Task.Run(() => service.SearchAsync(criteria.Search{{ filterParamNames .Properties "criteria." "pascal" }}, criteria.Page, criteria.PageSize)).GetAwaiter().GetResult();
+        var (items, totalCount) = Task.Run(() => service.SearchAsync(criteria.Search{{ filterParamNames .Properties "criteria." "pascal" }}{{ relationFilterParamNames .Properties "criteria." "pascal" }}, criteria.Page, criteria.PageSize)).GetAwaiter().GetResult();
         var rows = items.Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }})).ToList();
         return new {{ .Name }}PageResult(rows, totalCount, criteria.Page, criteria.PageSize);
     }

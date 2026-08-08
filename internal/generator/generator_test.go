@@ -72,8 +72,64 @@ func TestSplitRelationArgsManyToMany(t *testing.T) {
 		t.Fatalf("expected one many-to-many relation, got %#v", manyToMany)
 	}
 	rel := manyToMany[0]
-	if rel.Name != "Tags" || rel.Target != "Tag" || rel.JoinEntity != "PostTag" || rel.DisplayProperty != "Name" {
+	if rel.Name != "Tags" || rel.DisplayName != "Tags" || rel.Target != "Tag" || rel.JoinEntity != "PostTag" || rel.DisplayProperty != "Name" {
 		t.Fatalf("unexpected many-to-many relation: %#v", rel)
+	}
+}
+
+func TestReconstructManyToManyFromPersisted(t *testing.T) {
+	declaring := EntityMeta{
+		Name: "Post",
+		ManyToMany: []ManyToManyRelation{
+			{Name: "Tags", DisplayName: "Tags", Target: "Tag", JoinEntity: "PostTag", DisplayProperty: "Name"},
+		},
+	}
+	rels := reconstructManyToMany(declaring, nil)
+	if len(rels) != 1 || rels[0].JoinEntity != "PostTag" || rels[0].Target != "Tag" {
+		t.Fatalf("expected persisted many-to-many to round-trip, got %#v", rels)
+	}
+}
+
+func TestReconstructManyToManyInfersFromJoinEntity(t *testing.T) {
+	declaring := EntityMeta{Name: "Post", Context: "Catalog", Properties: []Property{{Name: "Title", CSharpType: "string"}}}
+	entities := []EntityMeta{
+		{Name: "Tag", Context: "Catalog", Properties: []Property{{Name: "Name", CSharpType: "string"}}},
+		{
+			Name:    "PostTag",
+			Context: "Catalog",
+			Properties: []Property{
+				{Name: "PostId", CSharpType: "long", RelationTarget: "Post", RelationDisplayProperty: "Title"},
+				{Name: "TagId", CSharpType: "long", RelationTarget: "Tag", RelationDisplayProperty: "Name"},
+			},
+		},
+	}
+	rels := reconstructManyToMany(declaring, entities)
+	if len(rels) != 1 {
+		t.Fatalf("expected one inferred many-to-many relation, got %#v", rels)
+	}
+	rel := rels[0]
+	if rel.Target != "Tag" || rel.JoinEntity != "PostTag" || rel.DisplayProperty != "Name" {
+		t.Fatalf("unexpected inferred relation: %#v", rel)
+	}
+}
+
+func TestReconstructManyToManyIgnoresUnrelatedEntities(t *testing.T) {
+	declaring := EntityMeta{Name: "Post", Context: "Catalog"}
+	entities := []EntityMeta{
+		{Name: "Tag", Context: "Catalog", Properties: []Property{{Name: "Name", CSharpType: "string"}}},
+		{Name: "PostCode", Context: "Catalog", Properties: []Property{{Name: "Value", CSharpType: "string"}}},
+	}
+	if rels := reconstructManyToMany(declaring, entities); len(rels) != 0 {
+		t.Fatalf("expected no inferred relations, got %#v", rels)
+	}
+}
+
+func TestInjectableTargetsDeduplicates(t *testing.T) {
+	relations := []Relation{{Target: "Customer"}, {Target: "Tag"}}
+	manyToMany := []ManyToManyRelation{{Target: "Tag", JoinEntity: "PostTag"}}
+	targets := injectableTargets(relations, manyToMany)
+	if len(targets) != 2 || targets[0] != "Customer" || targets[1] != "Tag" {
+		t.Fatalf("unexpected deduplicated targets: %#v", targets)
 	}
 }
 

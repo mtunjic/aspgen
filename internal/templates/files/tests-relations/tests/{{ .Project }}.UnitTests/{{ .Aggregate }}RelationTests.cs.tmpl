@@ -1,0 +1,64 @@
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+using {{ .Project }}.DomainModel;
+using {{ .Project }}.DomainModel.{{ .Context }};
+using {{ .Project }}.Persistence;
+
+namespace {{ .Project }}.UnitTests;
+
+public class {{ .Aggregate }}RelationTests
+{
+    private static {{ .Project }}Database NewDb()
+    {
+        var options = new DbContextOptionsBuilder<{{ .Project }}Database>()
+            .UseSqlite("DataSource=:memory:")
+            .Options;
+        var db = new {{ .Project }}Database(options);
+        db.Database.OpenConnection();
+        db.Database.EnsureCreated();
+        return db;
+    }
+
+    [Fact]
+    public void CreatesRelatedDataAndQueriesItBack()
+    {
+        using var db = NewDb();
+{{- range .RelationTest.Relations }}
+        var {{ .Var }} = new {{ .Target }}({{ range $i, $a := .CtorArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }});
+        {{ .Var }}.Init("system");
+        db.{{ .Target }}s.Add({{ .Var }});
+{{- end }}
+{{- range .RelationTest.ManyToMany }}
+        var {{ .Var }} = new {{ .Target }}({{ range $i, $a := .CtorArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }});
+        {{ .Var }}.Init("system");
+        db.{{ .Target }}s.Add({{ .Var }});
+        var {{ .SecondVar }} = new {{ .Target }}({{ range $i, $a := .CtorArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }});
+        {{ .SecondVar }}.Init("system");
+        db.{{ .Target }}s.Add({{ .SecondVar }});
+{{- end }}
+        db.SaveChanges();
+
+        // The aggregate is created only after its related entities are
+        // persisted, so the foreign keys it references are real database ids.
+        var {{ $.RelationTest.Var }} = new {{ $.RelationTest.Aggregate }}({{ range $i, $a := $.RelationTest.CtorArgs }}{{ if $i }}, {{ end }}{{ $a }}{{ end }});
+        {{ $.RelationTest.Var }}.Init("system");
+        db.{{ $.RelationTest.Aggregate }}s.Add({{ $.RelationTest.Var }});
+        db.SaveChanges();
+{{- range .RelationTest.ManyToMany }}
+        db.{{ .JoinEntity }}s.Add(new {{ .JoinEntity }}({{ $.RelationTest.Var }}.Id, {{ .Var }}.Id));
+        db.{{ .JoinEntity }}s.Add(new {{ .JoinEntity }}({{ $.RelationTest.Var }}.Id, {{ .SecondVar }}.Id));
+        db.SaveChanges();
+{{- end }}
+{{- range .RelationTest.ManyToMany }}
+        var {{ .Target }}Links = db.{{ .JoinEntity }}s.Where(x => x.{{ $.RelationTest.Aggregate }}Id == {{ $.RelationTest.Var }}.Id).ToList();
+        Assert.Equal(2, {{ .Target }}Links.Count);
+        Assert.Contains({{ .Target }}Links, l => l.{{ .Target }}Id == {{ .Var }}.Id);
+        Assert.Contains({{ .Target }}Links, l => l.{{ .Target }}Id == {{ .SecondVar }}.Id);
+{{- end }}
+{{- range .RelationTest.Relations }}
+        var {{ .Target }}Match = db.{{ $.RelationTest.Aggregate }}s.Where(x => x.{{ .Target }}Id == {{ .Var }}.Id).ToList();
+        Assert.Single({{ .Target }}Match);
+        Assert.Equal({{ .Var }}.Id, {{ .Target }}Match[0].{{ .Target }}Id);
+{{- end }}
+    }
+}

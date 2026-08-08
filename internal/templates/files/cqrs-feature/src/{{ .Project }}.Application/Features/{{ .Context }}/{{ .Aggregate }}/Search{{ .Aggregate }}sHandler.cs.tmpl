@@ -5,7 +5,7 @@ public sealed class Search{{ .Aggregate }}sHandler({{ .Aggregate }}CrudService s
 {
     public async Task<Result<{{ .Aggregate }}PagedResponse>> HandleAsync(Search{{ .Aggregate }}sQuery request, CancellationToken cancellationToken = default)
     {
-        var (items, totalCount) = await service.SearchAsync(request.Search{{ filterParamNames .Properties "request." "pascal" }}, request.Page, request.PageSize, cancellationToken);
+        var (items, totalCount) = await service.SearchAsync(request.Search{{ filterParamNames .Properties "request." "pascal" }}{{ relationFilterParamNames .Properties "request." "pascal" }}, request.Page, request.PageSize, cancellationToken);
         return Result<{{ .Aggregate }}PagedResponse>.Success(new {{ .Aggregate }}PagedResponse(items, totalCount, request.Page, request.PageSize));
     }
 }

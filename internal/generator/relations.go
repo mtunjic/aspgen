@@ -22,10 +22,11 @@ type Relation struct {
 // and Target, reusing the same entity/nav/config rendering as any other
 // two-relation entity instead of introducing bespoke join-table templates.
 type ManyToManyRelation struct {
-	Name            string // navigation property name, e.g. "Tags"
-	Target          string // referenced entity name, e.g. "Tag"
-	JoinEntity      string // synthesized join entity name, e.g. "PostTag"
-	DisplayProperty string // Target's display property, for the join entity's picker
+	Name            string `json:"name"`            // navigation property name, e.g. "Tags"
+	DisplayName     string `json:"displayName"`     // humanized label for the multi-select, e.g. "Tags"
+	Target          string `json:"target"`          // referenced entity name, e.g. "Tag"
+	JoinEntity      string `json:"joinEntity"`      // synthesized join entity name, e.g. "PostTag"
+	DisplayProperty string `json:"displayProperty"` // Target's display property, for the join entity's picker
 }
 
 // splitRelationArgs pulls `nav:Entity`/`nav:Entity?`/`nav:Entity[]` tokens
@@ -72,8 +73,10 @@ func splitRelationArgs(declaring string, args []string, entities []EntityMeta, c
 				return nil, nil, nil, fmt.Errorf("invalid or duplicate relation %q", name)
 			}
 			seen[name] = true
+			navName := pascal(name)
 			manyToMany = append(manyToMany, ManyToManyRelation{
-				Name:            pascal(name),
+				Name:            navName,
+				DisplayName:     humanize(navName),
 				Target:          match.Name,
 				JoinEntity:      declaring + match.Name,
 				DisplayProperty: resolveDisplayProperty(match),
@@ -201,4 +204,90 @@ func reconstructRelations(properties []Property) []Relation {
 		})
 	}
 	return relations
+}
+
+// reconstructManyToMany rebuilds the many-to-many relations a manifest's
+// persisted EntityMeta implies, for call sites (like retrofitting a UI onto
+// aggregates that already existed) that only have the recorded metadata on
+// hand, not the original *data.ManyToMany from the `add` call. Prefers the
+// explicitly-persisted declaring.ManyToMany; falls back to inferring a
+// relation from any join entity (named {declaring}{Target}) recorded with
+// exactly two relation FK properties pointing back at the declaring entity
+// and at that Target, which is exactly the shape applyManyToManyRenoir
+// produces.
+func reconstructManyToMany(declaring EntityMeta, entities []EntityMeta) []ManyToManyRelation {
+	if len(declaring.ManyToMany) > 0 {
+		rels := make([]ManyToManyRelation, 0, len(declaring.ManyToMany))
+		for _, rel := range declaring.ManyToMany {
+			if rel.DisplayName == "" {
+				rel.DisplayName = humanize(rel.Name)
+			}
+			rels = append(rels, rel)
+		}
+		return rels
+	}
+	var rels []ManyToManyRelation
+	for _, join := range entities {
+		if join.Context != declaring.Context || join.Name == declaring.Name || !strings.HasPrefix(join.Name, declaring.Name) {
+			continue
+		}
+		target := strings.TrimPrefix(join.Name, declaring.Name)
+		if target == "" {
+			continue
+		}
+		var fks []Property
+		for _, p := range join.Properties {
+			if p.RelationTarget != "" {
+				fks = append(fks, p)
+			}
+		}
+		if len(fks) != 2 {
+			continue
+		}
+		hasDeclaring, targetFK := false, Property{}
+		for _, p := range fks {
+			if p.RelationTarget == declaring.Name {
+				hasDeclaring = true
+			}
+			if p.RelationTarget == target {
+				targetFK = p
+			}
+		}
+		if !hasDeclaring || targetFK.Name == "" {
+			continue
+		}
+		navName := pascal(target + "s")
+		rels = append(rels, ManyToManyRelation{
+			Name:            navName,
+			DisplayName:     humanize(navName),
+			Target:          target,
+			JoinEntity:      join.Name,
+			DisplayProperty: targetFK.RelationDisplayProperty,
+		})
+	}
+	return rels
+}
+
+// injectableTargets returns the deduplicated set of relation Target entity
+// names whose store must be injected into a UI's constructor, combining the
+// many-to-one relations' targets with the many-to-many relations' targets.
+// Many-to-many pickers load their options from the same target Store a
+// many-to-one dropdown uses, so an entity with both `tag:Tag` and
+// `tags:Tag[]` must not inject I{{ .Target }}Store twice.
+func injectableTargets(relations []Relation, manyToMany []ManyToManyRelation) []string {
+	var result []string
+	seen := map[string]bool{}
+	for _, r := range relations {
+		if !seen[r.Target] {
+			seen[r.Target] = true
+			result = append(result, r.Target)
+		}
+	}
+	for _, m := range manyToMany {
+		if !seen[m.Target] {
+			seen[m.Target] = true
+			result = append(result, m.Target)
+		}
+	}
+	return result
 }

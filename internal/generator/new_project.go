@@ -72,6 +72,9 @@ func newContextProject(name string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if theme == "" && ui == "wpf" {
+		theme = "wpfui"
+	}
 	if theme != "" && ui != "wpf" {
 		return errors.New("--theme requires -ui wpf")
 	}

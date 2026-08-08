@@ -6,16 +6,16 @@ using {{ .Project }}.WebMvc.Models;
 namespace {{ .Project }}.WebMvc.Controllers;
 
 [Route("{{ kebab .Context }}/{{ kebab .Aggregate }}")]
-public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService service{{ range .Relations }}, {{ .Target }}CrudService {{ camel .Target }}Service{{ end }}) : Controller
+public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService service{{ range injectableTargets .Relations .ManyToMany }}, {{ . }}CrudService {{ camel . }}Service{{ end }}{{ range .ManyToMany }}, {{ .JoinEntity }}CrudService {{ camel .JoinEntity }}Service{{ end }}) : Controller
 {
     private const int PageSize = 25;
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(string? search{{ filterParamDecls .Properties "camel" }}, int page = 1, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Index(string? search{{ filterParamDecls .Properties "camel" }}{{ relationFilterParamDecls .Properties "camel" }}, int page = 1, CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
-        var (items, totalCount) = await service.SearchAsync(search{{ filterParamNames .Properties "" "camel" }}, page, PageSize, cancellationToken);
-        var model = new {{ .Aggregate }}IndexViewModel(items, totalCount, page, PageSize, search{{ filterParamNames .Properties "" "camel" }});
+        var (items, totalCount) = await service.SearchAsync(search{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }}, page, PageSize, cancellationToken);
+        var model = new {{ .Aggregate }}IndexViewModel(items, totalCount, page, PageSize, search{{ filterParamNames .Properties "" "camel" }}{{ relationFilterParamNames .Properties "" "camel" }});
 {{- range .Relations }}
         model.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
 {{- end }}
@@ -30,6 +30,10 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
 {{- range .Relations }}
         ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
 {{- end }}
+{{- range .ManyToMany }}
+        ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+        ViewBag.{{ .Target }}SelectedIds = (await {{ camel .JoinEntity }}Service.SearchAsync(null, id, null, 1, 1000, cancellationToken)).Items.Select(x => x.{{ .Target }}Id).ToList();
+{{- end }}
         return View(item);
     }
 
@@ -39,15 +43,22 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
 {{- range .Relations }}
         ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
 {{- end }}
+{{- range .ManyToMany }}
+        ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+        ViewBag.{{ .Target }}SelectedIds = new List<long>();
+{{- end }}
         return View();
     }
 
     [HttpPost("create")]
-    public async Task<IActionResult> Create({{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Create({{ .Aggregate }}Request request, CancellationToken cancellationToken = default{{ range .ManyToMany }}, long[]? selected{{ .Target }}Ids = null{{ end }})
     {
         try
         {
-            await service.CreateAsync(request, cancellationToken);
+            var created = await service.CreateAsync(request, cancellationToken);
+{{- range .ManyToMany }}
+            await Sync{{ .Target }}sAsync(created.Id, selected{{ .Target }}Ids ?? [], cancellationToken);
+{{- end }}
             return RedirectToAction(nameof(Index));
         }
         catch (ValidationException ex)
@@ -55,6 +66,10 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
             foreach (var failure in ex.Errors) ModelState.AddModelError(failure.PropertyName, failure.ErrorMessage);
 {{- range .Relations }}
             ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+{{- range .ManyToMany }}
+            ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+            ViewBag.{{ .Target }}SelectedIds = (selected{{ .Target }}Ids ?? []).ToList();
 {{- end }}
             return View(request);
         }
@@ -68,13 +83,17 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
 {{- range .Relations }}
         ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
 {{- end }}
+{{- range .ManyToMany }}
+        ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+        ViewBag.{{ .Target }}SelectedIds = (await {{ camel .JoinEntity }}Service.SearchAsync(null, id, null, 1, 1000, cancellationToken)).Items.Select(x => x.{{ .Target }}Id).ToList();
+{{- end }}
         ViewBag.Id = id;
         return View(new {{ .Aggregate }}Request(
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} item.{{ $property.Name }}{{ end }}));
     }
 
     [HttpPost("{id:long}/edit")]
-    public async Task<IActionResult> Edit(long id, {{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Edit(long id, {{ .Aggregate }}Request request, CancellationToken cancellationToken = default{{ range .ManyToMany }}, long[]? selected{{ .Target }}Ids = null{{ end }})
     {
         try
         {
@@ -85,9 +104,16 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
 {{- range .Relations }}
                 ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
 {{- end }}
+{{- range .ManyToMany }}
+                ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+                ViewBag.{{ .Target }}SelectedIds = (selected{{ .Target }}Ids ?? []).ToList();
+{{- end }}
                 ViewBag.Id = id;
                 return View(request);
             }
+{{- range .ManyToMany }}
+            await Sync{{ .Target }}sAsync(id, selected{{ .Target }}Ids ?? [], cancellationToken);
+{{- end }}
             return RedirectToAction(nameof(Index));
         }
         catch (ValidationException ex)
@@ -95,6 +121,10 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
             foreach (var failure in ex.Errors) ModelState.AddModelError(failure.PropertyName, failure.ErrorMessage);
 {{- range .Relations }}
             ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+{{- end }}
+{{- range .ManyToMany }}
+            ViewBag.{{ .Target }}Items = await {{ camel .Target }}Service.GetAllAsync(cancellationToken);
+            ViewBag.{{ .Target }}SelectedIds = (selected{{ .Target }}Ids ?? []).ToList();
 {{- end }}
             ViewBag.Id = id;
             return View(request);
@@ -107,4 +137,18 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
         await service.DeleteAsync(id, cancellationToken);
         return RedirectToAction(nameof(Index));
     }
+
+{{- range .ManyToMany }}
+    private async Task Sync{{ .Target }}sAsync(long {{ $.Aggregate }}Id, long[] selected{{ .Target }}Ids, CancellationToken cancellationToken)
+    {
+        var keep = selected{{ .Target }}Ids.ToHashSet();
+        var links = (await {{ camel .JoinEntity }}Service.SearchAsync(null, {{ $.Aggregate }}Id, null, 1, 1000, cancellationToken)).Items;
+        foreach (var link in links)
+            if (!keep.Contains(link.{{ .Target }}Id))
+                await {{ camel .JoinEntity }}Service.DeleteAsync(link.Id, cancellationToken);
+        var existing = links.Select(x => x.{{ .Target }}Id).ToHashSet();
+        foreach (var id in keep.Except(existing))
+            await {{ camel .JoinEntity }}Service.CreateAsync(new {{ .JoinEntity }}Request({{ $.Aggregate }}Id, id), cancellationToken);
+    }
+{{- end }}
 }

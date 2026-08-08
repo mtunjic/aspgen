@@ -61,6 +61,7 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 		return errors.New("at least one property or relation is required, e.g. name:string or customer:Customer")
 	}
 	d.Context, d.Aggregate, d.Properties, d.Relations, d.Crud = contextName, r.Name, props, relations, !hasFlag(r.Args, "--no-crud")
+	d.ManyToMany = manyToMany
 	if ctx.Arch != "" {
 		// A --context/--arch engine project's manifest only records ONE
 		// project-wide "backend:" component (set by whichever context was
@@ -84,11 +85,39 @@ func addAggregateCmd(r addRequest, m *Manifest, d *data) error {
 			return err
 		}
 	}
-	m.Entities = appendEntityMeta(m.Entities, EntityMeta{Name: r.Name, Context: contextName, Properties: props})
+	m.Entities = appendEntityMeta(m.Entities, EntityMeta{Name: r.Name, Context: contextName, Properties: props, ManyToMany: manyToMany})
 	m.Contexts = appendAggregate(m.Contexts, contextName, r.Name)
 	m.Components = appendUnique(m.Components, "aggregate:"+contextName+":"+r.Name)
 	if err := applyManyToManyRenoir(r, m, d, contextName, manyToMany, resolveDisplayProperty(EntityMeta{Properties: props}), ctx.Arch); err != nil {
 		return err
+	}
+	// Aggregates with relations get tests in the generated test projects
+	// exercising the EF relationship model end-to-end (create the related
+	// entities + join rows, then query them back by foreign key):
+	//   - dm/cqrs: a unit test drives the CrudService/DbContext in-process
+	//     (also the path the dm WPF and MVC frontends use);
+	//   - cqrs: an integration test drives the WebApi endpoints the Blazor
+	//     page and the cqrs WPF HTTP Store actually call.
+	// es aggregates are event-sourced (no plain ctor, and their id assignment
+	// is not yet reliable enough for a multi-create test), so they get no
+	// relation tests; ar-tier entities have a different project shape.
+	if len(relations) > 0 || len(manyToMany) > 0 {
+		d.RelationTest = buildRelationTest(m, contextName, r.Name, props, relations, manyToMany)
+		if ctx.Arch == "dm" || ctx.Arch == "cqrs" {
+			if err := renderTree(r.Project, "tests-relations", *d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+				return err
+			}
+		}
+		if ctx.Arch == "cqrs" {
+			if err := renderTree(r.Project, "tests-integration-relations", *d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+				return err
+			}
+		}
+		if ctx.Arch == "dm" && m.UI == "mvc" {
+			if err := renderTree(r.Project, "tests-mvc-relations", *d, templateDir(r.Args), r.DryRun, r.Force); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -194,11 +223,19 @@ func applyManyToManyRenoir(r addRequest, m *Manifest, d *data, contextName strin
 		rightRel := Relation{Name: rel.Target, Target: rel.Target, FKProperty: rel.Target + "Id", DisplayProperty: rel.DisplayProperty}
 		joinRelations := []Relation{leftRel, rightRel}
 		joinProps := []Property{synthesizeRelationProperty(leftRel), synthesizeRelationProperty(rightRel)}
+		// Join entities are link tables: their FK properties never get a
+		// nested "related display property contains" advanced filter, so the
+		// join SearchCriteria keeps a stable positional signature the
+		// multi-select sync calls (filter by parent id) can rely on.
+		for i := range joinProps {
+			joinProps[i].NoNestedFilter = true
+		}
 
 		jd := *d
 		jd.Aggregate = rel.JoinEntity
 		jd.Properties = joinProps
 		jd.Relations = joinRelations
+		jd.ManyToMany = nil
 		jd.Crud = true
 
 		if err := renderTree(r.Project, aggregateTemplateGroup(arch), jd, templateDir(r.Args), r.DryRun, r.Force); err != nil {
