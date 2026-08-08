@@ -321,6 +321,8 @@ func buildRelationQuickAdds(relations []Relation, entities []EntityMeta) (map[st
 			}
 			args = append(args, quickAddDefault(p))
 		}
+		// A freshly created row's optimistic-concurrency version starts at 0.
+		args = append(args, "0")
 		rows[rel.Target] = "new " + rel.Target + "Row(" + strings.Join(args, ", ") + ")"
 	}
 	return rows, missing

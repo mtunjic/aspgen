@@ -887,8 +887,8 @@ func TestBuildRelationQuickAddsNullableFk(t *testing.T) {
 	quickAdds, _ := buildRelationQuickAdds(
 		[]Relation{{Name: "Post", Target: "Post", DisplayProperty: "Title"}},
 		entities)
-	if got := quickAdds["Post"]; got != "new PostRow(0, name, null, null)" {
-		t.Fatalf("Post quick-add (optional customer FK) = %q, want null FK default", got)
+	if got := quickAdds["Post"]; got != "new PostRow(0, name, null, null, 0)" {
+		t.Fatalf("Post quick-add (optional customer FK) = %q, want null FK default + version 0", got)
 	}
 }
 
@@ -940,10 +940,10 @@ func TestBuildRelationQuickAdds(t *testing.T) {
 		{Name: "Office", Target: "Office", DisplayProperty: "Name"},
 	}
 	quickAdds, missing := buildRelationQuickAdds(relations, entities)
-	if quickAdds["Customer"] != "new CustomerRow(0, name)" {
+	if quickAdds["Customer"] != "new CustomerRow(0, name, 0)" {
 		t.Errorf("Customer quick-add = %q", quickAdds["Customer"])
 	}
-	if quickAdds["Tag"] != "new TagRow(0, name, false)" {
+	if quickAdds["Tag"] != "new TagRow(0, name, false, 0)" {
 		t.Errorf("Tag quick-add = %q", quickAdds["Tag"])
 	}
 	// A target with a required date can't be quick-added inline.
@@ -951,7 +951,7 @@ func TestBuildRelationQuickAdds(t *testing.T) {
 		t.Errorf("Event must not be quick-addable (required date): %q", quickAdds["Event"])
 	}
 	// A target with an FK names the entity that must exist first.
-	if quickAdds["Office"] != "new OfficeRow(0, name, 0)" {
+	if quickAdds["Office"] != "new OfficeRow(0, name, 0, 0)" {
 		t.Errorf("Office quick-add = %q", quickAdds["Office"])
 	}
 	if missing["Office"] != "Region" {
@@ -1204,7 +1204,7 @@ func TestRenderTransactionalM2mSync(t *testing.T) {
 		t.Errorf("HTTP IStore must not declare ReplaceTags\n%s", httpIStore)
 	}
 	httpVM := renderTemplate(t, "files/wpf-entity/src/Desktop/Modules/{{ .Name }}/ViewModels/{{ .Name }}EditViewModel.cs.tmpl", http)
-	for _, expected := range []string{"new PostTagRow(0, saved.Id, id)", "postTagStore.Delete(link.Id);"} {
+	for _, expected := range []string{"new PostTagRow(0, saved.Id, id, 0)", "postTagStore.Delete(link.Id);"} {
 		if !strings.Contains(httpVM, expected) {
 			t.Errorf("HTTP EditViewModel must keep the per-call m2m sync (missing %q)\n%s", expected, httpVM)
 		}

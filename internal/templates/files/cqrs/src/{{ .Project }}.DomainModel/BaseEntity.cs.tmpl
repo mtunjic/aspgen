@@ -9,6 +9,10 @@ public partial class BaseEntity
     }
 
     public bool Deleted { get; private set; }
+    // Optimistic-concurrency token: bumped on every write so a stale edit is
+    // detected (the UI carries the version it loaded and the update rejects it
+    // if the row moved on).
+    public int Version { get; private set; }
     public TimeStamp Created { get; private set; }
     public TimeStamp LastUpdated { get; private set; }
 }

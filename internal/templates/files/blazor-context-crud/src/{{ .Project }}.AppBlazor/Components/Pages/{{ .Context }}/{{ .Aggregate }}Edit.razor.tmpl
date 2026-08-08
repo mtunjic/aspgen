@@ -120,6 +120,7 @@
                     errorMessage = "This {{ .Aggregate }} could not be found. It may have been deleted.";
                     return;
                 }
+                form.Version = item.Version;
 {{- range .Properties }}
 {{- if eq .CSharpType "Guid" }}
                 form.{{ .Name }}Text = item.{{ .Name }}.ToString();
@@ -147,7 +148,7 @@
     {
         errorMessage = null;
         var request = new {{ .Aggregate }}Request(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }});
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ if eq $property.CSharpType "Guid" }}Guid.Parse(form.{{ $property.Name }}Text){{ else }}form.{{ $property.Name }}{{ end }}{{ end }}, form.Version);
         if (editingId == 0)
         {
             var response = await Http.PostAsJsonAsync(ApiPath, request);
@@ -163,7 +164,11 @@
             var response = await Http.PutAsJsonAsync($"{ApiPath}/{editingId}", request);
             if (!response.IsSuccessStatusCode)
             {
-                errorMessage = "Could not save {{ .Aggregate }}. Please check the form and try again.";
+                // A 409 means someone else saved this record since the form
+                // loaded; surface the server's conflict message.
+                errorMessage = (int)response.StatusCode == 409
+                    ? await response.Content.ReadAsStringAsync()
+                    : "Could not save {{ .Aggregate }}. Please check the form and try again.";
                 return;
             }
         }
@@ -208,6 +213,7 @@
 
     private sealed class {{ .Aggregate }}Editor
     {
+        public int Version { get; set; }
 {{- range .Properties }}
 {{- if eq .CSharpType "Guid" }}
         public string {{ .Name }}Text { get; set; } = "";

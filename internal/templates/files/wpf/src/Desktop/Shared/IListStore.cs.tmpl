@@ -4,6 +4,10 @@ namespace {{ .Project }}.Desktop.Shared;
 // module's list view model and rendered by the shared ListPage sort selector.
 public sealed record SortField(string Name, string Label);
 
+// Thrown when an update is rejected because the record was modified by someone
+// else since the edit form loaded (optimistic concurrency).
+public sealed class ConcurrencyConflictException(string message) : Exception(message);
+
 public interface IListPageResult<TRow>
 {
     IReadOnlyList<TRow> Items { get; }

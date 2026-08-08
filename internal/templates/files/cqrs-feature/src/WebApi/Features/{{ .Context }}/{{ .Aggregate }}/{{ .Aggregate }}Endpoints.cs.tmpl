@@ -40,9 +40,13 @@ public static class {{ .Aggregate }}Endpoints
         {
             var validation = await validator.ValidateAsync(request, cancellationToken);
             if (!validation.IsValid) return Results.ValidationProblem(validation.ToDictionary());
-            var command = new Update{{ .Aggregate }}Command(id{{ range .Properties }}, request.{{ .Name }}{{ end }});
+            var command = new Update{{ .Aggregate }}Command(id{{ range .Properties }}, request.{{ .Name }}{{ end }}, request.Version);
             var result = await handler.HandleAsync(command, cancellationToken);
-            return result.IsSuccess ? Results.NoContent() : Results.NotFound(result.Error);
+            return result.IsSuccess
+                ? Results.NoContent()
+                : result.Error?.Code == "conflict"
+                    ? Results.Conflict(result.Error.Message)
+                    : Results.NotFound(result.Error);
         });
         group.MapDelete("/{id:long}", async (long id, IHandler<Delete{{ .Aggregate }}Command, bool> handler, CancellationToken cancellationToken) =>
         {

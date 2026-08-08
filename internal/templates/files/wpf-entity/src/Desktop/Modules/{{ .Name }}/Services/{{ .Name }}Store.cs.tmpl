@@ -60,6 +60,11 @@ public sealed class {{ .Name }}Store(HttpClient http) : I{{ .Name }}Store
         }
 
         var update = Task.Run(() => http.PutAsJsonAsync($"{Path}/{editingId}", value)).GetAwaiter().GetResult();
+        if ((int)update.StatusCode == 409)
+        {
+            throw new global::{{ .Project }}.Desktop.Shared.ConcurrencyConflictException(
+                Task.Run(() => update.Content.ReadAsStringAsync()).GetAwaiter().GetResult());
+        }
         update.EnsureSuccessStatusCode();
         return value with { Id = editingId };
     }
@@ -81,25 +86,26 @@ public sealed class {{ .Name }}Store({{ .Name }}CrudService service) : I{{ .Name
     // directly here would deadlock on the WPF UI thread instead.
     public IReadOnlyList<{{ .Name }}Row> GetAll() =>
         Task.Run(() => service.GetAllAsync()).GetAwaiter().GetResult()
-            .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}))
+            .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}, x.Version))
             .ToList();
 
     public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
     {
         var (items, totalCount) = Task.Run(() => service.SearchAsync(criteria.Search{{ filterParamNames .Properties "criteria." "pascal" }}{{ relationFilterParamNames .Properties "criteria." "pascal" }}, criteria.Page, criteria.PageSize, default, criteria.SortBy, criteria.SortDesc)).GetAwaiter().GetResult();
-        var rows = items.Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }})).ToList();
+        var rows = items.Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}, x.Version)).ToList();
         return new {{ .Name }}PageResult(rows, totalCount, criteria.Page, criteria.PageSize);
     }
 
     public {{ .Name }}Row Save(long editingId, {{ .Name }}Row value)
     {
-        var request = new {{ .Name }}Request({{ range $index, $property := .Properties }}{{ if $index }}, {{ end }}value.{{ $property.Name }}{{ end }});
+        var request = new {{ .Name }}Request({{ range $index, $property := .Properties }}{{ if $index }}, {{ end }}value.{{ $property.Name }}{{ end }}, value.Version);
         if (editingId == 0)
         {
             var created = Task.Run(() => service.CreateAsync(request)).GetAwaiter().GetResult();
-            return new {{ .Name }}Row(created.Id{{ range .Properties }}, created.{{ .Name }}{{ end }});
+            return new {{ .Name }}Row(created.Id{{ range .Properties }}, created.{{ .Name }}{{ end }}, created.Version);
         }
-        Task.Run(() => service.UpdateAsync(editingId, request)).GetAwaiter().GetResult();
+        var result = Task.Run(() => service.UpdateAsync(editingId, request)).GetAwaiter().GetResult();
+        if (!result.Success) throw new global::{{ .Project }}.Desktop.Shared.ConcurrencyConflictException(result.Message ?? "Save failed.");
         return value with { Id = editingId };
     }
 
@@ -120,7 +126,7 @@ public sealed class {{ .Name }}Store(AppDbContext db) : I{{ .Name }}Store
     public IReadOnlyList<{{ .Name }}Row> GetAll() => db.Set<{{ .Name }}>()
         .AsNoTracking()
         .OrderBy(x => x.Id)
-        .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}))
+        .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}, x.Version))
         .ToList();
 
     public {{ .Name }}PageResult Search({{ .Name }}SearchCriteria criteria)
@@ -133,7 +139,7 @@ public sealed class {{ .Name }}Store(AppDbContext db) : I{{ .Name }}Store
         {{ filterWhereClauses .Properties "x" "criteria." }}
         var totalCount = query.LongCount();
         var items = query.OrderBy(x => x.Id).Skip((criteria.Page - 1) * criteria.PageSize).Take(criteria.PageSize)
-            .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}))
+            .Select(x => new {{ .Name }}Row(x.Id{{ range .Properties }}, x.{{ .Name }}{{ end }}, x.Version))
             .ToList();
         return new {{ .Name }}PageResult(items, totalCount, criteria.Page, criteria.PageSize);
     }
@@ -146,14 +152,14 @@ public sealed class {{ .Name }}Store(AppDbContext db) : I{{ .Name }}Store
             var created = new {{ .Name }}({{ range $index, $property := .Properties }}{{ if $index }}, {{ end }}value.{{ $property.Name }}{{ end }});
             db.Add(created);
             db.SaveChanges();
-            return new {{ .Name }}Row(created.Id{{ range .Properties }}, created.{{ .Name }}{{ end }});
+            return new {{ .Name }}Row(created.Id{{ range .Properties }}, created.{{ .Name }}{{ end }}, created.Version);
         }
 
         var existing = db.Set<{{ .Name }}>().SingleOrDefault(x => x.Id == editingId);
         if (existing is null) return value;
         existing.Update({{ range $index, $property := .Properties }}{{ if $index }}, {{ end }}value.{{ $property.Name }}{{ end }});
         db.SaveChanges();
-        return new {{ .Name }}Row(existing.Id{{ range .Properties }}, existing.{{ .Name }}{{ end }});
+        return new {{ .Name }}Row(existing.Id{{ range .Properties }}, existing.{{ .Name }}{{ end }}, existing.Version);
         {{- end }}
     }
 

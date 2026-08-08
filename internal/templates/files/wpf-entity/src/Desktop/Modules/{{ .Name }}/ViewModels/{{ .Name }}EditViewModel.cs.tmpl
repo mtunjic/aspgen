@@ -92,7 +92,7 @@ public sealed class {{ .Name }}EditViewModel : EditViewModelBase<I{{ .Name }}Sto
                 {{ camel .JoinEntity }}Store.Delete(link.Id);
         var keep{{ .Target }} = current{{ .Target }}.Select(x => x.{{ .Target }}Id).ToHashSet();
         foreach (var id in selected{{ .Target }}.Except(keep{{ .Target }}))
-            {{ camel .JoinEntity }}Store.Save(0, new {{ .JoinEntity }}Row(0, saved.Id, id));
+            {{ camel .JoinEntity }}Store.Save(0, new {{ .JoinEntity }}Row(0, saved.Id, id, 0));
 {{- end }}
 {{- end }}
     }
@@ -137,7 +137,7 @@ public sealed class {{ .Name }}EditViewModel : EditViewModelBase<I{{ .Name }}Sto
         }
 {{- end }}
 {{- end }}
-        value = new {{ .Name }}Row(EditingId{{ range .Properties }}, {{ camel .Name }}{{ end }});
+        value = new {{ .Name }}Row(EditingId{{ range .Properties }}, {{ camel .Name }}{{ end }}, EditingVersion);
         return true;
     }
 

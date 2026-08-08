@@ -3,4 +3,7 @@ namespace {{ .Project }}.Desktop.Shared;
 public interface IEntityRow
 {
     long Id { get; }
+    // Optimistic-concurrency token carried by every row so an edit form can
+    // send back the version it loaded; the update is rejected on mismatch.
+    int Version { get; }
 }

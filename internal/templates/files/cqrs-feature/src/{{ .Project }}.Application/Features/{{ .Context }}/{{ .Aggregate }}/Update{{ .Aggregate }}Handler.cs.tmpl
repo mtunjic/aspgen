@@ -6,9 +6,11 @@ public sealed class Update{{ .Aggregate }}Handler({{ .Aggregate }}CrudService se
     public async Task<Result<bool>> HandleAsync(Update{{ .Aggregate }}Command request, CancellationToken cancellationToken = default)
     {
         var result = await service.UpdateAsync(request.Id, new {{ .Aggregate }}Request(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }}), cancellationToken);
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }}, request.Version), cancellationToken);
         return result.Success
             ? Result<bool>.Success(true)
-            : Result<bool>.Failure(new Error("update_failed", result.Message ?? "{{ .Aggregate }} could not be updated."));
+            : result.Message == {{ .Project }}.DomainModel.CommandResponse.ConcurrencyConflictMessage
+                ? Result<bool>.Failure(new Error("conflict", result.Message))
+                : Result<bool>.Failure(new Error("update_failed", result.Message ?? "{{ .Aggregate }} could not be updated."));
     }
 }

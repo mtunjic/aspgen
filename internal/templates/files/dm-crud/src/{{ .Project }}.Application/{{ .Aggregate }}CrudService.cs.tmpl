@@ -17,7 +17,7 @@ public sealed class {{ .Aggregate }}CrudService(IDbContextFactory<{{ .Project }}
     {
         await using var database = databaseFactory.CreateDbContext();
         return await database.{{ .Aggregate }}s.Where(x => !x.Deleted).Select(x => new {{ .Aggregate }}View(x.Id,
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }})).ToListAsync(cancellationToken);
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }}, x.Version)).ToListAsync(cancellationToken);
     }
 
     public async Task<{{ .Aggregate }}View?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
@@ -25,7 +25,7 @@ public sealed class {{ .Aggregate }}CrudService(IDbContextFactory<{{ .Project }}
         await using var database = databaseFactory.CreateDbContext();
         var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
         return entity is null ? null : new {{ .Aggregate }}View(entity.Id,
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }});
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }}, entity.Version);
     }
 
     public async Task<{{ .Aggregate }}View> CreateAsync({{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
@@ -38,7 +38,7 @@ public sealed class {{ .Aggregate }}CrudService(IDbContextFactory<{{ .Project }}
         database.Add(entity);
         await database.SaveChangesSafelyAsync(cancellationToken);
         return new {{ .Aggregate }}View(entity.Id,
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }});
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} entity.{{ $property.Name }}{{ end }}, entity.Version);
     }
 
     public async Task<CommandResponse> UpdateAsync(long id, {{ .Aggregate }}Request request, CancellationToken cancellationToken = default)
@@ -47,6 +47,9 @@ public sealed class {{ .Aggregate }}CrudService(IDbContextFactory<{{ .Project }}
         await using var database = databaseFactory.CreateDbContext();
         var entity = await database.{{ .Aggregate }}s.FirstOrDefaultAsync(x => x.Id == id && !x.Deleted, cancellationToken);
         if (entity is null) return CommandResponse.Fail().AddMessage("{{ .Aggregate }} not found.");
+        // Optimistic concurrency: reject a save whose expected version no longer
+        // matches the row (someone else edited it since this form loaded).
+        if (entity.Version != request.Version) return CommandResponse.ConcurrencyConflict();
         entity.Update(
 {{- range $index, $property := .Properties }}{{ if $index }},{{ end }} request.{{ $property.Name }}{{ end }});
         return await database.TrySaveChangesAsync(cancellationToken);
@@ -93,13 +96,13 @@ public sealed class {{ .Aggregate }}CrudService(IDbContextFactory<{{ .Project }}
         {{ sortOrderSwitch .Properties "sortBy" "sortDesc" }}
         var totalCount = await query.LongCountAsync(cancellationToken);
         var items = await query.Skip((page - 1) * pageSize).Take(pageSize).Select(x => new {{ .Aggregate }}View(x.Id,
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }})).ToArrayAsync(cancellationToken);
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} x.{{ $property.Name }}{{ end }}, x.Version)).ToArrayAsync(cancellationToken);
         return (items, totalCount);
     }
 }
 
 public sealed record {{ .Aggregate }}Request(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }});
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} {{ $property.CSharpType }} {{ $property.Name }}{{ end }}, int Version = 0);
 
 public sealed record {{ .Aggregate }}View(
-    long Id{{ range .Properties }}, {{ .CSharpType }} {{ .Name }}{{ end }});
+    long Id{{ range .Properties }}, {{ .CSharpType }} {{ .Name }}{{ end }}, int Version);

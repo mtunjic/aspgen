@@ -86,7 +86,7 @@ public sealed class {{ .Aggregate }}Controller({{ .Aggregate }}CrudService servi
 {{- end }}
         ViewBag.Id = id;
         return View(new {{ .Aggregate }}Request(
-{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} item.{{ $property.Name }}{{ end }}));
+{{- range $index, $property := .Properties }}{{ if $index }},{{ end }} item.{{ $property.Name }}{{ end }}, item.Version));
     }
 
     [HttpPost("{id:long}/edit")]

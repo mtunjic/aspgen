@@ -17,6 +17,8 @@ public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INa
     protected readonly IAppNavigationService Navigation;
     private readonly TStore store;
     protected long EditingId;
+    // Optimistic-concurrency token of the record being edited (0 for a create).
+    protected int EditingVersion;
 
     // The declaring aggregate's store, for operations the base wires through
     // the aggregate service (e.g. transactional many-to-many link replacement).
@@ -45,6 +47,9 @@ public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INa
         var id = navigationContext.Parameters.GetValue<long>("id");
         EditingId = id;
         TRow? item = id == 0 ? default : store.GetAll().FirstOrDefault(x => x.Id == id);
+        // The version the form was loaded at, sent back on save for optimistic
+        // concurrency (a stale edit is rejected with a conflict message).
+        EditingVersion = item?.Version ?? 0;
         ResetForm(item);
         LoadRelated();
         ValidationMessage = string.Empty;
@@ -131,6 +136,13 @@ public abstract class EditViewModelBase<TStore, TRow, TForm> : BindableBase, INa
             var saved = store.Save(EditingId, value);
             SyncRelated(saved);
             Navigation.GoTo(ListViewName);
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            // Someone else saved this record since the form loaded; tell the
+            // user to reload rather than pretending the edit went through.
+            AppLog.Warning("Save conflicted for {Entity}: {Message}", EntityName, ex.Message);
+            ValidationMessage = ex.Message;
         }
         catch (Exception ex)
         {

@@ -10,6 +10,10 @@ public sealed class CommandResponse
 
     public static CommandResponse Fail() => new() { Success = false };
 
+    public const string ConcurrencyConflictMessage = "This record was modified by someone else. Please reload and try again.";
+
+    public static CommandResponse ConcurrencyConflict() => Fail().AddMessage(ConcurrencyConflictMessage);
+
     public CommandResponse AddMessage(string message)
     {
         Message = message;

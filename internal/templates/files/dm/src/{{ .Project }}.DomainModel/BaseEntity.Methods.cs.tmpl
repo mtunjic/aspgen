@@ -8,7 +8,11 @@ public partial class BaseEntity
         LastUpdated.Mark(author);
     }
 
-    public void Mark(string author) => LastUpdated.Mark(author);
+    public void Mark(string author)
+    {
+        LastUpdated.Mark(author);
+        Version++;
+    }
 
     public virtual bool IsValid() => true;
 
